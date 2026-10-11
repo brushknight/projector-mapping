@@ -1,0 +1,15 @@
+.rd {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--red);
+  box-shadow: 0 0 8px var(--red);
+  display: inline-block;
+  animation: pm-pulse 1.6s ease-in-out infinite;
+  flex: none;
+}
+.rd.off {
+  background: var(--faint);
+  box-shadow: none;
+  animation: none;
+}

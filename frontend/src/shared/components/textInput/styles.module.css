@@ -1,0 +1,17 @@
+.input {
+  height: var(--ctl-sm);
+  background: var(--control);
+  border: 0;
+  border-radius: var(--radius-num);
+  padding: 0 10px;
+  color: var(--ink);
+  outline: none;
+  min-width: 0;
+  width: 100%;
+}
+.input:focus {
+  box-shadow: 0 0 0 1px var(--dim);
+}
+.input::placeholder {
+  color: var(--dim);
+}

@@ -1,0 +1,145 @@
+/* Every token lives here (taken from design/html/editor/*.dc.html). Dark only: the editor and the output are black
+   rooms. No hex values anywhere else. */
+@font-face {
+  font-family: 'Share Tech Mono';
+  src: url('/fonts/ShareTechMono-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: 'Roboto Mono';
+  src: url('/fonts/RobotoMono.ttf') format('truetype');
+  font-weight: 100 700;
+  font-style: normal;
+  font-display: block;
+}
+
+:root {
+  /* ground and panels */
+  --bg: #000000;
+  --panel: #111112;
+  --stage: #0a0a0b;
+  --dialog: #161618;
+  --card: #1a1a1c;
+  --control: #1c1c1e;
+  --control-2: #232325;
+  --control-3: #2c2c2e;
+  --control-line: #2a2a2c;
+  --switch-off: #39393d;
+  --dot-grid: #1d1d1f;
+
+  /* ink */
+  --ink: #f5f4f0;
+  --ink-hi: #ffffff;
+  --ink-soft: #f2f0eb;
+  --ink-2: #b8b6b0;
+  --dim: #8c8a85;
+  --dim-2: #8a8780;
+  --dim-3: #6a6862;
+  --faint: #5e5c57;
+  --on-ink: #000000;
+  --on-ink-dim: #555555;
+
+  /* the one red: on air and the playhead only */
+  --red: #ff3b30;
+
+  /* lines and overlays */
+  --sep: rgba(255, 255, 255, 0.06);
+  --sep-faint: rgba(255, 255, 255, 0.04);
+  --glass: rgba(0, 0, 0, 0.5);
+  --hint-bg: rgba(28, 28, 30, 0.85);
+  --scrim: rgba(0, 0, 0, 0.6);
+  --shadow-stage: 0 0 0 1px var(--control-line), 0 20px 60px rgba(0, 0, 0, 0.6);
+  --shadow-dialog: 0 40px 120px rgba(0, 0, 0, 0.7);
+  --hatch: rgba(245, 244, 240, 0.35);
+  --fill-soft: rgba(245, 244, 240, 0.12);
+  --glow: rgba(191, 243, 255, 0.18);
+  --cyan: #d8f8ff;
+  --qr-paper: #ffffff;
+  --qr-ink: #000000;
+
+  /* type */
+  --ui: 'Share Tech Mono', ui-monospace, Menlo, monospace;
+  --num: 'Roboto Mono', ui-monospace, Menlo, monospace;
+  --fs: 13px;
+  --fs-sm: 12px;
+  --fs-xs: 11px;
+  --fs-xxs: 10px;
+  --fs-pill: 12.5px;
+  --fs-wordmark: 17px;
+  --fs-title: 22px;
+  --cap-spacing: 1.2px;
+
+  /* sizes: one control-height scale */
+  --ctl-xs: 26px;
+  --ctl-sm: 30px;
+  --ctl-md: 34px;
+  --ctl-lg: 40px;
+  --row: 32px;
+  --track-row: 27px;
+  --radius-panel: 22px;
+  --radius-dialog: 28px;
+  --radius-card: 18px;
+  --radius-tile: 14px;
+  --radius-efx: 16px;
+  --radius-seg: 12px;
+  --radius-row: 10px;
+  --radius-num: 9px;
+  --radius-clip: 8px;
+  --radius-pill: 999px;
+  --gap: 8px;
+
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--ui);
+  font-size: var(--fs);
+  letter-spacing: 0.2px;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+}
+
+::selection {
+  background: var(--ink);
+  color: var(--on-ink);
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--control-3);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@keyframes pm-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}

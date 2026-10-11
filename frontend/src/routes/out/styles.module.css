@@ -1,0 +1,21 @@
+.out {
+  position: fixed;
+  inset: 0;
+  background: var(--bg);
+  overflow: hidden;
+  cursor: none;
+}
+.canvas {
+  position: absolute;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  display: block;
+}
+.error {
+  position: absolute;
+  left: 24px;
+  bottom: 24px;
+  color: var(--ink);
+  font-size: var(--fs);
+}

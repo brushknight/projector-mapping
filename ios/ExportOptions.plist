@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Export options for an App Store Connect build (TestFlight and App Store):
+     xcodebuild -exportArchive -archivePath build/projmap.xcarchive \
+       -exportOptionsPlist ExportOptions.plist -exportPath build/export -allowProvisioningUpdates
+     Set destination to "upload" to send the build to App Store Connect directly. See docs/releasing.md. -->
+<plist version="1.0">
+<dict>
+	<key>method</key>
+	<string>app-store-connect</string>
+	<key>destination</key>
+	<string>export</string>
+	<key>teamID</key>
+	<string>3J46XQAXC4</string>
+	<key>signingStyle</key>
+	<string>automatic</string>
+	<key>uploadSymbols</key>
+	<true/>
+	<key>manageAppVersionAndBuildNumber</key>
+	<false/>
+</dict>
+</plist>

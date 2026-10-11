@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Auto map · calibrating</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;700&amp;family=Share+Tech+Mono&amp;family=Tilt+Neon&amp;display=swap">
+<style>
+body{margin:0;background:#050505}
+.ph{width:402px;height:874px;background:#000;color:#F5F4F0;font-family:'Share Tech Mono',ui-monospace,Menlo,monospace;font-size:15px;letter-spacing:.2px;position:relative;overflow:hidden;-webkit-font-smoothing:antialiased}
+.h{font-family:'Roboto Mono',ui-monospace,Menlo,monospace}
+.dim{color:#8C8A85}
+.cap{font-size:12px;letter-spacing:1.2px;text-transform:uppercase;color:#8C8A85}
+.scroll{position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;padding:64px 16px 132px;display:flex;flex-direction:column;gap:16px}
+.scroll::-webkit-scrollbar{width:0}
+.hd{display:flex;align-items:center;gap:8px;padding:4px 4px 2px}
+.ttl{font-family:'Roboto Mono',monospace;font-weight:700;font-size:32px;letter-spacing:-1px;line-height:1.1}
+.sp{flex:1}
+.pill{display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 13px;border-radius:999px;background:#1C1C1E;color:#F5F4F0;border:0;font:inherit;font-size:13px;cursor:pointer;text-decoration:none;white-space:nowrap}
+.pill.on{background:#F5F4F0;color:#000}
+.pill.icon{width:34px;padding:0;justify-content:center}
+.rd{width:8px;height:8px;border-radius:50%;background:#FF3B30;box-shadow:0 0 8px #FF3B30;display:inline-block;animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.35}}
+.card{background:#141415;border-radius:24px;padding:16px;display:flex;flex-direction:column;gap:14px}
+.hero{position:relative;border-radius:26px;overflow:hidden;background:#111}
+.scr{display:block;width:100%;height:auto}
+.hbar{position:absolute;left:12px;right:12px;top:12px;display:flex;justify-content:space-between;pointer-events:none}
+.glass{display:inline-flex;align-items:center;gap:7px;height:28px;padding:0 11px;border-radius:999px;background:rgba(0,0,0,.45);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);font-size:12px;color:#F5F4F0}
+.row2{display:flex;justify-content:space-between;align-items:center;padding:0 4px}
+.seg{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);background:#1C1C1E;border-radius:14px;padding:3px;gap:2px}
+.seg button{background:transparent;border:0;color:#8C8A85;font:inherit;font-size:13px;height:34px;border-radius:11px;cursor:pointer}
+.seg button.on{background:#F5F4F0;color:#000;box-shadow:0 2px 8px rgba(0,0,0,.4)}
+.big{position:relative;height:54px;background:#232325;border-radius:16px;overflow:hidden}
+.bfill{position:absolute;left:0;top:0;bottom:0;background:#F5F4F0}
+.blab{position:absolute;left:16px;top:0;bottom:0;display:flex;align-items:center;gap:10px;color:#fff;mix-blend-mode:difference;font-size:14px;pointer-events:none}
+.bval{position:absolute;right:16px;top:0;bottom:0;display:flex;align-items:center;color:#fff;mix-blend-mode:difference;font-family:'Roboto Mono',monospace;font-size:15px;font-weight:500;pointer-events:none;font-variant-numeric:tabular-nums}
+.big input,.strip input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer}
+.det{display:flex;justify-content:space-between;padding:0 8px;margin-top:7px}
+.det i{width:3px;height:3px;border-radius:50%;background:#3A3A3C;display:block}
+.det i.m{background:#6E6C68}
+.strip{position:relative;height:40px;border-radius:14px}
+.knob{position:absolute;top:50%;width:26px;height:26px;margin:-13px 0 0 -13px;border-radius:50%;background:transparent;border:3px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.4),0 2px 8px rgba(0,0,0,.5)}
+.tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.tile{background:transparent;border:0;padding:0;color:#F5F4F0;font:inherit;font-size:12px;display:flex;flex-direction:column;align-items:center;gap:7px;cursor:pointer}
+.tile .th{width:100%;aspect-ratio:1/1;border-radius:18px;overflow:hidden;display:block;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06)}
+.tile.on .th{box-shadow:0 0 0 2px #000,0 0 0 4px #F5F4F0}
+.tile.on span:last-child{color:#F5F4F0}
+.tile span:last-child{color:#8C8A85}
+.fxt{background:#1C1C1E;border:0;color:#F5F4F0;font:inherit;font-size:12px;border-radius:18px;aspect-ratio:1/1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;cursor:pointer;padding:0}
+.fxt.on{background:#F5F4F0;color:#000}
+.list{background:#141415;border-radius:22px;overflow:hidden}
+.li{display:flex;align-items:center;gap:12px;padding:10px 8px 10px 12px;min-height:64px;box-sizing:border-box;position:relative;color:#F5F4F0;text-decoration:none}
+.li + .li::before{content:'';position:absolute;top:0;left:68px;right:0;height:1px;background:rgba(255,255,255,.07)}
+.li.on{background:#F5F4F0;color:#000}
+.li.on .meta{color:#5a5955}
+.li.on + .li::before,.li.on::before{display:none}
+.li .gr{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.thumb{width:44px;height:44px;border-radius:12px;overflow:hidden;flex:none;display:block}
+.nm{font-size:15px}
+.meta{font-size:12px;color:#8C8A85}
+.ib{background:transparent;border:0;color:inherit;width:44px;height:44px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;padding:0;border-radius:12px}
+.addrow{display:flex;align-items:center;justify-content:center;gap:8px;height:54px;border-radius:18px;background:#141415;color:#F5F4F0;border:0;font:inherit;font-size:15px;cursor:pointer;width:100%;text-decoration:none}
+.tg{display:flex;align-items:center;justify-content:space-between;min-height:44px;gap:12px}
+.sw{width:51px;height:31px;border-radius:999px;background:#39393D;border:0;position:relative;cursor:pointer;padding:0;flex:none}
+.sw::after{content:'';position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.35)}
+.sw.on{background:#F5F4F0}
+.sw.on::after{left:22px;background:#000}
+.g2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.g3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.island{position:absolute;left:16px;right:16px;bottom:24px;height:68px;border-radius:34px;background:rgba(30,30,32,.72);backdrop-filter:blur(24px) saturate(160%);-webkit-backdrop-filter:blur(24px) saturate(160%);box-shadow:inset 0 0 0 1px rgba(255,255,255,.08),0 12px 32px rgba(0,0,0,.6);display:grid;grid-template-columns:repeat(5,minmax(0,1fr));padding:6px;box-sizing:border-box}
+.it{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:#8C8A85;text-decoration:none;font-size:11px;border-radius:28px}
+.it.on{background:#F5F4F0;color:#000}
+.home{position:absolute;left:50%;bottom:8px;width:140px;height:5px;margin-left:-70px;background:#F5F4F0;opacity:.9;border-radius:3px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;height:54px;border-radius:18px;background:#1C1C1E;color:#F5F4F0;border:0;font:inherit;font-size:15px;cursor:pointer;text-decoration:none;width:100%}
+.btn.on{background:#F5F4F0;color:#000}
+.scard{background:transparent;border:0;padding:0;color:#F5F4F0;font:inherit;text-align:left;display:flex;flex-direction:column;gap:8px;cursor:pointer}
+.scard .im{border-radius:20px;overflow:hidden;display:block;aspect-ratio:4/3;position:relative}
+.scard .im .scr{width:100%;height:100%}
+.scard.on .im{box-shadow:0 0 0 2px #000,0 0 0 4px #F5F4F0}
+.scard .nm{font-size:14px;padding:0 4px}
+.scard .meta{padding:0 4px;margin-top:-6px}
+.badge{position:absolute;right:8px;top:8px;font-size:10px;letter-spacing:.8px;text-transform:uppercase;background:rgba(0,0,0,.5);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);color:#fff;padding:3px 7px;border-radius:999px}
+.field{display:flex;align-items:center;gap:8px;height:40px;background:#232325;border-radius:12px;padding:0 12px;color:#8C8A85}
+.field input{flex:1;background:transparent;border:0;color:#F5F4F0;font:inherit;font-size:16px;outline:none;min-width:0}
+.sheet{position:absolute;left:0;right:0;bottom:0;top:70px;background:#161618;border-radius:38px 38px 0 0;padding:8px 16px 40px;display:flex;flex-direction:column;gap:14px;overflow:hidden;box-shadow:0 -10px 40px rgba(0,0,0,.6)}
+.grab{width:36px;height:5px;border-radius:3px;background:#48484A;margin:0 auto}
+.scrim{position:absolute;inset:0;background:rgba(0,0,0,.5)}
+.chips{display:flex;gap:8px;overflow:hidden}
+.sway{transform-origin:200px 210px;animation:sway 4s ease-in-out infinite}
+@keyframes sway{0%,100%{transform:rotate(-1.6deg)}50%{transform:rotate(1.8deg) translateX(3px)}}
+.drift{animation:drift 9s ease-in-out infinite alternate;transform-origin:172px 95px}
+@keyframes drift{to{transform:rotate(25deg) scale(1.15)}}
+
+.scroll > *{flex-shrink:0}
+.island{grid-template-columns:repeat(5,minmax(0,1fr));height:64px;border-radius:32px;padding:5px}
+.it{color:#8C8A85;gap:3px;border-radius:26px;position:relative}
+.it.on{background:rgba(255,255,255,.13);color:#F5F4F0}
+.it.on::after{content:'';position:absolute;bottom:5px;width:4px;height:4px;border-radius:50%;background:#F5F4F0}
+.it.on span{display:none}
+.vf{position:relative;border-radius:28px;overflow:hidden;background:#000}
+.vf svg{display:block;width:100%;height:auto}
+.vfbar{position:absolute;left:12px;right:12px;top:12px;display:flex;justify-content:space-between;align-items:center}
+.vfbot{position:absolute;left:12px;right:12px;bottom:12px;display:flex;justify-content:space-between;align-items:center}
+.ck{display:flex;align-items:center;gap:12px;min-height:40px}
+.ck .b{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#F5F4F0;color:#000;flex:none}
+.ck .b.no{background:#2C2C2E;color:#8C8A85}
+.log{display:flex;flex-direction:column;gap:6px;font-size:12.5px}
+.log div{display:grid;grid-template-columns:18px 1fr auto;gap:8px;align-items:start;line-height:1.4}
+.log .t{color:#5E5C57}
+.prompt{background:#1C1C1E;border-radius:22px;padding:14px 14px 10px;display:flex;flex-direction:column;gap:10px}
+.prompt .tx{font-size:16px;line-height:1.45;min-height:66px}
+.photo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
+</style>
+</helmet>
+<main class="ph">
+<div class="scroll" style="padding-bottom: 40px">
+<header class="hd">
+<a class="pill icon" href="Objects.dc.html" aria-label="close"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></a>
+<span style="display: flex; gap: 5px; margin: 0 auto"><i style="width: 6px; height: 6px; border-radius: 3px; background: #F5F4F0; display: block"></i><i style="width: 18px; height: 6px; border-radius: 3px; background: #F5F4F0; display: block"></i><i style="width: 6px; height: 6px; border-radius: 3px; background: #3A3A3C; display: block"></i><i style="width: 6px; height: 6px; border-radius: 3px; background: #3A3A3C; display: block"></i></span>
+<button class="pill icon" type="button" aria-label="help"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .8-1 1.5v.7"></path><circle cx="12" cy="17" r=".8" fill="currentColor"></circle></svg></button>
+</header>
+<div style="padding: 2px 4px 0"><span class="ttl" style="font-size: 26px">calibrating</span></div>
+<span class="dim" style="padding: 0 4px; font-size: 14px; line-height: 1.5">the projector flashes stripes and the phone watches them. this tells us exactly which projector pixel lands where.</span>
+<section class="vf"><svg viewBox="0 0 370 278" role="img" aria-label="live camera view of the desk">
+<defs><filter id="v66"><feGaussianBlur stdDeviation="1.6"></feGaussianBlur></filter></defs>
+<rect width="370" height="278" fill="#17161a"></rect>
+<rect width="370" height="172.35999999999999" fill="#1d1c20"></rect>
+<polygon points="0,172.35999999999999 370,161.23999999999998 370,278 0,278" fill="#141312"></polygon>
+<g filter="url(#v66)">
+<polygon points="173.89999999999998,100.08000000000001 223.93999999999997,127.88000000000001 173.89999999999998,155.68 123.85999999999999,127.88000000000001" fill="#3a3a3c"></polygon>
+<polygon points="123.85999999999999,127.88000000000001 173.89999999999998,155.68 173.89999999999998,211.28 123.85999999999999,183.48000000000002" fill="#2a2a2c"></polygon>
+<polygon points="173.89999999999998,155.68 223.93999999999997,127.88000000000001 223.93999999999997,183.48000000000002 173.89999999999998,211.28" fill="#202022"></polygon>
+<ellipse cx="173.89999999999998" cy="221.28" rx="55.044" ry="14" fill="#0a0a0a" opacity=".7"></ellipse>
+<rect x="288.6" y="83.39999999999999" width="12" height="88.96000000000001" fill="#2a2928"></rect>
+<polygon points="281.2,83.39999999999999 307.09999999999997,61.160000000000004 318.2,75.06 296.0,91.74000000000001" fill="#333230"></polygon>
+<rect x="22.2" y="44.480000000000004" width="59.2" height="83.39999999999999" fill="#222124"></rect>
+</g><g opacity=".55" style="mix-blend-mode: screen"><rect x="0" y="0" width="11" height="278" fill="#fff"></rect><rect x="22" y="0" width="11" height="278" fill="#fff"></rect><rect x="44" y="0" width="11" height="278" fill="#fff"></rect><rect x="66" y="0" width="11" height="278" fill="#fff"></rect><rect x="88" y="0" width="11" height="278" fill="#fff"></rect><rect x="110" y="0" width="11" height="278" fill="#fff"></rect><rect x="132" y="0" width="11" height="278" fill="#fff"></rect><rect x="154" y="0" width="11" height="278" fill="#fff"></rect><rect x="176" y="0" width="11" height="278" fill="#fff"></rect><rect x="198" y="0" width="11" height="278" fill="#fff"></rect><rect x="220" y="0" width="11" height="278" fill="#fff"></rect><rect x="242" y="0" width="11" height="278" fill="#fff"></rect><rect x="264" y="0" width="11" height="278" fill="#fff"></rect><rect x="286" y="0" width="11" height="278" fill="#fff"></rect><rect x="308" y="0" width="11" height="278" fill="#fff"></rect><rect x="330" y="0" width="11" height="278" fill="#fff"></rect><rect x="352" y="0" width="11" height="278" fill="#fff"></rect></g>
+<g stroke="rgba(255,255,255,.25)" stroke-width="1"></g>
+</svg>
+<div class="vfbar"><span class="glass"><i class="rd"></i>pattern 14 / 22</span><span class="glass">don't move</span></div>
+<div class="vfbot"><span></span><span class="glass">~ 12 s left</span></div>
+</section>
+<div style="height: 6px; border-radius: 3px; background: #2C2C2E; position: relative"><i style="position: absolute; left: 0; top: 0; bottom: 0; width: 64%; border-radius: 3px; background: #F5F4F0"></i></div>
+<section class="card" style="gap: 2px">
+<div class="ck"><span class="b"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg></span><span style="display: flex; flex-direction: column; gap: 2px"><span>projecting patterns</span><span class="meta">14 of 22 · gray code</span></span></div>
+<div class="ck"><span class="b no"></span><span style="display: flex; flex-direction: column; gap: 2px"><span>matching camera ↔ projector pixels</span><span class="meta">next</span></span></div>
+<div class="ck"><span class="b no"></span><span style="display: flex; flex-direction: column; gap: 2px"><span>finding surfaces</span><span class="meta">edges, planes, corners</span></span></div>
+</section>
+<button class="btn" type="button">cancel</button>
+</div>
+<i class="home" aria-hidden="true"></i>
+</main>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview": {"width": 402, "height": 874}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

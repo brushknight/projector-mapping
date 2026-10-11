@@ -1,0 +1,46 @@
+.sl {
+  position: relative;
+  height: var(--row);
+  background: var(--control-2);
+  border-radius: var(--radius-row);
+  overflow: hidden;
+  cursor: ew-resize;
+  touch-action: none;
+  user-select: none;
+  flex: none;
+}
+.sl:focus-visible {
+  outline: 1px solid var(--ink);
+  outline-offset: 2px;
+}
+.sl.disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.f {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: var(--ink);
+}
+.l,
+.v {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  color: var(--ink-hi);
+  mix-blend-mode: difference;
+  font-size: var(--fs-sm);
+  pointer-events: none;
+  white-space: nowrap;
+}
+.l {
+  left: 10px;
+}
+.v {
+  right: 10px;
+  font-family: var(--num);
+}

@@ -1,0 +1,42 @@
+.msg {
+  background: var(--control);
+  border-radius: var(--radius-efx);
+  padding: 11px 13px;
+  line-height: 1.5;
+  font-size: var(--fs);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.msg.me {
+  background: var(--ink);
+  color: var(--on-ink);
+  border-bottom-right-radius: 6px;
+  margin-left: 24px;
+}
+.log {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: var(--fs-sm);
+}
+.row {
+  display: grid;
+  grid-template-columns: 16px 1fr auto;
+  gap: 8px;
+  align-items: start;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.state {
+  color: var(--dim);
+  display: inline-flex;
+  padding-top: 1px;
+}
+.failed .state {
+  color: var(--ink);
+}
+.t {
+  color: var(--faint);
+  font-family: var(--num);
+  font-size: var(--fs-xs);
+}

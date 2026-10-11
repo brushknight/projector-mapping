@@ -1,0 +1,59 @@
+.pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: var(--ctl-md);
+  padding: 0 13px;
+  border-radius: var(--radius-pill);
+  background: var(--control);
+  color: var(--ink);
+  border: 0;
+  font-size: var(--fs-pill);
+  cursor: pointer;
+  white-space: nowrap;
+  text-decoration: none;
+  flex: none;
+}
+.pill:hover {
+  background: var(--control-3);
+}
+.pill:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.pill:focus-visible {
+  outline: 1px solid var(--ink);
+  outline-offset: 2px;
+}
+.pill.sm {
+  height: 28px;
+  padding: 0 11px;
+  font-size: var(--fs-sm);
+}
+.pill.lg {
+  height: var(--ctl-lg);
+  padding: 0 18px;
+}
+.pill.on {
+  background: var(--ink);
+  color: var(--on-ink);
+}
+.pill.ghost {
+  background: transparent;
+  color: var(--dim);
+}
+.pill.ghost:hover {
+  color: var(--ink);
+  background: var(--control);
+}
+.pill.iconOnly {
+  width: var(--ctl-md);
+  padding: 0;
+}
+.pill.iconOnly.sm {
+  width: 28px;
+}
+.pill.iconOnly.lg {
+  width: var(--ctl-lg);
+}

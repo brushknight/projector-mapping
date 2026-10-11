@@ -1,0 +1,46 @@
+.pane {
+  background: var(--panel);
+  border-radius: var(--radius-panel);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+.ph {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 14px 14px 8px;
+  flex: none;
+}
+.cap {
+  font-size: var(--fs-xs);
+  letter-spacing: var(--cap-spacing);
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.cap.bright {
+  color: var(--ink);
+}
+.sec {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: none;
+}
+.sec + .sec {
+  border-top: 1px solid var(--sep);
+}
+.sec.tight {
+  padding-top: 4px;
+}
+.r {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: space-between;
+  min-width: 0;
+}

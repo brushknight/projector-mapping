@@ -1,0 +1,1080 @@
+{
+ "version": 2,
+ "paramSchemaNote": "each param: {type: number|integer|boolean|color|enum|string|strokes, min?, max?, step?, default, label?, unit?, options?}; strokes is an array of drawing strokes (protocol §1, effect drawing)",
+ "light": {
+  "params": {
+   "intensity": {
+    "type": "number",
+    "min": 0,
+    "max": 1,
+    "default": 0.8,
+    "label": "intensity"
+   },
+   "softness": {
+    "type": "number",
+    "min": 0,
+    "max": 1,
+    "default": 0.5,
+    "label": "softness"
+   },
+   "angle": {
+    "type": "number",
+    "min": -90,
+    "max": 90,
+    "default": 0,
+    "label": "angle",
+    "unit": "°"
+   },
+   "scale": {
+    "type": "number",
+    "min": 0.25,
+    "max": 4,
+    "default": 1,
+    "label": "scale",
+    "unit": "×"
+   }
+  },
+  "fx": [
+   "none",
+   "candle",
+   "fire",
+   "lightning",
+   "paparazzi",
+   "tv",
+   "breathe",
+   "strobe",
+   "police"
+  ],
+  "cctPresets": [
+   {
+    "id": "tungsten",
+    "kelvin": 2700
+   },
+   {
+    "id": "golden",
+    "kelvin": 3200
+   },
+   {
+    "id": "daylight",
+    "kelvin": 5600
+   },
+   {
+    "id": "overcast",
+    "kelvin": 6500
+   }
+  ]
+ },
+ "gobos": [
+  {
+   "id": "window",
+   "name": "window",
+   "description": "2×3 window panes",
+   "category": "shadows"
+  },
+  {
+   "id": "blinds",
+   "name": "blinds",
+   "description": "venetian blinds",
+   "category": "shadows"
+  },
+  {
+   "id": "tree",
+   "name": "tree",
+   "description": "tree branches and leaves",
+   "category": "shadows"
+  },
+  {
+   "id": "palm",
+   "name": "palm",
+   "description": "palm fronds",
+   "category": "shadows"
+  },
+  {
+   "id": "arch",
+   "name": "arch",
+   "description": "arched window with mullions",
+   "category": "shadows"
+  },
+  {
+   "id": "lattice",
+   "name": "lattice",
+   "description": "diamond lattice",
+   "category": "shadows"
+  },
+  {
+   "id": "dots",
+   "name": "dots",
+   "description": "dappled dots",
+   "category": "shadows"
+  },
+  {
+   "id": "spot",
+   "name": "spot",
+   "description": "round spotlight",
+   "category": "shadows"
+  }
+ ],
+ "procedural": [
+  {
+   "id": "tree-sway",
+   "name": "tree sway",
+   "category": "nature",
+   "animated": true,
+   "params": {
+    "wind": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.4,
+     "label": "wind"
+    },
+    "gust": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.18,
+     "label": "gusts"
+    },
+    "focus": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.7,
+     "label": "focus"
+    },
+    "seed": {
+     "type": "integer",
+     "min": 0,
+     "max": 999,
+     "default": 7,
+     "label": "seed"
+    }
+   }
+  },
+  {
+   "id": "palm-sway",
+   "name": "palm sway",
+   "category": "nature",
+   "animated": true,
+   "params": {
+    "wind": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.35,
+     "label": "wind"
+    },
+    "gust": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.2,
+     "label": "gusts"
+    },
+    "focus": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.6,
+     "label": "focus"
+    },
+    "seed": {
+     "type": "integer",
+     "min": 0,
+     "max": 999,
+     "default": 3,
+     "label": "seed"
+    }
+   }
+  },
+  {
+   "id": "clouds",
+   "name": "clouds passing",
+   "category": "weather",
+   "animated": true,
+   "params": {
+    "speed": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.2,
+     "label": "speed"
+    },
+    "density": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.5,
+     "label": "density"
+    },
+    "softness": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.8,
+     "label": "softness"
+    }
+   }
+  },
+  {
+   "id": "rain-glass",
+   "name": "rain on glass",
+   "category": "weather",
+   "animated": true,
+   "params": {
+    "amount": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.5,
+     "label": "amount"
+    },
+    "speed": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.4,
+     "label": "speed"
+    },
+    "drops": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.6,
+     "label": "drop size"
+    }
+   }
+  },
+  {
+   "id": "lightning",
+   "name": "lightning",
+   "category": "weather",
+   "animated": true,
+   "params": {
+    "frequency": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.2,
+     "label": "frequency"
+    },
+    "brightness": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.9,
+     "label": "brightness"
+    }
+   }
+  },
+  {
+   "id": "day-cycle",
+   "name": "day cycle",
+   "category": "light",
+   "animated": true,
+   "params": {
+    "fromKelvin": {
+     "type": "number",
+     "min": 2000,
+     "max": 10000,
+     "default": 3200,
+     "label": "from",
+     "unit": "K"
+    },
+    "toKelvin": {
+     "type": "number",
+     "min": 2000,
+     "max": 10000,
+     "default": 5600,
+     "label": "to",
+     "unit": "K"
+    },
+    "minutes": {
+     "type": "number",
+     "min": 1,
+     "max": 240,
+     "default": 20,
+     "label": "duration",
+     "unit": "min"
+    }
+   }
+  },
+  {
+   "id": "sun-drift",
+   "name": "sun drift",
+   "category": "light",
+   "animated": true,
+   "params": {
+    "speed": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.1,
+     "label": "speed"
+    },
+    "travel": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.3,
+     "label": "travel"
+    }
+   }
+  },
+  {
+   "id": "candle-flicker",
+   "name": "candle flicker",
+   "category": "light",
+   "animated": true,
+   "params": {
+    "amount": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.5,
+     "label": "amount"
+    },
+    "speed": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.5,
+     "label": "speed"
+    }
+   }
+  },
+  {
+   "id": "caustics",
+   "name": "caustics",
+   "category": "texture",
+   "animated": true,
+   "params": {
+    "speed": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.3,
+     "label": "speed"
+    },
+    "scale": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.5,
+     "label": "scale"
+    },
+    "sharpness": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.5,
+     "label": "sharpness"
+    }
+   }
+  },
+  {
+   "id": "dapple",
+   "name": "dapple",
+   "category": "texture",
+   "animated": true,
+   "params": {
+    "speed": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.2,
+     "label": "speed"
+    },
+    "density": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.5,
+     "label": "density"
+    }
+   }
+  },
+  {
+   "id": "film-grain",
+   "name": "film grain",
+   "category": "texture",
+   "animated": true,
+   "params": {
+    "amount": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.15,
+     "label": "amount"
+    },
+    "size": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.3,
+     "label": "size"
+    }
+   }
+  },
+  {
+   "id": "haze",
+   "name": "haze",
+   "category": "texture",
+   "animated": true,
+   "params": {
+    "amount": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.3,
+     "label": "amount"
+    },
+    "drift": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.1,
+     "label": "drift"
+    }
+   }
+  }
+ ],
+ "gradients": [
+  {
+   "id": "ember",
+   "name": "ember",
+   "defaults": {
+    "stops": [
+     {
+      "color": "#ff4d00",
+      "pos": 0.0
+     },
+     {
+      "color": "#ff2e63",
+      "pos": 0.5
+     },
+     {
+      "color": "#6a00f4",
+      "pos": 1.0
+     }
+    ],
+    "angle": 135,
+    "drift": 0.24,
+    "grain": 0.12,
+    "brightness": 0.9
+   }
+  },
+  {
+   "id": "lagoon",
+   "name": "lagoon",
+   "defaults": {
+    "stops": [
+     {
+      "color": "#00e0b8",
+      "pos": 0.0
+     },
+     {
+      "color": "#0057ff",
+      "pos": 1.0
+     }
+    ],
+    "angle": 160,
+    "drift": 0.24,
+    "grain": 0.12,
+    "brightness": 0.9
+   }
+  },
+  {
+   "id": "ultraviolet",
+   "name": "ultraviolet",
+   "defaults": {
+    "stops": [
+     {
+      "color": "#c86bfa",
+      "pos": 0.0
+     },
+     {
+      "color": "#3a0ca3",
+      "pos": 0.5
+     },
+     {
+      "color": "#10002b",
+      "pos": 1.0
+     }
+    ],
+    "angle": 135,
+    "drift": 0.24,
+    "grain": 0.12,
+    "brightness": 0.9
+   }
+  },
+  {
+   "id": "dusk",
+   "name": "dusk",
+   "defaults": {
+    "stops": [
+     {
+      "color": "#ffb347",
+      "pos": 0.0
+     },
+     {
+      "color": "#ff5e62",
+      "pos": 0.5
+     },
+     {
+      "color": "#2b1055",
+      "pos": 1.0
+     }
+    ],
+    "angle": 180,
+    "drift": 0.24,
+    "grain": 0.12,
+    "brightness": 0.9
+   }
+  },
+  {
+   "id": "acid",
+   "name": "acid",
+   "defaults": {
+    "stops": [
+     {
+      "color": "#d4ff00",
+      "pos": 0.0
+     },
+     {
+      "color": "#00ff9d",
+      "pos": 0.5
+     },
+     {
+      "color": "#00b3ff",
+      "pos": 1.0
+     }
+    ],
+    "angle": 120,
+    "drift": 0.24,
+    "grain": 0.12,
+    "brightness": 0.9
+   }
+  },
+  {
+   "id": "mono-haze",
+   "name": "mono haze",
+   "defaults": {
+    "stops": [
+     {
+      "color": "#e8e4dc",
+      "pos": 0.0
+     },
+     {
+      "color": "#7a776f",
+      "pos": 0.5
+     },
+     {
+      "color": "#141412",
+      "pos": 1.0
+     }
+    ],
+    "angle": 150,
+    "drift": 0.24,
+    "grain": 0.12,
+    "brightness": 0.9
+   }
+  }
+ ],
+ "gradientParams": {
+  "angle": {
+   "type": "number",
+   "min": 0,
+   "max": 360,
+   "default": 135,
+   "label": "angle",
+   "unit": "°"
+  },
+  "drift": {
+   "type": "number",
+   "min": 0,
+   "max": 1,
+   "default": 0.24,
+   "label": "drift"
+  },
+  "grain": {
+   "type": "number",
+   "min": 0,
+   "max": 1,
+   "default": 0.12,
+   "label": "film grain"
+  },
+  "brightness": {
+   "type": "number",
+   "min": 0,
+   "max": 1,
+   "default": 0.9,
+   "label": "brightness"
+  }
+ },
+ "scenery": [
+  {
+   "id": "flowers",
+   "name": "flowers",
+   "category": "nature",
+   "asset": "scenery/flowers.jpg",
+   "credit": "Declan Sun · Unsplash"
+  },
+  {
+   "id": "forest",
+   "name": "forest",
+   "category": "nature",
+   "asset": "scenery/forest.jpg",
+   "credit": "Filip Varga · Unsplash"
+  },
+  {
+   "id": "dunes",
+   "name": "dunes",
+   "category": "nature",
+   "asset": "scenery/dunes.jpg",
+   "credit": "Benoît Deschasaux · Unsplash"
+  },
+  {
+   "id": "ocean",
+   "name": "ocean",
+   "category": "nature",
+   "asset": "scenery/ocean.jpg",
+   "credit": "Sean Oulashin · Unsplash"
+  },
+  {
+   "id": "mountains",
+   "name": "mountains",
+   "category": "nature",
+   "asset": "scenery/mountains.jpg",
+   "credit": "Bailey Zindel · Unsplash"
+  },
+  {
+   "id": "autumn",
+   "name": "autumn",
+   "category": "nature",
+   "asset": "scenery/autumn.jpg",
+   "credit": "Natalie Kinnear · Unsplash"
+  },
+  {
+   "id": "cherry-blossom",
+   "name": "cherry blossom",
+   "category": "nature",
+   "asset": "scenery/cherry-blossom.jpg",
+   "credit": "Declan Sun · Unsplash"
+  },
+  {
+   "id": "tropical",
+   "name": "tropical",
+   "category": "nature",
+   "asset": "scenery/tropical.jpg",
+   "credit": "Maria Lupan · Unsplash"
+  },
+  {
+   "id": "desert-sunset",
+   "name": "desert sunset",
+   "category": "nature",
+   "asset": "scenery/desert-sunset.jpg",
+   "credit": "Nick LaRovere · Unsplash"
+  },
+  {
+   "id": "wheat",
+   "name": "wheat",
+   "category": "nature",
+   "asset": "scenery/wheat.jpg",
+   "credit": "Heino Eisner · Unsplash"
+  },
+  {
+   "id": "waterfall",
+   "name": "waterfall",
+   "category": "nature",
+   "asset": "scenery/waterfall.jpg",
+   "credit": "Yasin Onuş · Unsplash"
+  },
+  {
+   "id": "city-bokeh",
+   "name": "city bokeh",
+   "category": "city",
+   "asset": "scenery/city-bokeh.jpg",
+   "credit": "Alexander Schimmeck · Unsplash"
+  }
+ ],
+ "photoParams": {
+  "blur": {
+   "type": "number",
+   "min": 0,
+   "max": 1,
+   "default": 0.74,
+   "label": "background blur"
+  },
+  "brightness": {
+   "type": "number",
+   "min": 0,
+   "max": 1,
+   "default": 0.66,
+   "label": "brightness"
+  },
+  "warmth": {
+   "type": "number",
+   "min": -1,
+   "max": 1,
+   "default": 0,
+   "label": "warmth"
+  },
+  "drift": {
+   "type": "number",
+   "min": 0,
+   "max": 1,
+   "default": 0.1,
+   "label": "slow drift"
+  }
+ },
+ "effects": [
+  {
+   "id": "grid-build",
+   "name": "grid build",
+   "group": "fill",
+   "kind": "builtin",
+   "origin": "builtin",
+   "params": {
+    "cells": {
+     "type": "integer",
+     "min": 2,
+     "max": 32,
+     "default": 8,
+     "label": "cells"
+    },
+    "line": {
+     "type": "number",
+     "min": 1,
+     "max": 8,
+     "default": 2,
+     "label": "line",
+     "unit": "px"
+    },
+    "glow": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.5,
+     "label": "glow"
+    },
+    "color": {
+     "type": "color",
+     "default": "#d8f8ff",
+     "label": "color"
+    }
+   }
+  },
+  {
+   "id": "trace",
+   "name": "trace",
+   "group": "outline",
+   "kind": "builtin",
+   "origin": "builtin",
+   "params": {
+    "mode": {
+     "type": "enum",
+     "options": [
+      "border",
+      "boomerang"
+     ],
+     "default": "border",
+     "label": "mode"
+    },
+    "line": {
+     "type": "number",
+     "min": 1,
+     "max": 12,
+     "default": 3,
+     "label": "line",
+     "unit": "px"
+    },
+    "speed": {
+     "type": "number",
+     "min": 0.2,
+     "max": 10,
+     "default": 2,
+     "label": "speed",
+     "unit": "s"
+    },
+    "glow": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.62,
+     "label": "glow"
+    },
+    "pixelStep": {
+     "type": "number",
+     "min": 0,
+     "max": 12,
+     "default": 0,
+     "label": "pixel step",
+     "unit": "px"
+    },
+    "color": {
+     "type": "color",
+     "default": "#e9fbff",
+     "label": "color"
+    }
+   }
+  },
+  {
+   "id": "scan",
+   "name": "scan",
+   "group": "fill",
+   "kind": "builtin",
+   "origin": "builtin",
+   "params": {
+    "direction": {
+     "type": "enum",
+     "options": [
+      "down",
+      "up",
+      "left",
+      "right"
+     ],
+     "default": "down",
+     "label": "direction"
+    },
+    "width": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.15,
+     "label": "band"
+    },
+    "color": {
+     "type": "color",
+     "default": "#e9fbff",
+     "label": "color"
+    }
+   }
+  },
+  {
+   "id": "glitch",
+   "name": "glitch",
+   "group": "transform",
+   "kind": "builtin",
+   "origin": "builtin",
+   "params": {
+    "amount": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.5,
+     "label": "amount"
+    },
+    "blocks": {
+     "type": "integer",
+     "min": 2,
+     "max": 64,
+     "default": 12,
+     "label": "blocks"
+    },
+    "color": {
+     "type": "color",
+     "default": "#ffffff",
+     "label": "color"
+    }
+   }
+  },
+  {
+   "id": "fill",
+   "name": "fill",
+   "group": "fill",
+   "kind": "builtin",
+   "origin": "builtin",
+   "params": {
+    "color": {
+     "type": "color",
+     "default": "#ffffff",
+     "label": "color"
+    },
+    "opacity": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 1,
+     "label": "opacity"
+    }
+   }
+  },
+  {
+   "id": "particles",
+   "name": "particles",
+   "group": "fill",
+   "kind": "builtin",
+   "origin": "builtin",
+   "params": {
+    "count": {
+     "type": "integer",
+     "min": 10,
+     "max": 2000,
+     "default": 200,
+     "label": "count"
+    },
+    "speed": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.4,
+     "label": "speed"
+    },
+    "size": {
+     "type": "number",
+     "min": 1,
+     "max": 8,
+     "default": 2,
+     "label": "size",
+     "unit": "px"
+    },
+    "color": {
+     "type": "color",
+     "default": "#ffffff",
+     "label": "color"
+    }
+   }
+  },
+  {
+   "id": "label",
+   "name": "label",
+   "group": "outline",
+   "kind": "builtin",
+   "origin": "builtin",
+   "params": {
+    "text": {
+     "type": "string",
+     "default": "ZIMACUBE",
+     "label": "text"
+    },
+    "size": {
+     "type": "number",
+     "min": 8,
+     "max": 300,
+     "default": 48,
+     "label": "size",
+     "unit": "px"
+    },
+    "color": {
+     "type": "color",
+     "default": "#ffffff",
+     "label": "color"
+    }
+   }
+  },
+  {
+   "id": "pulse",
+   "name": "pulse",
+   "group": "fill",
+   "kind": "builtin",
+   "origin": "builtin",
+   "params": {
+    "bpm": {
+     "type": "number",
+     "min": 20,
+     "max": 200,
+     "default": 72,
+     "label": "bpm"
+    },
+    "depth": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.6,
+     "label": "depth"
+    },
+    "color": {
+     "type": "color",
+     "default": "#e9fbff",
+     "label": "color"
+    }
+   }
+  },
+  {
+   "id": "highlight",
+   "name": "highlight",
+   "group": "fill",
+   "kind": "builtin",
+   "origin": "builtin",
+   "params": {
+    "color": {
+     "type": "color",
+     "default": "#e9fbff",
+     "label": "color"
+    },
+    "edgeGlow": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.6,
+     "label": "edge glow"
+    },
+    "fillOpacity": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.25,
+     "label": "fill"
+    }
+   }
+  },
+  {
+   "id": "spin",
+   "name": "spin (dashed ring)",
+   "group": "transform",
+   "kind": "builtin",
+   "origin": "builtin",
+   "params": {
+    "rpm": {
+     "type": "number",
+     "min": 1,
+     "max": 600,
+     "default": 60,
+     "label": "rpm"
+    },
+    "dashes": {
+     "type": "integer",
+     "min": 2,
+     "max": 64,
+     "default": 12,
+     "label": "dashes"
+    },
+    "line": {
+     "type": "number",
+     "min": 1,
+     "max": 12,
+     "default": 3,
+     "label": "line",
+     "unit": "px"
+    },
+    "color": {
+     "type": "color",
+     "default": "#e9fbff",
+     "label": "color"
+    }
+   }
+  },
+  {
+   "id": "drawing",
+   "name": "drawing",
+   "group": "draw",
+   "kind": "builtin",
+   "origin": "builtin",
+   "params": {
+    "strokes": {
+     "type": "strokes",
+     "default": [],
+     "label": "strokes"
+    },
+    "reveal": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 1,
+     "label": "reveal"
+    }
+   }
+  }
+ ]
+}

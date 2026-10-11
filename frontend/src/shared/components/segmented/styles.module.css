@@ -1,0 +1,42 @@
+.seg {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  background: var(--control);
+  border-radius: var(--radius-seg);
+  padding: 3px;
+  gap: 2px;
+  flex: none;
+}
+.seg button {
+  background: transparent;
+  border: 0;
+  color: var(--dim);
+  font-size: var(--fs-sm);
+  height: 28px;
+  border-radius: var(--radius-num);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.seg button:hover {
+  color: var(--ink);
+}
+.seg button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.seg button.on {
+  background: var(--ink);
+  color: var(--on-ink);
+}
+.seg.sm button {
+  height: 24px;
+  font-size: var(--fs-xs);
+}

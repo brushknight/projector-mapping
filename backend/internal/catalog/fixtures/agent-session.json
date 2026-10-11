@@ -1,0 +1,9 @@
+{
+ "id": "agt_3",
+ "agent": "codex",
+ "prompt": "map the zimacube faces, bays and fan",
+ "status": "running",
+ "sceneId": "scn_desk",
+ "draftId": "drf_1",
+ "createdAt": "2026-10-11T10:00:00Z"
+}

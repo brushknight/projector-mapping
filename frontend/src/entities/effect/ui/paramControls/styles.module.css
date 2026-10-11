@@ -1,0 +1,11 @@
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.row {
+  min-height: var(--row);
+}
+.text {
+  width: 140px;
+}

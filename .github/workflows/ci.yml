@@ -1,0 +1,79 @@
+# Tests on every push to main and every pull request: the Go server, the web
+# app and the iPhone app.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash # -eo pipefail
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - name: vet and test
+        working-directory: backend
+        run: |
+          make catalog
+          go vet ./...
+          test -z "$(gofmt -l internal cmd)" || { gofmt -l internal cmd; echo "run make fmt"; exit 1; }
+          go test ./...
+      - name: cross-compile (the release targets)
+        working-directory: backend
+        run: |
+          for t in darwin/arm64 darwin/amd64 linux/amd64 linux/arm64; do
+            GOOS=${t%/*} GOARCH=${t#*/} CGO_ENABLED=0 go build -o /dev/null ./cmd/projmap
+          done
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: typecheck, unit tests, build
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
+          npm run build
+
+  ios:
+    # Slower: a macOS runner with Xcode 27 (iOS 26 SDK; the PM package also targets macOS 26 for swift test).
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - run: brew install xcodegen
+      - name: swift test (PM package)
+        run: swift test --package-path ios/Packages/PM
+      - name: build for the simulator
+        working-directory: ios
+        run: |
+          xcodegen generate
+          xcodebuild -project projmap.xcodeproj -scheme projmap \
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath .build/dd \
+            CODE_SIGNING_ALLOWED=NO build | tail -n 40

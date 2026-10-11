@@ -1,0 +1,51 @@
+.node {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: var(--row);
+  padding: 0 8px;
+  border-radius: var(--radius-row);
+  color: var(--ink);
+  cursor: pointer;
+  flex: none;
+  user-select: none;
+}
+.node:hover {
+  background: var(--control);
+}
+.k {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.m {
+  color: var(--faint);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+.ic {
+  color: var(--dim);
+  display: inline-flex;
+}
+.eye {
+  color: var(--dim);
+  display: inline-flex;
+  background: transparent;
+  border: 0;
+  padding: 2px;
+  cursor: pointer;
+}
+.node.sel {
+  background: var(--ink);
+  color: var(--on-ink);
+}
+.node.sel .ic,
+.node.sel .m,
+.node.sel .eye {
+  color: var(--on-ink-dim);
+}
+.node.dimn {
+  color: var(--dim-3);
+}

@@ -1,0 +1,314 @@
+.stage {
+  background: var(--stage);
+  border-radius: var(--radius-panel);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+.sbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 10px 0;
+  flex: none;
+  min-width: 0;
+  overflow: hidden;
+}
+.sp {
+  flex: 1;
+}
+.draftChip {
+  font-size: var(--fs-sm);
+  color: var(--dim);
+  margin-left: 6px;
+  white-space: nowrap;
+}
+.area {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background-image: radial-gradient(var(--dot-grid) 1px, transparent 1px);
+  background-size: 16px 16px;
+  touch-action: none;
+}
+.frame {
+  position: absolute;
+  border-radius: 10px;
+  box-shadow: var(--shadow-stage);
+  background: var(--bg);
+  overflow: visible;
+}
+.ref,
+.canvas,
+.overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.ref {
+  object-fit: fill;
+  opacity: 0.9;
+  border-radius: 10px;
+  user-select: none;
+  pointer-events: none;
+}
+.canvas {
+  border-radius: 10px;
+}
+.canvas.screen {
+  mix-blend-mode: screen;
+}
+.noRef {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--dim);
+  font-size: var(--fs-sm);
+  padding: 24px;
+  text-align: center;
+}
+.label {
+  position: absolute;
+  left: 12px;
+  top: 10px;
+  font-size: var(--fs-xs);
+  letter-spacing: var(--cap-spacing);
+  text-transform: uppercase;
+  color: var(--dim);
+  pointer-events: none;
+}
+.overlay {
+  overflow: visible;
+  cursor: default;
+}
+.overlay.drawing {
+  cursor: crosshair;
+}
+.srf {
+  stroke: var(--ink-soft);
+  cursor: move;
+  pointer-events: visiblePainted;
+}
+.srf.dimmed {
+  stroke-opacity: 0.7;
+}
+.srf.detail {
+  stroke: var(--dim-2);
+}
+.srf.other {
+  stroke-opacity: 0.45;
+}
+.srf.sel {
+  stroke: var(--ink-soft);
+  stroke-opacity: 1;
+}
+.srf.hidden {
+  stroke-opacity: 0.2;
+}
+.hitLine {
+  stroke: transparent;
+  fill: none;
+  cursor: move;
+  pointer-events: stroke;
+}
+.hatchDot {
+  fill: var(--hatch);
+}
+.maskBg {
+  fill: var(--stage);
+  fill-opacity: 0.55;
+}
+.maskLine {
+  stroke: var(--dim-2);
+  stroke-opacity: 0.5;
+}
+.meshLine {
+  fill: none;
+  stroke: var(--ink-soft);
+  stroke-opacity: 0.35;
+  pointer-events: none;
+}
+.meshHandle {
+  fill: var(--bg);
+  stroke: var(--ink-soft);
+  cursor: grab;
+}
+.meshHandleOn {
+  fill: var(--ink-soft);
+  stroke: var(--ink-soft);
+  cursor: grabbing;
+}
+.handleG {
+  cursor: grab;
+}
+.handle {
+  fill: var(--bg);
+  stroke: var(--ink);
+}
+.handleOn {
+  fill: var(--ink-soft);
+  stroke: var(--ink-soft);
+}
+.handleTarget {
+  fill: var(--ink-hi);
+  stroke: var(--ink);
+}
+.handleDot {
+  fill: var(--bg);
+}
+.preview {
+  fill: none;
+  stroke: var(--ink);
+}
+.readout {
+  font-family: var(--ui);
+}
+.readoutBg {
+  fill: var(--bg);
+}
+.readoutText {
+  fill: var(--ink-soft);
+}
+.loupe {
+  position: absolute;
+  width: 128px;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.loupe canvas {
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--ink-soft);
+  display: block;
+}
+.loupeLabel {
+  font-size: var(--fs-xs);
+  color: var(--dim-2);
+  white-space: nowrap;
+}
+.leader {
+  position: absolute;
+  pointer-events: none;
+  overflow: visible;
+}
+.leader line {
+  stroke: var(--faint);
+  stroke-dasharray: 3 3;
+}
+.hints {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  right: 12px;
+  pointer-events: none;
+}
+.glError {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  color: var(--ink);
+  font-size: var(--fs-sm);
+}
+.draftBar {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--hint-bg);
+  border-radius: var(--radius-pill);
+  padding: 3px 3px 3px 12px;
+  z-index: 2;
+}
+.wallChip {
+  position: absolute;
+  left: 12px;
+  top: 4px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 2px 2px 12px;
+  border-radius: var(--radius-pill);
+  background: var(--hint-bg);
+  backdrop-filter: blur(10px);
+}
+.wallText {
+  font-size: var(--fs-sm);
+  color: var(--dim);
+  white-space: nowrap;
+}
+.wallText b {
+  color: var(--ink);
+  font-weight: normal;
+}
+.underlay {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+}
+.coach {
+  position: absolute;
+  left: 50%;
+  bottom: 56px;
+  transform: translateX(-50%);
+  z-index: 4;
+  width: min(460px, calc(100% - 32px));
+  padding: 16px 18px 14px;
+  border-radius: var(--radius-card);
+  background: var(--dialog);
+  box-shadow: var(--shadow-dialog);
+  border: 1px solid var(--control-line);
+  color: var(--ink);
+  /* clicks pass through to the stage (the first corner can sit under the tips); only its buttons take them */
+  pointer-events: none;
+}
+.coach button {
+  pointer-events: auto;
+}
+.coachHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.coachTitle {
+  font-family: var(--ui);
+  font-size: var(--fs);
+}
+.coachList {
+  margin: 0;
+  padding: 0 0 0 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+  line-height: 1.4;
+}
+.coachList kbd {
+  font-family: var(--num);
+  font-size: var(--fs-xs);
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--control-2);
+  color: var(--ink);
+}
+.coachActions {
+  display: flex;
+  gap: 6px;
+  margin-top: 12px;
+}

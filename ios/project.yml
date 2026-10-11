@@ -1,0 +1,67 @@
+name: projmap
+options:
+  bundleIdPrefix: com.brushknight
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    DEVELOPMENT_TEAM: "3J46XQAXC4"
+    CODE_SIGN_STYLE: Automatic
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    TARGETED_DEVICE_FAMILY: "1"
+    SUPPORTS_MACCATALYST: NO
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+
+packages:
+  PM:
+    path: Packages/PM
+
+targets:
+  projmap:
+    type: application
+    platform: iOS
+    sources:
+      - path: App/Sources
+      - path: App/Resources
+      # Demo mode (-pm-demo) and the bundled catalog read the shared contract; one copy for all clients.
+      - path: ../contract/fixtures
+        type: folder
+        buildPhase: resources
+      - path: ../contract/catalog.json
+        buildPhase: resources
+      # Scenery photos for demo mode and as an offline fallback before the server's copy is cached.
+      - path: ../design/photos
+        type: folder
+        buildPhase: resources
+    dependencies:
+      - package: PM
+        product: PMKit
+      - package: PM
+        product: PMStore
+      - package: PM
+        product: PMLive
+      - package: PM
+        product: PMDesign
+      - package: PM
+        product: PMCamera
+      - package: PM
+        product: PMPreview
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.brushknight.projmap
+        PRODUCT_NAME: projmap
+        INFOPLIST_FILE: App/Resources/Info.plist
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        GENERATE_INFOPLIST_FILE: NO
+
+schemes:
+  projmap:
+    build:
+      targets:
+        projmap: all

@@ -1,0 +1,9 @@
+.qr {
+  display: block;
+}
+.paper {
+  fill: var(--qr-paper);
+}
+.ink {
+  fill: var(--qr-ink);
+}

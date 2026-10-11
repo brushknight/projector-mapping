@@ -1,0 +1,19 @@
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.inline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+.label {
+  font-size: var(--fs-xs);
+  letter-spacing: var(--cap-spacing);
+  text-transform: uppercase;
+  color: var(--dim);
+}

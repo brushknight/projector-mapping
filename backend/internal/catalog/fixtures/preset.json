@@ -1,0 +1,40 @@
+{
+ "id": "pre_golden",
+ "name": "golden hour",
+ "mode": "static",
+ "backdrop": {
+  "layers": [
+   {
+    "id": "lay_window",
+    "kind": "gobo",
+    "ref": "window",
+    "name": "window 2×3",
+    "visible": true,
+    "opacity": 1.0,
+    "blend": "normal",
+    "light": {
+     "intensity": 0.8,
+     "softness": 0.62,
+     "angle": -22,
+     "scale": 1.4,
+     "offsetX": 0,
+     "offsetY": 0,
+     "color": {
+      "mode": "cct",
+      "kelvin": 3200,
+      "tint": 0.04,
+      "hue": 212,
+      "sat": 0.7
+     },
+     "fx": {
+      "kind": "none",
+      "speed": 0.35
+     }
+    },
+    "params": {}
+   }
+  ]
+ },
+ "thumbAsset": null,
+ "createdAt": "2026-10-11T10:00:00Z"
+}

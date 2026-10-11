@@ -1,0 +1,29 @@
+.efx {
+  background: var(--card);
+  border-radius: var(--radius-efx);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.efx.off {
+  opacity: 0.5;
+}
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.name {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  cursor: default;
+}
+.actions {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}

@@ -1,0 +1,18 @@
+.num {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--control);
+  height: var(--ctl-sm);
+  padding: 0 10px;
+  border-radius: var(--radius-num);
+  font-family: var(--num);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+  flex: none;
+}
+.num i {
+  font-style: normal;
+  color: var(--dim);
+  font-family: var(--ui);
+}

@@ -1,0 +1,27 @@
+.tools {
+  display: flex;
+  gap: 2px;
+  background: var(--control);
+  padding: 3px;
+  border-radius: var(--radius-pill);
+  flex: none;
+}
+.tool {
+  width: 36px;
+  height: 30px;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  border: 0;
+  color: var(--dim);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.tool:hover {
+  color: var(--ink);
+}
+.tool.on {
+  background: var(--ink);
+  color: var(--on-ink);
+}

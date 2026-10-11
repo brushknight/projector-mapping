@@ -1,0 +1,265 @@
+[
+ {
+  "t": "hello",
+  "d": {
+   "token": "tok_abc",
+   "role": "remote",
+   "name": "Grisha's iPhone",
+   "caps": [
+    "haptics",
+    "camera"
+   ],
+   "build": "0.1.0"
+  }
+ },
+ {
+  "t": "welcome",
+  "d": {
+   "device": {
+    "id": "dev_7k2",
+    "name": "Grisha's iPhone",
+    "role": "remote",
+    "lastSeen": "2026-10-11T10:00:00Z",
+    "online": true
+   },
+   "serverTime": 1791700000123456789,
+   "show": {
+    "activeSetupId": "set_desk",
+    "activeSceneId": "scn_desk",
+    "onAir": true,
+    "transport": {
+     "state": "stopped",
+     "startedAt": 0,
+     "offset": 0,
+     "cue": 0
+    },
+    "version": 1
+   },
+   "catalogVersion": 1
+  }
+ },
+ {
+  "t": "ping",
+  "d": {
+   "t0": 1791700000123.5
+  }
+ },
+ {
+  "t": "pong",
+  "d": {
+   "t0": 1791700000123.5,
+   "ts": 1791700000125456789
+  }
+ },
+ {
+  "t": "sub",
+  "ch": "scene:scn_desk"
+ },
+ {
+  "t": "snapshot",
+  "ch": "setup:set_desk",
+  "v": 3,
+  "d": {
+   "id": "set_desk",
+   "name": "Desk projector",
+   "output": {
+    "width": 1920,
+    "height": 1080,
+    "orientation": "landscape",
+    "flipH": false,
+    "flipV": false
+   },
+   "master": 1.0,
+   "blackoutFadeMs": 500,
+   "testPattern": "off",
+   "testPatternUntil": null,
+   "referenceAsset": null,
+   "calibrationId": null
+  }
+ },
+ {
+  "t": "param",
+  "ch": "scene:scn_desk",
+  "d": {
+   "path": "/backdrop/static/layers/0/light/intensity",
+   "value": 0.62
+  }
+ },
+ {
+  "t": "param",
+  "ch": "scene:scn_desk",
+  "d": {
+   "path": "/backdrop/static/layers/0/light/intensity",
+   "value": 0.62,
+   "by": "dev_7k2"
+  }
+ },
+ {
+  "t": "patch",
+  "ch": "scene:scn_desk",
+  "id": "c-77",
+  "base": 419,
+  "d": [
+   {
+    "op": "add",
+    "path": "/backdrop/live/layers/-",
+    "value": {
+     "id": "lay_tree",
+     "kind": "procedural",
+     "ref": "tree-sway",
+     "name": "tree sway",
+     "visible": true,
+     "opacity": 0.88,
+     "blend": "multiply",
+     "light": {
+      "intensity": 0.8,
+      "softness": 0.62,
+      "angle": -22,
+      "scale": 1.4,
+      "offsetX": 0,
+      "offsetY": 0,
+      "color": {
+       "mode": "cct",
+       "kelvin": 3200,
+       "tint": 0.04,
+       "hue": 212,
+       "sat": 0.7
+      },
+      "fx": {
+       "kind": "none",
+       "speed": 0.35
+      }
+     },
+     "params": {
+      "wind": 0.4,
+      "gust": 0.18,
+      "focus": 0.7,
+      "seed": 7
+     }
+    }
+   }
+  ]
+ },
+ {
+  "t": "patch",
+  "ch": "scene:scn_desk",
+  "id": "c-80",
+  "base": 420,
+  "d": [
+   {
+    "op": "replace",
+    "path": "/mode",
+    "value": "objects"
+   }
+  ]
+ },
+ {
+  "t": "patched",
+  "ch": "scene:scn_desk",
+  "v": 420,
+  "re": "c-77",
+  "d": {
+   "ops": [
+    {
+     "op": "replace",
+     "path": "/name",
+     "value": "Desk"
+    }
+   ],
+   "by": "dev_7k2"
+  }
+ },
+ {
+  "t": "reject",
+  "re": "c-77",
+  "v": 421,
+  "d": {
+   "code": "stale",
+   "message": "Scene changed; rebase on version 421."
+  }
+ },
+ {
+  "t": "cmd",
+  "id": "c-78",
+  "d": {
+   "name": "show.go",
+   "args": {}
+  }
+ },
+ {
+  "t": "cmd",
+  "id": "c-79",
+  "d": {
+   "name": "scene.mode",
+   "args": {
+    "sceneId": "scn_desk",
+    "mode": "live"
+   }
+  }
+ },
+ {
+  "t": "cmd",
+  "id": "c-81",
+  "d": {
+   "name": "setup.testPattern",
+   "args": {
+    "setupId": "set_desk",
+    "pattern": "grid",
+    "seconds": 60
+   }
+  }
+ },
+ {
+  "t": "ack",
+  "re": "c-78"
+ },
+ {
+  "t": "error",
+  "re": "c-78",
+  "d": {
+   "code": "no_scene",
+   "message": "No active scene."
+  }
+ },
+ {
+  "t": "rpc",
+  "id": "r-1",
+  "d": {
+   "method": "output.pattern",
+   "args": {
+    "kind": "gray",
+    "axis": "x",
+    "bit": 3,
+    "inverse": false
+   }
+  }
+ },
+ {
+  "t": "rpc.result",
+  "re": "r-1",
+  "d": {
+   "presented": true
+  }
+ },
+ {
+  "t": "rpc",
+  "id": "r-2",
+  "d": {
+   "method": "camera.capture",
+   "args": {
+    "requestId": "cap_9",
+    "lock": true
+   }
+  }
+ },
+ {
+  "t": "telemetry",
+  "d": {
+   "fps": 60,
+   "dropped": 0,
+   "width": 1920,
+   "height": 1080,
+   "refresh": 60
+  }
+ }
+]

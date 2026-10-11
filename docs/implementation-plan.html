@@ -1,0 +1,677 @@
+<title>Projector Map Build Plan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=Roboto+Mono:wght@400;500;700&family=Share+Tech+Mono&display=swap">
+<style>
+:root{
+  --bg:#F6F5F1; --surface:#FFFFFF; --sunk:#EFEDE7; --ink:#151514; --ink-2:#3E3D3A; --dim:#6E6C66; --line:#E2E0D9; --accent:#D42A1E; --accent-ink:#FFFFFF;
+  --ok:#2F7D4F; --code-bg:#F0EEE8;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-head:"Roboto Mono",ui-monospace,Menlo,Consolas,monospace;
+  --f-label:"Share Tech Mono","Roboto Mono",ui-monospace,Menlo,monospace;
+  --r:14px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0B0B0C; --surface:#141415; --sunk:#1B1B1D; --ink:#F2F1EC; --ink-2:#C9C7C0; --dim:#8C8A85; --line:#29292C; --accent:#FF4A3D; --accent-ink:#000;
+    --ok:#5FC88A; --code-bg:#161618; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0B0B0C; --surface:#141415; --sunk:#1B1B1D; --ink:#F2F1EC; --ink-2:#C9C7C0; --dim:#8C8A85; --line:#29292C; --accent:#FF4A3D; --accent-ink:#000;
+  --ok:#5FC88A; --code-bg:#161618; color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.6;padding-inline:20px;padding-block:0 80px;-webkit-font-smoothing:antialiased}
+a{color:inherit;text-decoration-color:var(--dim);text-underline-offset:3px}
+a:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+.wrap{max-width:1180px;margin:0 auto;display:grid;grid-template-columns:220px minmax(0,1fr);gap:56px}
+@media (max-width:980px){.wrap{grid-template-columns:minmax(0,1fr);gap:0}.toc{display:none}}
+.toc{position:sticky;top:env(safe-area-inset-top,0px);align-self:start;padding-top:40px;max-height:100vh;overflow:auto}
+.toc .lbl{font-family:var(--f-label);font-size:11px;letter-spacing:1.6px;text-transform:uppercase;color:var(--dim);margin-bottom:12px;display:block}
+.toc ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px;counter-reset:t}
+.toc li{counter-increment:t}
+.toc a{display:flex;gap:10px;padding:5px 8px;border-radius:8px;text-decoration:none;color:var(--ink-2);font-size:13.5px;line-height:1.35}
+.toc a::before{content:counter(t,decimal-leading-zero);font-family:var(--f-label);color:var(--dim);font-size:12px;padding-top:1px}
+.toc a:hover{background:var(--sunk);color:var(--ink)}
+main{min-width:0;max-width:800px}
+header.top{padding:48px 0 28px;border-bottom:1px solid var(--line);margin-bottom:8px}
+.eyebrow{font-family:var(--f-label);font-size:12px;letter-spacing:1.8px;text-transform:uppercase;color:var(--dim);display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--accent);display:inline-block}
+h1{font-family:var(--f-head);font-weight:700;font-size:clamp(30px,5vw,44px);letter-spacing:-1.4px;line-height:1.08;margin:14px 0 14px;text-wrap:balance}
+.lede{font-size:18px;color:var(--ink-2);max-width:66ch;margin:0}
+.meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:22px}
+.chip{font-family:var(--f-label);font-size:12px;letter-spacing:.6px;padding:4px 10px;border-radius:999px;background:var(--sunk);color:var(--ink-2);border:1px solid var(--line);white-space:nowrap}
+.chip.crit{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+section{padding-top:44px;scroll-margin-top:16px}
+h2{font-family:var(--f-head);font-weight:700;font-size:24px;letter-spacing:-.6px;line-height:1.2;margin:0 0 6px;text-wrap:balance;display:flex;gap:14px;align-items:baseline}
+h2 .n{font-family:var(--f-label);font-weight:400;font-size:14px;color:var(--dim);letter-spacing:1px}
+h3{font-family:var(--f-head);font-weight:500;font-size:16.5px;letter-spacing:-.2px;margin:30px 0 8px}
+p{margin:10px 0;max-width:68ch}
+.sub{color:var(--dim);margin-top:0}
+ul,ol.plain{padding-left:20px;margin:10px 0;max-width:68ch}
+li{margin:4px 0}
+li::marker{color:var(--dim)}
+strong{font-weight:600}
+code{font-family:var(--f-head);font-size:.86em;background:var(--code-bg);border:1px solid var(--line);padding:1px 5px;border-radius:5px}
+pre{font-family:var(--f-head);font-size:13px;line-height:1.55;background:var(--code-bg);border:1px solid var(--line);border-radius:var(--r);padding:16px 18px;overflow-x:auto;margin:14px 0;color:var(--ink-2)}
+pre code{background:none;border:0;padding:0;font-size:inherit}
+pre .c{color:var(--dim)}
+.tbl{overflow-x:auto;margin:14px 0;border:1px solid var(--line);border-radius:var(--r);background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:14.5px;min-width:560px}
+th,td{text-align:left;vertical-align:top;padding:10px 14px;border-bottom:1px solid var(--line)}
+tr:last-child td{border-bottom:0}
+th{font-family:var(--f-label);font-weight:400;font-size:11.5px;letter-spacing:1.4px;text-transform:uppercase;color:var(--dim);background:var(--sunk)}
+td code{white-space:nowrap}
+td.k{font-family:var(--f-head);font-size:13.5px;white-space:nowrap;color:var(--ink)}
+.decision{border:1px solid var(--line);border-left:0;background:var(--surface);border-radius:var(--r);padding:16px 18px;margin:18px 0;display:grid;grid-template-columns:auto 1fr;gap:14px;align-items:start}
+.decision .tag{font-family:var(--f-label);font-size:11px;letter-spacing:1.4px;text-transform:uppercase;background:var(--ink);color:var(--bg);padding:3px 8px;border-radius:6px;white-space:nowrap}
+.decision p{margin:0}
+.decision p + p{margin-top:6px}
+.decision .alt{color:var(--dim);font-size:14.5px}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:14px 0}
+@media (max-width:640px){.grid2{grid-template-columns:minmax(0,1fr)}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px 18px}
+.card h4{font-family:var(--f-head);font-size:14.5px;font-weight:500;margin:0 0 6px;display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.card h4 span{font-family:var(--f-label);font-weight:400;font-size:11.5px;color:var(--dim);letter-spacing:1px}
+.card p,.card ul{font-size:14.5px;margin:6px 0 0}
+.card ul{padding-left:18px}
+.diagram{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px;margin:16px 0;overflow-x:auto}
+.diagram pre.mermaid{background:none;border:0;margin:0;padding:0;color:var(--ink);font-family:var(--f-body)}
+.ms{display:flex;flex-direction:column;gap:10px;margin:16px 0}
+.m{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px 18px;display:grid;grid-template-columns:64px minmax(0,1fr);gap:4px 16px}
+.m .id{font-family:var(--f-head);font-weight:700;font-size:20px;letter-spacing:-.5px}
+.m .days{font-family:var(--f-label);font-size:12px;color:var(--dim);grid-column:1;align-self:start}
+.m h4{font-family:var(--f-head);font-weight:500;font-size:15.5px;margin:2px 0 4px;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.m .body{grid-column:2;grid-row:1 / span 2}
+.m ul{margin:6px 0;font-size:14.5px;padding-left:18px}
+.m .acc{font-size:14px;color:var(--ink-2);border-top:1px dashed var(--line);padding-top:8px;margin-top:8px}
+.m .acc b{font-family:var(--f-label);font-weight:400;font-size:11.5px;letter-spacing:1.2px;text-transform:uppercase;color:var(--dim);margin-right:6px}
+.m.vid{border-color:var(--ink)}
+@media (max-width:560px){.m{grid-template-columns:minmax(0,1fr)}.m .body{grid-column:1;grid-row:auto}}
+.callout{background:var(--sunk);border-radius:var(--r);padding:14px 18px;margin:16px 0;font-size:15px;max-width:68ch}
+.callout b{font-family:var(--f-label);font-weight:400;letter-spacing:1.2px;text-transform:uppercase;font-size:12px;color:var(--dim);display:block;margin-bottom:2px}
+.ok{color:var(--ok)}
+footer{margin-top:56px;padding-top:20px;border-top:1px solid var(--line);color:var(--dim);font-size:14px}
+@media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+html{scroll-behavior:smooth}
+</style>
+
+<div class="wrap">
+<nav class="toc" aria-label="contents">
+<span class="lbl">contents</span>
+<ol>
+<li><a href="#principles">Principles</a></li>
+<li><a href="#architecture">Architecture</a></li>
+<li><a href="#backend">Go backend</a></li>
+<li><a href="#model">Data model</a></li>
+<li><a href="#api">API and realtime protocol</a></li>
+<li><a href="#render">Render engine</a></li>
+<li><a href="#clients">Clients</a></li>
+<li><a href="#output">Getting to the projector</a></li>
+<li><a href="#camera">Camera and calibration</a></li>
+<li><a href="#agents">MCP and agents</a></li>
+<li><a href="#security">Pairing and security</a></li>
+<li><a href="#repo">Repo layout</a></li>
+<li><a href="#milestones">Milestones</a></li>
+<li><a href="#testing">Testing</a></li>
+<li><a href="#risks">Risks</a></li>
+<li><a href="#decisions">Decisions</a></li>
+</ol>
+</nav>
+
+<main>
+<header class="top">
+<div class="eyebrow"><span class="dot" aria-hidden="true"></span>implementation plan · revision 2 · 11 oct 2026</div>
+<h1>Projector Map: how it gets built</h1>
+<p class="lede">A single Go backend owns every scene, setup, preset and asset. The projector output, the laptop editor, the iPhone remote and the AI agents are all clients of it. This page explains how that works and the order to build it in. Revision 2 sets the web stack to React and the phone to native Swift, and follows the conventions of content-media-manager, cmm-ios, warden and warden-ios. The product name is still open, so <code>projmap</code> stands in for the binary.</p>
+<div class="meta"><span class="chip">go 1.25 backend</span><span class="chip">webgl2 renderer</span><span class="chip">react + typescript web</span><span class="chip">native swiftui ios</span><span class="chip">mcp for claude / codex</span><span class="chip crit">video path: M0–M4</span></div>
+</header>
+
+<section id="principles">
+<h2><span class="n">01</span>Principles</h2>
+<ul>
+<li><strong>The backend is the only source of truth.</strong> Scenes, setups (projector rigs), presets, catalogs (gobos, layers, gradients, scenery photos, effects), calibrations and assets all live in the Go server. Clients cache, but they never own data.</li>
+<li><strong>Clients are thin and interchangeable.</strong> Output, editor, phone and agents use one protocol. Anything the phone can do, an agent can do through MCP, and the editor can do it too.</li>
+<li><strong>State travels, pixels don't.</strong> The server sends scene state of a few KB, and every screen renders it locally with the same engine. The projector stays sharp, and a slider drag reaches the wall within one frame plus the LAN hop.</li>
+<li><strong>One renderer everywhere.</strong> The projector, the editor stage, the phone previews and the agent's test renders all run the same WebGL2 package. A preview is therefore exactly what the wall will show.</li>
+<li><strong>Live and backstage.</strong> Edits from the editor and from agents go into drafts. "On air" is a separate live state that only an explicit apply or GO changes.</li>
+<li><strong>Local-first, single binary.</strong> <code>projmap</code> embeds the web apps, runs on the laptop (or a mini PC by the projector), stores everything in one data folder, and needs no internet.</li>
+</ul>
+</section>
+
+<section id="architecture">
+<h2><span class="n">02</span>Architecture</h2>
+<p class="sub">Five kinds of client, one server. The arrows show who talks to whom.</p>
+<div class="diagram">
+<pre class="mermaid">
+flowchart LR
+  subgraph clients[Clients]
+    OUT["Output page<br/>/out · fullscreen<br/>WebGL2"]
+    ED["Laptop editor<br/>/editor"]
+    PH["iPhone app<br/>SwiftUI, native"]
+    AG["Claude Code / Codex<br/>MCP client"]
+  end
+  subgraph server["projmap (Go, one binary)"]
+    HTTP["HTTP API<br/>REST + assets"]
+    WS["Realtime hub<br/>WebSocket"]
+    MCP["MCP server<br/>stdio + streamable HTTP"]
+    RTC["Camera relay<br/>Pion WebRTC"]
+    CAL["Calibration<br/>Gray code decode"]
+    RUN["Agent runner<br/>codex exec / claude -p"]
+    STORE[("SQLite + asset files")]
+  end
+  PH -- "WS state + params" --> WS
+  ED -- "WS state + patches" --> WS
+  OUT -- "WS subscribe + frame acks" --> WS
+  PH -- "camera track" --> RTC
+  RTC -- "relayed track" --> ED
+  PH -- "still photos (HTTP)" --> HTTP
+  AG -- "tools" --> MCP
+  RUN -- "spawns" --> AG
+  WS --- STORE
+  HTTP --- STORE
+  MCP --- WS
+  CAL --- HTTP
+</pre>
+</div>
+<h3>What happens when you drag a slider on the phone</h3>
+<div class="diagram">
+<pre class="mermaid">
+sequenceDiagram
+  participant P as iPhone
+  participant S as projmap
+  participant O as Output (/out)
+  participant E as Editor
+  P->>P: haptic tick at each 10% step, local preview updates
+  P->>S: param {scene, path: layers.0.intensity, value: .62, ephemeral}
+  S->>O: param (forwarded right away, not written to disk)
+  S->>E: param
+  O->>O: render next frame
+  Note over S: 200 ms after the last move
+  S->>S: commit a patch, version 418 → 419, write the op log
+  S-->>P: patched v419 (ack)
+  S-->>O: patched v419
+  S-->>E: patched v419
+</pre>
+</div>
+<p>High-frequency values (slider drags) are <strong>ephemeral</strong>. The server forwards them to every subscriber immediately and only commits a versioned patch after the drag settles. That keeps the wall at 60 fps without writing to SQLite 60 times a second.</p>
+</section>
+
+<section id="backend">
+<h2><span class="n">03</span>Go backend</h2>
+<p class="sub">Same layering as content-media-manager and warden: domain, application, infrastructure, plus one composition module per section in <code>internal/app</code>. The cmm "new area checklist" applies as written, with SQLite instead of Postgres.</p>
+<h3>Sections</h3>
+<div class="tbl"><table>
+<thead><tr><th>section</th><th>owns</th></tr></thead>
+<tbody>
+<tr><td class="k">show</td><td>live state: active scene, on air or blackout, transport, cues, master brightness, the server clock</td></tr>
+<tr><td class="k">scenes</td><td>scenes, backdrop layers, objects and surfaces, timeline, drafts, op log, undo, presets</td></tr>
+<tr><td class="k">setups</td><td>projector rigs: output size, orientation, flips, reference photo, calibrations</td></tr>
+<tr><td class="k">catalog</td><td>built-in and user gobos, live layers, gradients, scenery photos and effects, each with a param schema</td></tr>
+<tr><td class="k">assets</td><td>content-addressed photos, snapshots, maps and thumbnails</td></tr>
+<tr><td class="k">devices</td><td>pairing codes, device tokens, roles, presence, local CA</td></tr>
+<tr><td class="k">camera</td><td>still capture requests, WebRTC relay, Gray-code decoding, surface candidates</td></tr>
+<tr><td class="k">agents</td><td>agent sessions, the runner (<code>codex exec</code> / <code>claude -p</code>), event log, proposals</td></tr>
+</tbody></table></div>
+<h3>Layout</h3>
+<pre><code>backend/
+├─ cmd/projmap/                 <span class="c">serve · open · pair · mcp (stdio bridge) · sim · install</span>
+├─ internal/app/                <span class="c">composition root: app.go builds Echo, the hub, MCP; &lt;section&gt;.go per section</span>
+├─ internal/domain/&lt;section&gt;/    <span class="c">plain Go entities and rules: Scene, Layer, Surface, Timeline, Show, Draft…</span>
+├─ internal/application/
+│  ├─ app_errors/&lt;section&gt;.go    <span class="c">sentinel errors</span>
+│  ├─ services/&lt;section&gt;/        <span class="c">service interfaces; handlers, the WS hub and MCP tools depend on these</span>
+│  └─ ports/{in,out,repository}/ <span class="c">commands, queries, client ports, repository interfaces, result shapes</span>
+├─ internal/infrastructure/
+│  ├─ database/sqlite/           <span class="c">Open + Migrate (goose); pure-Go driver, no cgo</span>
+│  ├─ database/migrations/       <span class="c">versioned SQL, the schema's source of truth</span>
+│  ├─ database/sql/&lt;section&gt;/    <span class="c">GORM models (ToDomain/FromDomain) and repositories</span>
+│  ├─ realtime/hub/              <span class="c">WebSocket channels, ephemeral params, presence</span>
+│  ├─ webrtc/                    <span class="c">Pion relay for the phone's preview track</span>
+│  ├─ vision/                    <span class="c">Gray-code decode, homography and RANSAC, plane segmentation</span>
+│  ├─ discovery/                 <span class="c">Bonjour _projmap._tcp</span>
+│  └─ clients/{codex,claude,chrome}/ <span class="c">agent runner processes, optional headless renderer</span>
+├─ internal/handlers/&lt;section&gt;/  <span class="c">Echo handlers with swag annotations</span>
+├─ internal/mcp/tools/&lt;section&gt;/ <span class="c">MCP tools over the same services</span>
+├─ internal/apitest/&lt;section&gt;/   <span class="c">every route over HTTP, plus WS flows</span>
+├─ internal/contract/           <span class="c">recorded message shapes; fails when the wire format drifts</span>
+└─ web/embed.go                 <span class="c">the built React app</span></code></pre>
+<div class="tbl"><table>
+<thead><tr><th>concern</th><th>library</th><th>as in</th></tr></thead>
+<tbody>
+<tr><td class="k">HTTP</td><td><code>labstack/echo/v4</code> + swag for OpenAPI</td><td>cmm</td></tr>
+<tr><td class="k">database</td><td>GORM on SQLite (<code>glebarez/sqlite</code>, pure Go) + goose migrations</td><td>cmm (Postgres there)</td></tr>
+<tr><td class="k">MCP</td><td><code>modelcontextprotocol/go-sdk</code> v1.7</td><td>cmm</td></tr>
+<tr><td class="k">WebSocket</td><td><code>coder/websocket</code></td><td>warden's realtime flow</td></tr>
+<tr><td class="k">WebRTC</td><td><code>pion/webrtc/v4</code></td><td>new</td></tr>
+<tr><td class="k">math</td><td><code>gonum</code></td><td>new</td></tr>
+<tr><td class="k">Bonjour</td><td><code>grandcat/zeroconf</code></td><td>new</td></tr>
+<tr><td class="k">JSON Patch</td><td><code>evanphx/json-patch/v5</code></td><td>new</td></tr>
+</tbody></table></div>
+<div class="callout"><b>Concurrency model</b>Each open scene has one goroutine that owns its document. Patches and params go through its channel, so writes are serialized without locks. The hub fans results out per channel, and slow clients get coalesced updates instead of a growing backlog.</div>
+<h3>Storage</h3>
+<ul>
+<li>A data folder at <code>~/Library/Application Support/projmap/</code> holds <code>projmap.db</code>, <code>assets/ab/cd/&lt;sha256&gt;</code> and <code>tls/</code>.</li>
+<li>Tables: <code>setups</code>, <code>scenes</code> (JSON doc + version), <code>ops</code> (scene, version, patch, author, ts), <code>drafts</code>, <code>presets</code>, <code>effects</code>, <code>assets</code>, <code>calibrations</code>, <code>devices</code>, <code>agent_sessions</code>, <code>agent_events</code>.</li>
+<li>Scenes are stored as whole JSON documents plus an append-only op log. Undo replays inverse ops, and history is a list of ops with authors.</li>
+<li>Backup and export: <code>projmap export scene.zip</code> writes the scene JSON plus every asset it references.</li>
+</ul>
+</section>
+
+<section id="model">
+<h2><span class="n">04</span>Data model</h2>
+<p class="sub">These domain structs are the contract. TypeScript types come from them through <code>tygo</code>, and Swift wire models through a generator script, as cmm-ios does with <code>gen_schema.py</code>. <code>internal/contract</code> fails the build when a message shape changes without both clients being regenerated.</p>
+<pre><code><span class="c">// A projector rig: where the light comes from and how it's mounted.</span>
+type Setup struct {
+  ID, Name     string
+  Output       Output        <span class="c">// 1920×1080, orientation, flips</span>
+  Master       float64       <span class="c">// 0..1</span>
+  BlackoutFade Duration      <span class="c">// cut | 0.5s | 2s</span>
+  Reference    *AssetRef     <span class="c">// photo from the lens position, never projected</span>
+  Calibration  *CalibRef     <span class="c">// camera↔projector map, if one was run</span>
+}
+type Output struct {
+  Width, Height int
+  Orientation   string       <span class="c">// landscape | portrait-cw | portrait-ccw</span>
+  FlipH, FlipV  bool
+}
+
+<span class="c">// Everything the wall shows: a backdrop stack, mapped objects, a timeline.</span>
+type Scene struct {
+  ID, SetupID, Name string
+  Version           int64
+  Backdrop          Backdrop
+  Objects           []Object
+  Timeline          Timeline
+}
+type Backdrop struct{ Layers []Layer }  <span class="c">// static / live / color / scenery are layer kinds</span>
+type Layer struct {
+  ID, Kind, Ref string           <span class="c">// kind: gobo | procedural | gradient | photo; ref: catalog id</span>
+  Params        map[string]any   <span class="c">// validated against the catalog item's JSON Schema</span>
+  Light         *Light           <span class="c">// intensity, softness, angle, scale, color, fx</span>
+  Blend         string           <span class="c">// normal | multiply | screen | add</span>
+  Opacity       float64
+  Visible       bool
+}
+type Light struct {
+  Intensity, Softness, Angle, Scale float64
+  Color Color                    <span class="c">// mode cct {kelvin, tint} | hsi {hue, sat}</span>
+  FX    *LightFX                 <span class="c">// candle | fire | lightning | paparazzi | tv | breathe | strobe | police, speed</span>
+}
+
+type Object  struct{ ID, Name string; Tags []string; Surfaces []Surface }
+type Surface struct {
+  ID, Name, Kind string          <span class="c">// quad | tri | poly | circle | line | mesh | mask</span>
+  Role          string           <span class="c">// face | edge | detail</span>
+  Points        []Point          <span class="c">// output pixels; shared Point.ID welds faces</span>
+  Mesh          *Mesh            <span class="c">// cols, rows, bezier handles</span>
+  ParentID      string           <span class="c">// detail shapes (hdd bays) live inside a face</span>
+}
+type Timeline struct {
+  Duration Duration
+  Tracks   []Track               <span class="c">// target: surface | object | "all"</span>
+  Clips    []Clip                <span class="c">// effect, start, end, params, fades</span>
+  Cues     []Cue                 <span class="c">// at, label, autoFollow; the phone's GO steps through these</span>
+}
+type Effect struct {
+  ID, Name, Kind string          <span class="c">// glsl | js</span>
+  Source         string
+  Params         JSONSchema
+  Origin         string          <span class="c">// builtin | user | agent:codex</span>
+}
+
+<span class="c">// Live state, separate from the scene document.</span>
+type Show struct {
+  ActiveScene string
+  OnAir       bool               <span class="c">// false = blackout</span>
+  Transport   Transport          <span class="c">// state, startedAt (server ns), offset, cue index</span>
+}
+type Draft struct {
+  ID, SceneID, Author string     <span class="c">// "user:editor" | "agent:codex#42"</span>
+  BaseVersion int64
+  Ops         []Op
+  Status      string             <span class="c">// open | proposed | applied | discarded</span>
+}</code></pre>
+<p><strong>Presets</strong> are named snapshots of a backdrop (or a whole scene) with a thumbnail. <strong>Catalog items</strong> carry a JSON Schema for their params, so the phone draws the right controls automatically. A new built-in layer needs no new UI code.</p>
+</section>
+
+<section id="api">
+<h2><span class="n">05</span>API and realtime protocol</h2>
+<h3>REST, for things that aren't realtime</h3>
+<div class="tbl"><table>
+<thead><tr><th>route</th><th>purpose</th></tr></thead>
+<tbody>
+<tr><td class="k">POST /api/v1/pair</td><td>exchange a 4-character pairing code for a device token and role</td></tr>
+<tr><td class="k">GET /api/v1/catalog</td><td>gobos, layers, gradients, scenery, effects with param schemas, plus <code>catalogVersion</code> for caching</td></tr>
+<tr><td class="k">GET/POST/PATCH /api/v1/setups, /scenes, /presets, /effects</td><td>CRUD. The scene body is read-only here; changes go through patches</td></tr>
+<tr><td class="k">POST /api/v1/assets</td><td>upload a photo (JPEG/HEIC/PNG) and get back <code>{sha, w, h, thumb}</code></td></tr>
+<tr><td class="k">GET /a/{sha}</td><td>immutable asset bytes, cached forever</td></tr>
+<tr><td class="k">POST /api/v1/scenes/from-photo</td><td>"new scene from photo": asset, position (lens or anywhere), detect, agent prompt</td></tr>
+<tr><td class="k">POST /api/v1/camera/stills</td><td>the phone uploads a captured still tagged with a capture request id</td></tr>
+<tr><td class="k">POST /api/v1/calibrations</td><td>start a run, then follow progress on the <code>calib:&lt;id&gt;</code> channel</td></tr>
+<tr><td class="k">POST /api/v1/agents/sessions</td><td>start Codex or Claude with a prompt and get a session id</td></tr>
+<tr><td class="k">GET /api/v1/export/scene/{id}</td><td>scene zip with assets</td></tr>
+</tbody></table></div>
+
+<h3>WebSocket <code>/ws</code>, for everything live</h3>
+<p>Every message is one JSON envelope. Clients subscribe to channels: <code>show</code>, <code>scene:&lt;id&gt;</code>, <code>draft:&lt;id&gt;</code>, <code>agent:&lt;id&gt;</code>, <code>calib:&lt;id&gt;</code>, <code>camera</code>, <code>devices</code>.</p>
+<pre><code>{"t":"hello","d":{"token":"…","role":"remote","caps":["haptics","camera"],"build":"0.3.0"}}
+{"t":"welcome","d":{"device":"iphone-g","serverTime":1791700000123456789,"catalogVersion":12}}
+{"t":"sub","ch":"scene:desk"}
+{"t":"snapshot","ch":"scene:desk","v":418,"d":{ …full scene… }}
+
+<span class="c">// continuous control (drag): forwarded right away, committed later</span>
+{"t":"param","ch":"scene:desk","d":{"path":"/backdrop/layers/0/light/intensity","value":0.62,"seq":991}}
+
+<span class="c">// structural edit: needs the current base version</span>
+{"t":"patch","ch":"scene:desk","base":419,"id":"c-77","d":[{"op":"add","path":"/backdrop/layers/1","value":{…}}]}
+{"t":"patched","ch":"scene:desk","v":420,"by":"editor","re":"c-77","d":[…]}
+{"t":"reject","re":"c-77","d":{"code":"stale","v":421}}   <span class="c">// client rebases and resends</span>
+
+<span class="c">// show control</span>
+{"t":"show","d":{"action":"go"}}            <span class="c">// next cue</span>
+{"t":"show","d":{"action":"blackout","on":true}}
+{"t":"show:state","d":{"onAir":true,"transport":{"state":"playing","startedAt":…,"offset":6.4,"cue":2}}}
+
+<span class="c">// clock sync: 8 pings on connect, median offset, repeat every 30 s</span>
+{"t":"ping","d":{"t0":…}}  →  {"t":"pong","d":{"t0":…,"ts":…}}</code></pre>
+<div class="callout"><b>Conflict rule</b>Param paths use last-writer-wins: two people dragging the same slider is harmless. Structural patches must match the current version. If they don't, the server rejects them with the new version, and the client re-applies its intent on top of the latest snapshot. This is simple, and enough for 1–3 humans plus an agent working in a draft.</div>
+<div class="callout"><b>Timeline sync</b>The server owns transport time: <code>startedAt</code> is in server nanoseconds. Each client converts it with its measured clock offset, so the projector and the phone's progress bar agree to within a few milliseconds without streaming the playhead.</div>
+</section>
+
+<section id="render">
+<h2><span class="n">06</span>Render engine (<code>web/src/render</code>)</h2>
+<p class="sub">A deterministic function <code>render(state, t) → frame</code> in WebGL2, used by the output, the editor stage, the phone previews and agent renders.</p>
+<div class="grid2">
+<div class="card"><h4>Backdrop compositor <span>static · live · color · scenery</span></h4><ul>
+<li>Layers render into an output-sized framebuffer, using each layer's blend mode and opacity.</li>
+<li>Gobos are SDF textures, so they stay crisp at any scale. Softness is a dual-Kawase blur, cheap even at 4K.</li>
+<li>CCT goes to RGB through a blackbody fit plus green/magenta tint. HSI uses hue and saturation. Light FX (candle, lightning, …) are time-based intensity and color curves.</li>
+<li>Live layers are shaders: the tree sways by noise-displacing a leaf mask, plus clouds, rain on glass, a day cycle and caustics.</li>
+<li>Scenery is a photo texture with a blur radius, warmth, brightness and a slow drift.</li>
+</ul></div>
+<div class="card"><h4>Mapping <span>objects · surfaces</span></h4><ul>
+<li>Each surface gets a content texture in its own UV space, where its effects draw.</li>
+<li>That texture is warped onto the output by homography (quad, perspective-correct with a per-vertex q) or by a subdivided mesh (bilinear or bezier, evaluated on the CPU).</li>
+<li>Masks use the stencil buffer. Detail shapes clip to their parent face.</li>
+<li>A final pass applies orientation (90° rotation for portrait), flips, master brightness and blackout fade.</li>
+</ul></div>
+<div class="card"><h4>Effects runtime <span>glsl · js</span></h4><ul>
+<li>GLSL fragment shaders get uniforms <code>u_time</code>, <code>u_progress</code>, <code>u_params</code>, <code>u_edgeDist</code> and <code>u_neighbors</code>.</li>
+<li>JS effects (particles, text) draw in a worker with OffscreenCanvas, with no DOM, no network and a frame budget.</li>
+<li>Built-ins (grid build, trace, scan, glitch, fill, particles, label, pulse) use the same contract.</li>
+</ul></div>
+<div class="card"><h4>Determinism <span>same input, same pixels</span></h4><ul>
+<li>No <code>Math.random</code> inside effects: seeds come from params.</li>
+<li>Time is always passed in, never read from the clock inside the engine.</li>
+<li>Golden-image tests compare headless renders against stored frames.</li>
+</ul></div>
+</div>
+</section>
+
+<section id="clients">
+<h2><span class="n">07</span>Clients</h2>
+<h3>Web: one React app, embedded in the binary</h3>
+<p>React 18, TypeScript, Vite and TanStack Router with a code-based route tree, the same stack as content-media-manager and warden. CSS Modules, no UI library and no Tailwind. All tokens live in <code>theme.css</code>, taken from the editor v2 canvas boards. The build in <code>dist/</code> is embedded by <code>web/embed.go</code>.</p>
+<pre><code>web/src/
+├─ main.tsx, router.tsx          <span class="c">routes: /out, /editor/{map,animate,automap}, /components</span>
+├─ shared/
+│  ├─ components/&lt;name&gt;/          <span class="c">Pill, Segmented, FillSlider, Panel, Loupe, Timeline… + styles.module.css</span>
+│  ├─ lib/                       <span class="c">http.ts, ws.ts (hub client, clock sync, optimistic patches), cx.ts</span>
+│  └─ styles/theme.css           <span class="c">every token; dark by default</span>
+├─ entities/&lt;scene|setup|surface|effect|agent|camera&gt;/
+│  └─ types.ts (generated), api.ts, ui/&lt;component&gt;/
+├─ render/                       <span class="c">the WebGL2 engine: compositor, warp, effects runtime, workers</span>
+└─ routes/&lt;area&gt;/index.tsx       <span class="c">pages compose layout + entity UI only</span></code></pre>
+<ul>
+<li><strong><code>/out</code></strong> loads only <code>render/</code> and the hub client: a fullscreen canvas, wake lock, a pairing screen while idle, frame-presented acks for calibration and fps telemetry.</li>
+<li><strong><code>/editor</code></strong> has the map, animate and auto-map workspaces from the canvas.</li>
+<li><strong><code>/components</code></strong> is the living style guide: every shared component gets a demo there, as in cmm.</li>
+<li>cmm's rules carry over:
+  <ul>
+  <li>HTTP only in <code>entities/*/api.ts</code>.</li>
+  <li>No hex values outside <code>theme.css</code>.</li>
+  <li>One control-height scale, checked by a Playwright alignment spec.</li>
+  <li>Copy in active voice with no em dashes.</li>
+  </ul></li>
+</ul>
+<h3>iPhone: native SwiftUI</h3>
+<p>iOS 26, Swift 6, an <code>xcodegen</code> project and a local Swift package split into modules, the same shape as cmm-ios. Haptics, camera control, Bonjour and Keychain are all first-party APIs, so nothing needs a bridge.</p>
+<div class="tbl"><table>
+<thead><tr><th>module</th><th>what it holds</th></tr></thead>
+<tbody>
+<tr><td class="k">PMKit</td><td>API client, wire models (generated), <code>projmap://connect</code> links, Keychain token, TLS pinning of the server's CA</td></tr>
+<tr><td class="k">PMStore</td><td>GRDB cache of setups, scenes, presets and the catalog; read queries observed with <code>ValueObservation</code></td></tr>
+<tr><td class="k">PMLive</td><td>WebSocket to the hub, clock sync, snapshot and patch apply into GRDB, the outbox for structural edits, the param sender for drags</td></tr>
+<tr><td class="k">PMDesign</td><td>the phone v4 kit: FillSlider with detents, island tab bar, Pill, Segmented, Sheet, line icons, mono type</td></tr>
+<tr><td class="k">PMCamera</td><td>AVFoundation stills with locked exposure, ISO, focus and white balance; the preview track over WebRTC (Google's WebRTC framework through SwiftPM)</td></tr>
+<tr><td class="k">PMPreview</td><td>a small WKWebView that runs the web <code>render/</code> engine for hero previews and layer thumbnails, so the phone shows exactly what the wall shows</td></tr>
+<tr><td class="k">App/</td><td>features: Connect, Static, Live, Color, Scenery, Objects, Auto map, Projector settings</td></tr>
+</tbody></table></div>
+<ul>
+<li><strong>Local-first, as in warden-ios and cmm-ios.</strong> Screens read from GRDB. Structural writes (add a layer, save a preset) are applied optimistically and queued in the outbox. Server changes arrive over the WebSocket and are written to GRDB.</li>
+<li><strong>Live control skips the outbox.</strong> Slider drags, GO and blackout are ephemeral and go straight to the hub. When offline the controls show "not connected" instead of queueing, so an old slider move can never replay on the wall later.</li>
+<li><strong>Haptics:</strong> <code>.sensoryFeedback</code> ticks at every 10% detent, with a stronger bump at 0 and 100 and on GO.</li>
+<li><strong>Discovery:</strong> <code>NWBrowser</code> finds <code>_projmap._tcp</code>, with the Local Network permission and Bonjour services in Info.plist.</li>
+<li><strong>Pixel perfect against the canvas:</strong> each screen is compared with its phone v4 board in the simulator with a <code>compare.sh</code>, as in cmm-ios.</li>
+</ul>
+<div class="decision"><span class="tag">decide</span><div>
+<p><strong>Phone previews through PMPreview (a WKWebView running the web engine).</strong> One renderer means the phone preview can never disagree with the wall.</p>
+<p class="alt">Alternative: port the renderer to Metal. That gives full native rendering, but every effect has to be written twice.</p>
+</div></div>
+</section>
+
+<section id="output">
+<h2><span class="n">08</span>Getting to the projector</h2>
+<p>The output is a web page that renders locally, so anything with Chrome and an HDMI port can drive the projector. Video is never streamed to it.</p>
+<div class="tbl"><table>
+<thead><tr><th>setup</th><th>how</th><th>when</th></tr></thead>
+<tbody>
+<tr><td class="k">Laptop over HDMI</td><td>The projector is a second display. <code>projmap open --out --display 2</code> launches Chrome in kiosk mode on that display.</td><td><strong>Default</strong>: lowest latency, one machine</td></tr>
+<tr><td class="k">Mini PC / Pi 5</td><td>Chromium kiosk loads <code>https://studio-mac.local:7400/out</code> over Wi-Fi and auto-pairs as role <code>output</code>.</td><td>Permanent rig; the laptop moves freely</td></tr>
+<tr><td class="k">Projector browser</td><td>Built-in Android TV browser opens <code>/out</code>.</td><td>Cable-free, but test the GPU first</td></tr>
+<tr><td class="k">AirPlay or mirroring</td><td>—</td><td>Not supported: compression and lag blur the line work</td></tr>
+</tbody></table></div>
+<p>The output reports its real resolution, refresh rate and fps. The editor and phone show a warning chip when it drops frames, and blackout is handled in the output's final pass, so it works even if the WebSocket drops.</p>
+</section>
+
+<section id="camera">
+<h2><span class="n">09</span>Camera, photo scenes and calibration</h2>
+<h3>Two camera paths</h3>
+<ul>
+<li><strong>Live preview</strong>, for you and the editor. PMCamera opens a WebRTC track to the server, and Pion relays the packets to subscribed editors without decoding them. 720p30, about 80 ms on a good LAN.</li>
+<li><strong>Stills</strong>, for decisions. When calibration or an agent needs a frame, the server sends a capture request and the phone takes a full-resolution still with locked exposure and uploads it as JPEG. Go decodes JPEG with the standard library, so the backend never touches video codecs.</li>
+</ul>
+<h3>New scene from photo (built first)</h3>
+<p>Upload a photo, take one with the iPhone or grab a frame from the stream. If it was taken next to the lens, the photo is close enough to the projector's view to draw outlines on directly. That makes it the cheapest way to test whether an agent maps well. "Anywhere" adds a quick calibration first.</p>
+<h3>Auto map: calibration flow</h3>
+<div class="diagram">
+<pre class="mermaid">
+sequenceDiagram
+  participant P as iPhone (on stand)
+  participant S as projmap
+  participant O as Output
+  S->>P: lock exposure, focus, white balance
+  loop 46 patterns: 11+11 Gray-code bits, inverses, white, black
+    S->>O: show pattern k
+    O-->>S: presented k (after 3 vsyncs)
+    S->>P: capture k
+    P-->>S: still k (JPEG)
+  end
+  S->>S: decode each camera pixel to a projector column and row
+  S->>S: confidence mask, outlier filter, store map as a 16-bit PNG asset
+  S->>S: segment planar regions, then candidate polygons
+  S-->>P: calibrated · 0.6 px · 3 surfaces found
+</pre>
+</div>
+<ul>
+<li><strong>Timing:</strong> about 46 frames at about 0.4 s each, which is roughly 20 s. Capture is gated on the output's "presented" ack, so a slow projector can't scramble the sequence.</li>
+<li><strong>Decoding</strong> runs in parallel goroutines on a 1280×960 downscale. Each bit compares the pattern frame with its inverse, which survives ambient light and dark surfaces.</li>
+<li><strong>Outputs:</strong> a dense camera→projector map and a sparse inverse, quality stats (coverage %, reprojection error), and candidate faces found by fitting homographies over patches (RANSAC) and merging the planar ones.</li>
+<li><strong>Alignment check:</strong> the server projects a surface's edges as thin lines, captures a still, and measures where the lines landed against where the map says they should be. That gives an error per edge in projector pixels.</li>
+</ul>
+</section>
+
+<section id="agents">
+<h2><span class="n">10</span>MCP and agents</h2>
+<p>The MCP server is part of the same binary. <code>projmap mcp</code> is a stdio bridge to the running daemon, for Claude Code and Codex configs, and <code>/mcp</code> serves streamable HTTP. The full tool list is in <code>docs/mcp-plan.md</code>; in short:</p>
+<div class="grid2">
+<div class="card"><h4>Read <span>always allowed</span></h4><p><code>scene_get</code>, <code>surface_get</code>, <code>reference_photo_get</code>, <code>effects_list</code>, <code>effect_source_get</code>, <code>timeline_get</code>, <code>camera_stream_status</code></p></div>
+<div class="card"><h4>Look <span>images, downscaled to 1280 px</span></h4><p><code>output_render</code>, <code>output_render_strip</code>, <code>camera_snapshot</code>, <code>alignment_error</code>, <code>calibration_get</code></p></div>
+<div class="card"><h4>Write <span>into the session's draft</span></h4><p><code>surface_create</code>, <code>surface_create_from_camera</code>, <code>surface_nudge</code>, <code>effect_create</code> (returns compile errors and a test render), <code>clip_add</code>, <code>cue_add</code>, <code>draft_diff</code>, <code>proposal_submit</code></p></div>
+<div class="card"><h4>Act <span>gated by toggles in the editor</span></h4><p><code>projector_show</code> (patterns, outlines, draft frames), <code>calibration_run</code>, <code>preview_on_projector</code>, <code>transport</code>. Going live is off by default.</p></div>
+</div>
+<h3>Starting an agent from the phone</h3>
+<ol class="plain">
+<li>The phone posts <code>{agent: "codex", prompt, sceneId}</code> to <code>/api/v1/agents/sessions</code>.</li>
+<li>The server creates a draft and a scoped agent token, then spawns <code>codex exec --json</code> (or <code>claude -p --output-format stream-json</code>) with an MCP config that points at <code>projmap mcp --token …</code>.</li>
+<li>Streamed JSON events become entries on the <code>agent:&lt;id&gt;</code> channel. The phone and editor show the same live log.</li>
+<li>The agent ends with <code>proposal_submit</code>. You keep, preview, discard or ask for changes, and a follow-up prompt resumes the same session.</li>
+</ol>
+<p>Sessions you start yourself in Claude Code or Codex show up the same way once they connect, so the editor's agent panel works for both.</p>
+<div class="callout"><b>Rendering for agents</b><code>output_render</code> first asks a connected render-capable client (the editor or output) to draw frame <i>t</i> of the draft offscreen and return a PNG. When no client is connected, headless Chrome through <code>chromedp</code> loads <code>/out?headless</code>. That's an optional dependency, added in M5.</div>
+</section>
+
+<section id="security">
+<h2><span class="n">11</span>Pairing and security</h2>
+<ul>
+<li><strong>First run:</strong> the server creates a local CA and a server certificate for <code>&lt;host&gt;.local</code> plus its LAN IPs, and serves HTTPS on <code>:7400</code>. Plain HTTP is allowed only on <code>127.0.0.1</code>.</li>
+<li><strong>Pairing:</strong> the output's idle screen shows a 4-character code and a QR code with the URL, code and certificate fingerprint. The iPhone app finds the server over Bonjour, scans or types the code, and gets a device token that it keeps in the Keychain. It pins the CA fingerprint in its <code>URLSession</code> delegate, so nothing needs to be installed on the phone.</li>
+<li><strong>Roles:</strong>
+  <ul>
+  <li><code>output</code>: renders only.</li>
+  <li><code>remote</code>: show control, backdrops, playback, camera.</li>
+  <li><code>editor</code>: everything.</li>
+  <li><code>agent</code>: drafts only, plus whatever the editor toggles allow.</li>
+  </ul></li>
+<li><strong>Editor login:</strong> <code>projmap open</code> prints a one-time link, as <code>agentctl web</code> does in agents-deck.</li>
+<li><strong>Network:</strong> the server answers private-range and link-local addresses only. Tokens can be revoked from the projector settings.</li>
+<li><strong>Agent code:</strong> GLSL is compiled in the browser sandbox. JS effects run in a worker with no network and a frame budget, so a bad effect stalls a worker, never the show.</li>
+</ul>
+</section>
+
+<section id="repo">
+<h2><span class="n">12</span>Repo layout</h2>
+<pre><code>projector-mapping/
+├─ backend/                      <span class="c">Go module, layout in section 03</span>
+│  └─ web/                       <span class="c">React app (embedded), Playwright e2e, vitest</span>
+├─ ios/                          <span class="c">xcodegen project.yml, App/, Packages/PM (PMKit, PMStore, PMLive, PMDesign, PMCamera, PMPreview)</span>
+├─ design/                       <span class="c">canvas boards exported at 3x for pixel compare, as cmm-ios-design</span>
+├─ docs/                         <span class="c">architecture.md, protocol.md, mcp-plan.md, effects.md</span>
+├─ tools/                        <span class="c">tygo.yaml, gen_swift_models.py</span>
+├─ Makefile                      <span class="c">dev · web · build · test · e2e · lint · docs · contract</span>
+└─ install.sh</code></pre>
+<p><code>make dev</code> runs the server on <code>:7400</code> and Vite on <code>:5410</code>, proxied to it. <code>make build</code> produces one <code>projmap</code> binary with the web app embedded (<code>CGO_ENABLED=0</code>). The iPhone app builds with <code>xcodegen</code> and <code>xcodebuild</code>, with package tests through <code>swift test</code>.</p>
+</section>
+
+<section id="milestones">
+<h2><span class="n">13</span>Milestones</h2>
+<p class="sub">Estimates are focused days with agents doing most of the typing. Milestones with a dark border are on the critical path for the video: after M4 the Zima cube reveal works by hand. A native iPhone app adds about two days over a web wrapper, mostly in M0 and M1.</p>
+<div class="ms">
+<div class="m vid"><span class="id">M0</span><span class="days">1–2 days</span><div class="body"><h4>Foundations</h4><ul>
+<li>Monorepo, Go server skeleton, SQLite and migrations, hub with channels, <code>tygo</code> and Swift model generation, the React app embedded by <code>web/embed.go</code></li>
+<li>The output page connects and draws a test pattern; pairing code and device tokens; Bonjour</li>
+<li>iOS skeleton: xcodegen project, PM package, Connect screen that discovers, pairs and stores the token</li>
+<li>CI: <code>go test</code>, <code>vitest</code>, type check, build</li></ul>
+<div class="acc"><b>done when</b>the iPhone app finds the laptop, pairs by code, and a button press changes the test pattern on the projector.</div></div></div>
+
+<div class="m vid"><span class="id">M1</span><span class="days">3 days</span><div class="body"><h4>Static backdrops end to end</h4><ul>
+<li>Render engine core: backdrop compositor, the 8 gobos, softness, CCT/tint/HSI, light FX, orientation and flips, blackout fade</li>
+<li>iPhone: PMDesign kit, the static tab, fill sliders with detent haptics, presets, the on-air pill, projector settings; PMPreview hero</li>
+<li>PMStore and PMLive: GRDB cache, WebSocket apply, outbox for structural edits</li></ul>
+<div class="acc"><b>done when</b>a phone slider drag shows on the wall in under 50 ms on the LAN, portrait output is correct, and presets survive a restart.</div></div></div>
+
+<div class="m vid"><span class="id">M2</span><span class="days">2 days</span><div class="body"><h4>Live, color and scenery</h4><ul>
+<li>Layer stack with reorder, visibility and the add-layer sheet; catalog served from the backend with param schemas</li>
+<li>Procedural layers: tree sway (masked to the light), palm, clouds, rain on glass, day cycle, caustics</li>
+<li>Gradients with editable stops, drift and grain; scenery photos with blur, warmth and drift; "use my photo"</li></ul>
+<div class="acc"><b>done when</b>the four phone tabs from the canvas work against the real projector, and the previews match the wall.</div></div></div>
+
+<div class="m vid"><span class="id">M3</span><span class="days">3 days</span><div class="body"><h4>Editor: mapping</h4><ul>
+<li>Surfaces tree; quad, tri, poly, circle, line and mask tools; shared points with magnet; corner pin, mesh and bezier warp</li>
+<li>Reference photo behind the stage; keyboard precision (arrows, Shift, Tab), loupe, numeric points; split input/output view; test patterns</li>
+<li>Drafts with backstage/live, undo/redo and history</li></ul>
+<div class="acc"><b>done when</b>the Zima cube's three faces, the drive bays and the fan are mapped by hand to within 1–2 px on the real object.</div></div></div>
+
+<div class="m vid"><span class="id">M4</span><span class="days">3 days</span><div class="body"><h4>Effects, timeline and playback</h4><ul>
+<li>Effects runtime (GLSL plus JS worker) and the 8 built-ins, including edge trace in border and boomerang modes</li>
+<li>Timeline editor with tracks, clips, fades and cues; server-clock transport</li>
+<li>Phone objects tab: cue progress, GO, back, stop, per-object reveal</li></ul>
+<div class="acc"><b>done when</b>the 20-second Zima cube reveal plays from the phone's GO button and looks the same on the editor stage and on the wall.</div></div></div>
+
+<div class="m"><span class="id">M5</span><span class="days">2 days</span><div class="body"><h4>MCP read and look, plus new scene from photo</h4><ul>
+<li>MCP server with the read and look tools, images, resources and prompts; the <code>projmap mcp</code> stdio bridge</li>
+<li><code>output_render</code> through a render client, with chromedp as a fallback</li>
+<li>Editor "new scene from photo" (upload, iPhone, frame) and the phone's "just take a photo"</li></ul>
+<div class="acc"><b>done when</b>Claude Code and Codex can describe the scene and return a correct render of any frame.</div></div></div>
+
+<div class="m"><span class="id">M6</span><span class="days">2 days</span><div class="body"><h4>Agents that build</h4><ul>
+<li>Write tools into drafts, <code>effect_create</code> with compile feedback, proposals</li>
+<li>Agent runner (<code>codex exec</code> / <code>claude -p</code>), session log on the phone and in the editor, keep/preview/discard, permission toggles</li></ul>
+<div class="acc"><b>done when</b>"make the cube feel alive" from the phone produces a proposal that you preview on the wall and apply.</div></div></div>
+
+<div class="m"><span class="id">M7</span><span class="days">3–4 days</span><div class="body"><h4>Camera and auto map</h4><ul>
+<li>PMCamera: locked stills, the WebRTC preview relayed through Pion, still capture requests</li>
+<li>Gray-code calibration, decoding, maps, quality stats; plane segmentation and candidate surfaces</li>
+<li>Camera tools: <code>surface_create_from_camera</code>, <code>alignment_error</code>; the phone's 4-step auto-map flow and the editor's auto-map workspace</li></ul>
+<div class="acc"><b>done when</b>with the phone on a stand, "map the zimacube faces, bays and fan" ends with under 1 px error and no laptop interaction.</div></div></div>
+
+<div class="m"><span class="id">M8</span><span class="days">2 days</span><div class="body"><h4>Hardening and shipping</h4><ul>
+<li><code>install.sh</code> and launchd (as in agents-deck), signed release builds, a TestFlight build for the iPhone</li>
+<li>Reconnect and soak tests (4 hours on air), a performance pass at 4K output, docs</li></ul>
+<div class="acc"><b>done when</b>a fresh Mac goes from install to projecting in under 5 minutes.</div></div></div>
+</div>
+</section>
+
+<section id="testing">
+<h2><span class="n">14</span>Testing</h2>
+<ul>
+<li><strong>Go unit tests:</strong> patch apply and validation, version conflicts, ephemeral coalescing, transport and clock math, Gray-code decoding on synthetic frames, homography and RANSAC, plane segmentation.</li>
+<li><strong>Protocol contract tests:</strong> <code>internal/contract</code> records every message shape. Generated TS and Swift models decode the recorded messages in vitest and <code>swift test</code>.</li>
+<li><strong>API tests:</strong> <code>internal/apitest/&lt;section&gt;</code> covers every route and WS flow over a real server, as in cmm.</li>
+<li><strong>iOS:</strong> Swift Testing for PMStore queries and PMLive apply and outbox, using a fake hub; screen-by-screen pixel compare against the phone v4 boards.</li>
+<li><strong>Golden images:</strong> the render engine draws fixed scenes at fixed <i>t</i> in headless Chrome and diffs them against stored PNGs (gobos, CCT, warp, each built-in effect).</li>
+<li><strong>End to end:</strong> Playwright with three contexts (output, editor, phone viewport). Drag a slider on the phone and assert on the output's pixels.</li>
+<li><strong><code>projmap sim</code>:</strong> a fake phone and fake camera. The camera renders a synthetic 3D desk with a cube, so it "sees" the projected patterns. Calibration and auto map can be tested and demoed without hardware.</li>
+<li><strong>Agent evals:</strong> fixed photo scenes with known ground-truth outlines, scoring how close Codex and Claude get with <code>surface_create_from_camera</code>.</li>
+</ul>
+</section>
+
+<section id="risks">
+<h2><span class="n">15</span>Risks</h2>
+<div class="tbl"><table>
+<thead><tr><th>risk</th><th>mitigation</th></tr></thead>
+<tbody>
+<tr><td>The ZimaCube is dark and partly glossy, which gives weak stripe contrast</td><td>Compare each pattern with its inverse, use longer locked exposure and full projector brightness during calibration, and fall back to manual corners on low-confidence pixels</td></tr>
+<tr><td>iOS auto exposure ruins calibration frames</td><td>Native camera plugin with locked exposure, ISO, focus and white balance; stills, not video frames</td></tr>
+<tr><td>Chrome on the projector display drops frames</td><td>Kiosk launch on the correct display, render at native resolution, fps telemetry with warnings, an option for half-resolution effects</td></tr>
+<tr><td>WebRTC on iOS adds a large binary dependency</td><td>The preview is optional, since stills drive every decision. A fallback sends MJPEG frames over the WebSocket at 10 fps</td></tr>
+<tr><td>Wi-Fi jitter while dragging sliders</td><td>Ephemeral params tolerate loss, and the latest value wins; the output interpolates over 2 frames</td></tr>
+<tr><td>Agents write slow or broken effects</td><td>Compile and test renders before proposing, a worker frame budget, drafts only by default</td></tr>
+<tr><td>Deploying to the iPhone 18 on iOS 27 needs Xcode 27 (noted in warden-ios)</td><td>Build against iOS 26 and test on the iPhone 17 Pro or the simulator until Xcode 27 is set up</td></tr>
+</tbody></table></div>
+</section>
+
+<section id="decisions">
+<h2><span class="n">16</span>Decisions</h2>
+<p class="sub">Settled in revision 2: React for the web UI and native Swift for the phone. The rest are my recommendations; say which to change.</p>
+<div class="tbl"><table>
+<thead><tr><th>question</th><th>status</th></tr></thead>
+<tbody>
+<tr><td>Web UI</td><td class="ok">decided · React 18 + TS + Vite + TanStack Router, CSS Modules (cmm conventions)</td></tr>
+<tr><td>iPhone app</td><td class="ok">decided · native SwiftUI, iOS 26, GRDB local-first (cmm-ios / warden-ios conventions)</td></tr>
+<tr><td>Backend layout</td><td class="ok">decided · Go, domain / application / infrastructure, Echo, GORM, goose, MCP go-sdk</td></tr>
+<tr><td>Product name (binary, Bonjour service, data folder)</td><td><code>projmap</code> until you pick one</td></tr>
+<tr><td>Database</td><td>SQLite in the data folder; no Postgres container needed for a local tool</td></tr>
+<tr><td>Phone previews</td><td>PMPreview (WKWebView with the web engine) instead of a Metal port</td></tr>
+<tr><td>First projector path</td><td>Laptop over HDMI, Chrome kiosk on display 2</td></tr>
+<tr><td>Headless renders for agents</td><td>A connected client first, then chromedp as an optional fallback</td></tr>
+<tr><td>Agents allowed to write JS effects</td><td>Yes, in a sandboxed worker; GLSL preferred in the prompts</td></tr>
+<tr><td>Order after the video path</td><td>M5 photo scenes, then M6 agents, then M7 camera auto map</td></tr>
+</tbody></table></div>
+</section>
+
+<footer>The designs this plan builds are on the Projector Map canvas: phone v4 and laptop editor v2. The MCP tool list is in <code>docs/mcp-plan.md</code> in the repo.</footer>
+</main>
+</div>

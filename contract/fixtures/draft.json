@@ -1,0 +1,15 @@
+{
+ "id": "drf_1",
+ "sceneId": "scn_desk",
+ "author": "agent:codex#3",
+ "baseVersion": 418,
+ "ops": [
+  {
+   "op": "replace",
+   "path": "/points/0/x",
+   "value": 1001
+  }
+ ],
+ "status": "proposed",
+ "summary": "tightened the right face"
+}

@@ -1,0 +1,17 @@
+{
+ "id": "set_desk",
+ "name": "Desk projector",
+ "output": {
+  "width": 1920,
+  "height": 1080,
+  "orientation": "landscape",
+  "flipH": false,
+  "flipV": false
+ },
+ "master": 1.0,
+ "blackoutFadeMs": 500,
+ "testPattern": "off",
+ "testPatternUntil": null,
+ "referenceAsset": null,
+ "calibrationId": null
+}

@@ -1,0 +1,96 @@
+.insp {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.ph {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 14px 14px 8px;
+}
+.title {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+.name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.points {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.vx {
+  display: grid;
+  grid-template-columns: 24px repeat(2, minmax(0, 1fr)) 18px;
+  gap: 6px;
+  align-items: center;
+}
+.p,
+.pOn {
+  font-size: var(--fs-xs);
+  letter-spacing: var(--cap-spacing);
+  color: var(--dim);
+  cursor: pointer;
+}
+.pOn {
+  color: var(--ink);
+}
+.dim {
+  color: var(--dim);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  display: inline-flex;
+}
+.numText {
+  font-family: var(--num);
+  font-size: var(--fs-sm);
+}
+.two {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.stop {
+  display: grid;
+  grid-template-columns: 1fr 96px auto;
+  gap: 6px;
+  align-items: center;
+}
+.inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.flip {
+  display: inline-flex;
+  transform: rotate(180deg);
+}
+.history {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 180px;
+  overflow: auto;
+}
+.flatRow {
+  display: flex;
+  gap: 6px;
+  padding: 0 14px 6px;
+}

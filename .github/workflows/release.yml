@@ -1,0 +1,178 @@
+# Release builds. Push a tag (v0.2.0, made by scripts/release.sh) and this
+# creates the GitHub release with the notes from CHANGELOG.md and attaches:
+#
+#   projmap_<version>_{darwin,linux}_{arm64,amd64}.tar.gz   the server + CLI, web app embedded
+#   projmap_<version>_ios.ipa                               the iPhone app, when signing secrets exist
+#   SHA256SUMS                                              checked by install.sh
+#
+# The iOS job is optional: without the APPSTORE_* secrets it skips with a
+# notice, and if it fails the release still goes out without the IPA.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: existing tag to (re)build and attach
+        required: true
+
+permissions:
+  contents: write
+
+defaults:
+  run:
+    shell: bash # -eo pipefail
+
+jobs:
+  meta:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.v.outputs.tag }}
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - id: v
+        env:
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+  server:
+    needs: meta
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.meta.outputs.tag }}
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # The web app is built once and embedded into every binary.
+      - name: web app
+        working-directory: backend
+        run: make catalog web
+      - name: binaries (CGO off) and tarballs
+        working-directory: backend
+        run: make release-bins VERSION="$VERSION" DIST="$GITHUB_WORKSPACE/dist"
+      - name: smoke test (linux/amd64)
+        run: |
+          mkdir -p "$RUNNER_TEMP/smoke"
+          tar -xzf "dist/projmap_${VERSION}_linux_amd64.tar.gz" -C "$RUNNER_TEMP/smoke"
+          test "$("$RUNNER_TEMP/smoke/projmap" version)" = "$VERSION"
+      - name: drop the per-build SHA256SUMS (publish writes one for every file)
+        run: rm dist/SHA256SUMS && ls -la dist
+      - uses: actions/upload-artifact@v7
+        with:
+          name: server
+          path: dist/*
+
+  ios:
+    needs: meta
+    runs-on: macos-26
+    timeout-minutes: 45
+    continue-on-error: true
+    env:
+      VERSION: ${{ needs.meta.outputs.version }}
+      HAVE_KEY: ${{ secrets.APPSTORE_API_KEY_P8 != '' }}
+    steps:
+      - name: no signing secrets
+        if: env.HAVE_KEY != 'true'
+        run: echo "::notice::no APPSTORE_API_KEY_P8 secret, so no IPA in this release (see docs/releasing.md)"
+      - uses: actions/checkout@v7
+        if: env.HAVE_KEY == 'true'
+        with:
+          ref: ${{ needs.meta.outputs.tag }}
+      - uses: maxim-lobanov/setup-xcode@v1
+        if: env.HAVE_KEY == 'true'
+        with:
+          xcode-version: latest-stable
+      - name: archive and export
+        if: env.HAVE_KEY == 'true'
+        working-directory: ios
+        env:
+          KEY_P8: ${{ secrets.APPSTORE_API_KEY_P8 }}
+          KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APPSTORE_API_ISSUER_ID }}
+          TEAM: ${{ vars.IOS_TEAM_ID || '3J46XQAXC4' }}
+          UPLOAD: ${{ vars.IOS_UPLOAD_TESTFLIGHT }}
+          BUILD: ${{ github.run_number }}
+        run: |
+          brew install xcodegen
+          xcodegen generate
+          key="$RUNNER_TEMP/AuthKey_$KEY_ID.p8"
+          echo "$KEY_P8" | base64 --decode > "$key"
+          auth=(-allowProvisioningUpdates -authenticationKeyPath "$key"
+                -authenticationKeyID "$KEY_ID" -authenticationKeyIssuerID "$ISSUER_ID")
+          xcodebuild archive -project projmap.xcodeproj -scheme projmap -configuration Release \
+            -destination 'generic/platform=iOS' -archivePath build/projmap.xcarchive "${auth[@]}" \
+            DEVELOPMENT_TEAM="$TEAM" MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$BUILD" | tail -n 40
+          cp ExportOptions.plist "$RUNNER_TEMP/ExportOptions.plist"
+          /usr/libexec/PlistBuddy -c "Set :teamID $TEAM" "$RUNNER_TEMP/ExportOptions.plist"
+          if [ "$UPLOAD" = "true" ]; then
+            /usr/libexec/PlistBuddy -c "Set :destination upload" "$RUNNER_TEMP/ExportOptions.plist"
+          fi
+          xcodebuild -exportArchive -archivePath build/projmap.xcarchive \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" -exportPath build/export "${auth[@]}"
+          rm -f "$key"
+          mkdir -p ../dist
+          if ls build/export/*.ipa >/dev/null 2>&1; then
+            cp build/export/*.ipa "../dist/projmap_${VERSION}_ios.ipa"
+          fi
+          ls -la ../dist
+      - uses: actions/upload-artifact@v7
+        if: env.HAVE_KEY == 'true'
+        with:
+          name: ios
+          path: dist/*
+          if-no-files-found: ignore
+
+  publish:
+    needs: [meta, server, ios]
+    if: ${{ !cancelled() && needs.server.result == 'success' }}
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ needs.meta.outputs.tag }}
+      VERSION: ${{ needs.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.meta.outputs.tag }}
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+      - name: checksums
+        run: cd dist && sha256sum -- * > SHA256SUMS && cat SHA256SUMS
+      - name: notes from CHANGELOG.md
+        run: |
+          awk -v v="$VERSION" '
+            /^## \[/ { p = (index($0, "## [" v "]") == 1); next }
+            /^\[[^]]+\]: / { next }
+            p
+          ' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+          if ! grep -q '[^[:space:]]' "$RUNNER_TEMP/notes.md"; then
+            echo "No notes for $VERSION in CHANGELOG.md." > "$RUNNER_TEMP/notes.md"
+          fi
+          cat "$RUNNER_TEMP/notes.md"
+      - name: release
+        run: |
+          if gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit "$TAG" -R "$GITHUB_REPOSITORY" --notes-file "$RUNNER_TEMP/notes.md"
+          else
+            pre=(); case "$VERSION" in *-*) pre=(--prerelease) ;; esac
+            gh release create "$TAG" -R "$GITHUB_REPOSITORY" --title "projmap $TAG" \
+              --notes-file "$RUNNER_TEMP/notes.md" "${pre[@]}"
+          fi
+          gh release upload "$TAG" -R "$GITHUB_REPOSITORY" --clobber dist/*

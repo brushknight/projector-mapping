@@ -1,0 +1,71 @@
+.ph {
+  display: flex;
+  align-items: center;
+  padding: 14px 14px 4px;
+  flex: none;
+}
+.item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.dim {
+  color: var(--dim);
+  font-size: var(--fs-sm);
+  display: inline-flex;
+}
+.err {
+  color: var(--ink);
+  font-size: var(--fs-sm);
+}
+.stage {
+  background: var(--stage);
+  border-radius: var(--radius-panel);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.sbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 10px 0;
+  flex: none;
+}
+.sp {
+  flex: 1;
+}
+.both {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 10px;
+  align-content: center;
+  align-items: center;
+  min-height: 0;
+}
+.one {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 40px;
+  min-height: 0;
+}
+.one > * {
+  max-width: 100%;
+  max-height: 100%;
+}
+.outWrap {
+  width: 100%;
+}
+.steps {
+  grid-column: 1 / -1;
+  background: var(--panel);
+  border-radius: var(--radius-panel);
+  padding: 14px 6px;
+  min-height: 0;
+}

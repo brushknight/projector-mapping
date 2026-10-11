@@ -1,0 +1,232 @@
+.tl {
+  grid-column: 1 / -1;
+  background: var(--panel);
+  border-radius: var(--radius-panel);
+  display: grid;
+  grid-template-columns: 210px 1fr;
+  grid-template-rows: 46px 22px 1fr;
+  min-height: 0;
+  overflow: hidden;
+}
+.tlh {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  min-width: 0;
+}
+.tc {
+  font-family: var(--num);
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  margin: 0 10px;
+  white-space: nowrap;
+}
+.dim {
+  color: var(--dim);
+}
+.sp {
+  flex: 1;
+}
+.corner {
+  grid-column: 1;
+  grid-row: 2;
+  display: flex;
+  align-items: center;
+  padding: 0 6px;
+}
+.corner button {
+  height: 20px;
+}
+.rul {
+  grid-column: 2;
+  grid-row: 2;
+  position: relative;
+  font-size: var(--fs-xxs);
+  color: var(--faint);
+  margin-right: 10px;
+  cursor: col-resize;
+  user-select: none;
+}
+.tick {
+  position: absolute;
+  top: 4px;
+  pointer-events: none;
+}
+.cueWrap {
+  position: absolute;
+  top: 1px;
+  width: 0;
+  display: flex;
+  justify-content: center;
+}
+.cue {
+  height: 18px;
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  background: var(--control-3);
+  color: var(--ink);
+  font-size: var(--fs-xxs);
+  display: flex;
+  align-items: center;
+  border: 0;
+  flex: none;
+  cursor: pointer;
+}
+.body {
+  grid-column: 1 / -1;
+  grid-row: 3;
+  display: grid;
+  grid-template-columns: 210px 1fr;
+  align-content: start;
+  overflow-y: auto;
+  scrollbar-width: none;
+  min-height: 0;
+  padding-bottom: 6px;
+}
+.body::-webkit-scrollbar {
+  display: none;
+}
+.phLayer {
+  grid-column: 2;
+  grid-row: 2 / 4;
+  position: relative;
+  margin-right: 10px;
+  pointer-events: none;
+  overflow: hidden;
+}
+.tn {
+  grid-column: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 0 6px;
+  overflow: hidden;
+}
+.tr {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: var(--track-row);
+  padding: 0 4px 0 8px;
+  border-radius: var(--radius-clip);
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+  flex: none;
+}
+.tr.trSel {
+  color: var(--on-ink);
+  background: var(--ink);
+}
+.tr.trMuted {
+  color: var(--dim-3);
+}
+.k {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.trBtn {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  display: inline-flex;
+  padding: 3px;
+  cursor: pointer;
+  opacity: 0.8;
+}
+.lanes {
+  grid-column: 2;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  margin-right: 10px;
+  min-height: 0;
+}
+.ln {
+  position: relative;
+  height: var(--track-row);
+  flex: none;
+}
+.ln::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 13px;
+  height: 1px;
+  background: var(--sep-faint);
+}
+.clip {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  background: var(--control-3);
+  color: var(--ink);
+  border: 0;
+  font-size: var(--fs-xs);
+  text-align: left;
+  padding: 0 9px;
+  overflow: hidden;
+  white-space: nowrap;
+  border-radius: var(--radius-clip);
+  cursor: grab;
+  touch-action: none;
+}
+.clip:hover {
+  box-shadow: inset 0 0 0 1px var(--faint);
+}
+.clip.sel {
+  background: var(--ink);
+  color: var(--on-ink);
+}
+.clip.muted {
+  opacity: 0.4;
+}
+.clipLabel {
+  position: relative;
+  pointer-events: none;
+}
+.fadeIn,
+.fadeOut {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  pointer-events: none;
+  opacity: 0.18;
+}
+.fadeIn {
+  left: 0;
+  background: linear-gradient(90deg, var(--bg), transparent);
+}
+.fadeOut {
+  right: 0;
+  background: linear-gradient(270deg, var(--bg), transparent);
+}
+.phd {
+  position: absolute;
+  top: 0;
+  bottom: 4px;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--red);
+  border-radius: 1px;
+  pointer-events: none;
+}
+.phd::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -5px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--red);
+}
+.empty {
+  color: var(--dim);
+  font-size: var(--fs-sm);
+  padding: 10px 0;
+}

@@ -1,0 +1,40 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 8px;
+}
+.name {
+  color: var(--ink);
+}
+.size {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+.ref {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.refActions {
+  display: flex;
+  gap: 4px;
+}
+.thumb {
+  width: 72px;
+  height: 46px;
+  object-fit: cover;
+  border-radius: 8px;
+}
+.none {
+  color: var(--dim);
+  font-size: var(--fs-sm);
+  flex: 1;
+}

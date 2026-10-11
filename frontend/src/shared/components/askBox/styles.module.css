@@ -1,0 +1,28 @@
+.ask {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--control);
+  border-radius: var(--radius-efx);
+  padding: 8px 8px 8px 14px;
+  color: var(--dim);
+}
+.ask.multi {
+  align-items: flex-start;
+  min-height: 60px;
+  padding-top: 10px;
+}
+.input {
+  flex: 1;
+  background: transparent;
+  border: 0;
+  outline: none;
+  resize: none;
+  color: var(--ink);
+  font-size: var(--fs);
+  line-height: 1.45;
+  padding: 0;
+}
+.input::placeholder {
+  color: var(--dim);
+}

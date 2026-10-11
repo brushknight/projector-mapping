@@ -1,0 +1,15 @@
+{
+ "id": "eff_baysweep",
+ "name": "bay sweep",
+ "kind": "glsl",
+ "origin": "agent:codex",
+ "params": {
+  "speed": {
+   "type": "number",
+   "min": 0,
+   "max": 1,
+   "default": 0.5
+  }
+ },
+ "source": "// see docs/effects.md\nvec4 effect(vec2 uv, float t, float progress) { return vec4(vec3(step(uv.y, progress)), 1.0); }"
+}

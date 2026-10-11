@@ -1,0 +1,50 @@
+.view {
+  position: relative;
+  width: 100%;
+  border-radius: var(--radius-efx);
+  overflow: hidden;
+  background: var(--bg);
+  box-shadow: var(--shadow-stage);
+}
+.canvas,
+.svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.poly,
+.line {
+  fill: transparent;
+  stroke: var(--ink-soft);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+  cursor: pointer;
+}
+.line {
+  fill: none;
+}
+.poly.detail {
+  stroke: var(--dim-2);
+  stroke-dasharray: 4 3;
+}
+.poly.sel {
+  fill: var(--fill-soft);
+}
+.fbar {
+  position: absolute;
+  left: 14px;
+  right: 10px;
+  top: 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  pointer-events: none;
+}
+.cap {
+  font-size: var(--fs-xs);
+  letter-spacing: var(--cap-spacing);
+  text-transform: uppercase;
+  color: var(--dim);
+}

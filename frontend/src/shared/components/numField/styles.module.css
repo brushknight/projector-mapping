@@ -1,0 +1,37 @@
+.num {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--control);
+  height: var(--ctl-sm);
+  padding: 0 10px;
+  border-radius: var(--radius-num);
+  font-family: var(--num);
+  font-size: var(--fs-sm);
+  min-width: 0;
+}
+.num i {
+  font-style: normal;
+  color: var(--dim);
+  font-family: var(--ui);
+}
+.num input {
+  width: 100%;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  outline: none;
+  padding: 0;
+}
+.num.sel {
+  background: var(--ink);
+  color: var(--on-ink);
+}
+.num.sel i {
+  color: var(--on-ink-dim);
+}
+.num:focus-within {
+  box-shadow: 0 0 0 1px var(--dim);
+}

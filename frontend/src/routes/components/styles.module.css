@@ -1,0 +1,133 @@
+.page {
+  min-height: 100vh;
+  background: var(--bg);
+  padding: 8px;
+  overflow: auto;
+  height: 100vh;
+}
+.top {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 6px 16px;
+}
+.wm {
+  font-family: var(--num);
+  font-weight: 700;
+  font-size: var(--fs-wordmark);
+  letter-spacing: -0.4px;
+}
+.sp {
+  flex: 1;
+}
+.link {
+  color: var(--dim);
+  text-decoration: none;
+}
+.link:hover {
+  color: var(--ink);
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 8px;
+  align-items: start;
+}
+.demo {
+  background: var(--panel);
+  border-radius: var(--radius-panel);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.name {
+  font-family: var(--num);
+  font-weight: 500;
+}
+.note {
+  color: var(--dim);
+  font-size: var(--fs-xs);
+}
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.body > div {
+  flex-wrap: wrap;
+}
+.two {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.col {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+.panelDemo {
+  background: var(--bg);
+}
+.media {
+  position: relative;
+  height: 150px;
+  border-radius: var(--radius-efx);
+  background: linear-gradient(135deg, var(--control-3), var(--bg));
+}
+.mediaBar {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  top: 10px;
+  display: flex;
+  justify-content: space-between;
+}
+.mediaHints {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+}
+.qr {
+  background: var(--qr-paper);
+  border-radius: 14px;
+  padding: 10px;
+  align-self: flex-start;
+}
+.icons {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+  gap: 6px;
+}
+.icon {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  background: var(--control);
+  border-radius: 10px;
+  padding: 8px 2px;
+  color: var(--ink);
+}
+.icon i {
+  font-style: normal;
+  font-size: var(--fs-xxs);
+  color: var(--dim);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

@@ -1,0 +1,33 @@
+.fx {
+  background: var(--control);
+  border: 0;
+  color: var(--ink);
+  font-size: var(--fs-xs);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  padding: 12px 2px 10px;
+  border-radius: var(--radius-tile);
+  cursor: grab;
+  min-width: 0;
+}
+.fx:hover {
+  background: var(--control-3);
+}
+.fx.on {
+  background: var(--ink);
+  color: var(--on-ink);
+}
+.label {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 4px;
+}
+.sw {
+  width: 40px;
+  height: 22px;
+  border-radius: 6px;
+}

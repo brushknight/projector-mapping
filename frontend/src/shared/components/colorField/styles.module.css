@@ -1,0 +1,37 @@
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: var(--row);
+  background: var(--control-2);
+  border-radius: var(--radius-row);
+  padding: 0 4px 0 10px;
+}
+.label {
+  flex: 1;
+  font-size: var(--fs-sm);
+}
+.swatch {
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  box-shadow: inset 0 0 0 1px var(--sep);
+  position: relative;
+  cursor: pointer;
+  flex: none;
+}
+.swatch input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  width: 100%;
+  height: 100%;
+}
+.hex {
+  width: 84px;
+  height: 24px;
+  font-family: var(--num);
+  font-size: var(--fs-xs);
+  background: transparent;
+}

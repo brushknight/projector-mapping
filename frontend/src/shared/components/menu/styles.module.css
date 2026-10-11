@@ -1,0 +1,71 @@
+.wrap {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+}
+.pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 40;
+  background: var(--dialog);
+  border-radius: var(--radius-efx);
+  padding: 6px;
+  box-shadow: var(--shadow-dialog), 0 0 0 1px var(--sep);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-height: 70vh;
+  overflow: auto;
+}
+.pop.right {
+  left: auto;
+  right: 0;
+}
+.item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: var(--row);
+  padding: 0 10px;
+  border-radius: var(--radius-row);
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+  font-size: var(--fs);
+  flex: none;
+}
+.item:hover {
+  background: var(--control);
+}
+.item:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.item.on {
+  background: var(--ink);
+  color: var(--on-ink);
+}
+.item.danger {
+  color: var(--ink);
+}
+.k {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.m {
+  color: var(--faint);
+  font-size: var(--fs-xs);
+}
+.caption {
+  font-size: var(--fs-xs);
+  letter-spacing: var(--cap-spacing);
+  text-transform: uppercase;
+  color: var(--dim);
+  padding: 8px 10px 4px;
+}

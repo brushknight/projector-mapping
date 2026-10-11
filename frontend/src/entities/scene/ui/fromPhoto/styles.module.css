@@ -1,0 +1,98 @@
+.sources {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.src {
+  background: var(--control);
+  border: 0;
+  color: var(--ink);
+  border-radius: var(--radius-card);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-start;
+  text-align: left;
+  cursor: pointer;
+}
+.src:hover {
+  background: var(--control-3);
+}
+.src.on {
+  background: var(--ink);
+  color: var(--on-ink);
+}
+.srcTitle {
+  font-size: 15px;
+}
+.srcSub {
+  font-size: var(--fs-sm);
+  color: var(--dim);
+}
+.src.on .srcSub {
+  color: var(--on-ink-dim);
+}
+.body {
+  display: grid;
+  grid-template-columns: 520px 1fr;
+  gap: 16px;
+  min-height: 390px;
+}
+.feed {
+  border-radius: var(--radius-efx);
+  overflow: hidden;
+  position: relative;
+  background: var(--bg);
+  aspect-ratio: 4 / 3;
+  outline: none;
+}
+.img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--dim);
+  padding: 24px;
+  text-align: center;
+  font-size: var(--fs-sm);
+  border: 1px dashed var(--control-3);
+  border-radius: var(--radius-efx);
+}
+.fbar {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  top: 10px;
+  display: flex;
+  justify-content: space-between;
+}
+.grab {
+  position: absolute;
+  bottom: 12px;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+}
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.note {
+  color: var(--dim);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+}
+.sp {
+  flex: 1;
+}

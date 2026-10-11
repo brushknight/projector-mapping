@@ -1,0 +1,9 @@
+{
+ "seq": 4,
+ "kind": "tool",
+ "tool": "surface_create",
+ "text": "top, left, right",
+ "durationMs": 200,
+ "ok": true,
+ "ts": "2026-10-11T10:00:02Z"
+}
