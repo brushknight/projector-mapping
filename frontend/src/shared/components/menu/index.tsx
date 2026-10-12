@@ -20,8 +20,37 @@ export interface MenuItem {
  * A button that opens a list below it. `trigger` renders the button (gets toggle + open state).
  * Clicking outside or pressing Escape closes it.
  */
-export function Menu({ trigger, items, align = 'left', width = 260, children, className, style }: { trigger: (p: { open: boolean; toggle: () => void }) => ReactNode; items?: MenuItem[]; align?: 'left' | 'right'; width?: number; children?: (close: () => void) => ReactNode; className?: string; style?: CSSProperties }) {
-  const [open, setOpen] = useState(false)
+export function Menu({
+  trigger,
+  items,
+  align = 'left',
+  width = 260,
+  children,
+  className,
+  style,
+  open: openProp,
+  onOpenChange,
+}: {
+  trigger: (p: { open: boolean; toggle: () => void }) => ReactNode
+  items?: MenuItem[]
+  align?: 'left' | 'right'
+  width?: number
+  children?: (close: () => void) => ReactNode
+  className?: string
+  style?: CSSProperties
+  /** controlled open state (optional); onOpenChange hears every change */
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+}) {
+  const [own, setOwn] = useState(false)
+  const open = openProp ?? own
+  const changeRef = useRef(onOpenChange)
+  changeRef.current = onOpenChange
+  const setOpen = (v: boolean | ((o: boolean) => boolean)) => {
+    const next = typeof v === 'function' ? v(open) : v
+    setOwn(next)
+    changeRef.current?.(next)
+  }
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (!open) return

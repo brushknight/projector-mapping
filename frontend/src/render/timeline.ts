@@ -40,3 +40,42 @@ export function evaluateTimeline(scene: Scene, t: number, mutedTracks?: Readonly
   }
   return out
 }
+
+/** What layer clips (track target `layer`, protocol §12) set at time t. */
+export interface LayerAnim {
+  reveal?: number
+  /** gradient offset or media x */
+  sweep?: number
+}
+
+export const LAYER_CLIP_EFFECTS = ['reveal', 'sweep'] as const
+export const LAYER_CLIP_DEFAULTS: Record<string, { from: number; to: number }> = { reveal: { from: 0, to: 1 }, sweep: { from: -1, to: 1 } }
+
+/**
+ * Per content layer id, the animated values at t: during a clip `from + (to − from) × progress`, after it the `to`
+ * until the next clip starts, before the first clip its `from`.
+ */
+export function evaluateLayerClips(scene: Scene, t: number, mutedTracks?: ReadonlySet<string>): Map<string, LayerAnim> {
+  const out = new Map<string, LayerAnim>()
+  for (const track of scene.timeline.tracks) {
+    if (track.target.kind !== 'layer' || mutedTracks?.has(track.id)) continue
+    const layerId = track.target.id
+    for (const effect of LAYER_CLIP_EFFECTS) {
+      const clips = scene.timeline.clips.filter((c) => c.trackId === track.id && c.effect === effect).sort((a, b) => a.start - b.start)
+      if (!clips.length) continue
+      const val = (c: Clip, k: 'from' | 'to') => {
+        const v = Number((c.params as Record<string, unknown>)[k])
+        return Number.isFinite(v) ? v : LAYER_CLIP_DEFAULTS[effect][k]
+      }
+      let v = val(clips[0], 'from')
+      for (const c of clips) {
+        if (t < c.start) break
+        v = t < c.end ? val(c, 'from') + (val(c, 'to') - val(c, 'from')) * clipProgress(c, t) : val(c, 'to')
+      }
+      const cur = out.get(layerId) ?? {}
+      cur[effect] = v
+      out.set(layerId, cur)
+    }
+  }
+  return out
+}

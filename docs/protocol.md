@@ -281,7 +281,7 @@ token, so the editor and output on the same Mac just work.
 | GET/POST | `/effects` | list / create `{ name, kind, source, params }` |
 | GET/PUT/DELETE | `/effects/{id}` | |
 | GET | `/show` | Show |
-| POST | `/show/{action}` | `go`, `back`, `play`, `pause`, `stop`, `seek {t}`, `blackout {on}`, `activate {sceneId}` |
+| POST | `/show/{action}` | `go`, `back`, `play`, `pause`, `stop`, `seek {t}`, `blackout {on}`, `activate {sceneId}`, `solo {surfaceIds, fill, seconds}`, `preview {draftId, t, play}` (§12) |
 | POST | `/assets` | multipart `file`, optional `kind` → Asset |
 | GET | `/a/{sha}` | bytes (no `/api/v1` prefix; immutable cache headers) |
 | GET | `/devices` | list; `DELETE /devices/{id}` revokes |
@@ -541,3 +541,128 @@ One release, all three clients and the server together:
 - **Drawing effect.** The built-in effect `drawing` (`params.strokes`, `params.reveal`) and the catalog param type
   `strokes`; the catalog `version` is 2.
 - **render.frame** takes an optional `mode`; the output draws `show.preview` drafts in `objects` mode.
+
+## 12. Content layers, atlases and solo (2026-10-12)
+
+Additive. Every new field is optional on decode, so older documents and clients keep working. The iPhone app
+decodes and ignores them.
+
+### Content layer
+
+A content layer is a picture or a gradient drawn inside a surface (a **surface layer**) or across an object's unfolded
+faces (an **object layer**, see Atlas). Shape:
+
+```json
+{
+  "id": "cl_flowers", "kind": "media", "name": "flowers", "visible": true, "opacity": 0.8, "blend": "normal",
+  "x": 0, "y": 0, "scale": 1, "rotation": 0, "reveal": 1, "revealAngle": 0,
+  "src": "flowers", "media": "image", "fit": "fill", "crop": { "x": 0, "y": 0, "w": 1, "h": 1 }
+}
+```
+
+```json
+{
+  "id": "cl_sweep", "kind": "gradient", "name": "sweep", "visible": true, "opacity": 0.9, "blend": "screen",
+  "x": 0, "y": 0, "scale": 1, "rotation": 0, "reveal": 1, "revealAngle": 0,
+  "stops": [ { "color": "#000000", "pos": 0 }, { "color": "#ff3b30", "pos": 0.5 }, { "color": "#000000", "pos": 1 } ],
+  "angle": 30, "offset": 0, "repeat": true
+}
+```
+
+- `kind`: `media` | `gradient`. `blend`: `normal` | `multiply` | `screen` | `add`. `opacity` 0…1.
+- The layer lives in its **canvas**: the surface's UV square (0,0 top left of the content, as for effects) for a
+  surface layer, the object's atlas for an object layer.
+- Transform, applied in canvas pixels: the layer's box (see `fit`) is scaled by `scale` (0.01…100) about its centre,
+  rotated by `rotation` degrees (clockwise) about its centre, then moved by `x`, `y` in canvas fractions (−10…10;
+  `x: 0.5` moves it half the canvas width to the right).
+- `reveal` 0…1 is a wipe: the part of the canvas within the first `reveal` fraction along the direction
+  `revealAngle` (degrees; 0 = left to right, 90 = top to bottom) shows, the rest is transparent. Missing = 1.
+- Media only: `src` is a scenery id from the catalog (`/catalog/assets/scenery/<id>.jpg`) or `asset:<sha>` (an
+  uploaded image or video). `media`: `image` | `video` (videos loop, muted). `fit`: `fill` (cover the canvas, crop the
+  rest), `fit` (contain, transparent bars) or `stretch` (fill exactly, ignoring the aspect). `crop` is the part of the
+  source to use, in source fractions (default the whole source).
+- Gradient only: `stops` (1…8, `#rrggbb`, `pos` 0…1) along `angle` (degrees, 0 = left to right), shifted by
+  `offset` (−10…10, in gradient lengths). `repeat: true` tiles it, so an `offset` that runs from −1 to 1 sweeps the
+  band across the canvas. Defaults: `angle` 0, `offset` 0, `repeat` false.
+- Missing common fields decode as: `visible` true, `opacity` 1, `blend` normal, `x`/`y`/`rotation` 0, `scale` 1,
+  `reveal` 1, `revealAngle` 0.
+
+### Surface and object additions
+
+```json
+{ "id": "srf_right", "...": "…", "layers": [ /* ContentLayer, bottom → top */ ] }
+{ "id": "obj_cube", "...": "…", "atlas": { /* Atlas */ }, "layers": [ /* ContentLayer, bottom → top */ ] }
+```
+
+- `surface.layers` and `object.layers` are optional (absent = `[]`). A client adding the first layer sends
+  `add …/layers` with `[layer]`; later ones `add …/layers/-`.
+- Content layer ids are unique across the scene (they share one namespace with nothing else).
+- What a surface draws, bottom to top: the object layers (through the surface's atlas rect), the surface layers,
+  the always-on `effects`, then the timeline clips. Lines and masks draw no layers.
+
+### Atlas
+
+The object's faces unfolded flat at their real proportions, edge to edge, like a dieline. Object layers are drawn on
+this canvas, and each face shows the part of it under its rect, so content runs on across shared edges.
+
+```json
+"atlas": { "width": 618, "height": 609, "faces": {
+  "srf_top":   { "x": 0,   "y": 0,   "w": 309, "h": 309, "rotation": 270 },
+  "srf_left":  { "x": 0,   "y": 309, "w": 309, "h": 300, "rotation": 0 },
+  "srf_right": { "x": 309, "y": 309, "w": 309, "h": 300, "rotation": 0 } } }
+```
+
+- Units are atlas pixels (1…16384); an exported template is exactly `width × height`. Auto layouts use one atlas
+  pixel per scene pixel.
+- `faces` keys are surface ids of the object (role `face`). `x`, `y`, `w`, `h` is the axis-aligned rect the face
+  covers; `rotation` (0 | 90 | 180 | 270, clockwise) turns the face's UV inside it. With `W = w`, `H = h`, face uv
+  (u, v) lands at:
+  - 0: `(x + u·W, y + v·H)`
+  - 90: `(x + (1 − v)·W, y + u·H)`
+  - 180: `(x + (1 − u)·W, y + (1 − v)·H)`
+  - 270: `(x + v·W, y + (1 − u)·H)`
+- Detail surfaces are not listed: they sit inside their parent face's rect, where their corners fall in the
+  parent's UV. Faces missing from `faces` draw no object layers.
+- `atlas` is optional. Absent or null means "not laid out yet": renderers compute the auto layout below on the fly.
+  The editor stores it when you add the first object layer, export a template or move a face, so artwork stays
+  put when the mapping changes; **re-layout** recomputes it.
+- Auto layout (deterministic): the faces are the object's `face` surfaces that are quads (the others go in a row
+  under the unfold at their flat size). Each face's flat size is the mean length of its opposite edges in scene
+  pixels. The root is the face whose v axis (first point to last point) points most nearly straight down on the
+  stage, ties to the larger area, then the earlier surface; it sits at rotation 0. Breadth-first from the root, in
+  surface order, each face that shares an edge (both point ids) with a placed face is placed against that edge on
+  the other side, at the one rotation that lines the shared points up, scaled so the shared edge has the same
+  length (its aspect is kept). A placement that would overlap a placed rect is skipped. Finally everything shifts
+  so the smallest `x`, `y` is 0 and values round to whole pixels.
+
+### Layer tracks
+
+- Track `target.kind` may be `layer` with `id` = a content layer id (surface or object layer).
+- Clips on a layer track animate that layer. `effect` is `reveal` (drives `reveal`) or `sweep` (drives a gradient's
+  `offset`, or a media layer's `x`); `params: { from, to }` (numbers; defaults reveal 0 → 1, sweep −1 → 1). During
+  the clip the value is `from + (to − from) × progress`. After a clip ends the value holds at its `to` until the
+  next clip on the layer starts; before the first clip starts it is that clip's `from`. A layer without clips uses
+  its own value. Fades do not apply to layer clips.
+
+### Solo
+
+```json
+"solo": { "surfaceIds": ["srf_top"], "fill": "grid", "until": 1791700060123456789 }
+```
+
+- `show.solo` (optional, null when off): the output draws only these surfaces, over black, in `objects` mode
+  whatever `scene.mode` says (blackout still applies). `fill`: `content` (their normal content, with their details),
+  `white` (solid white through the warp) or `grid` (a numbered test grid drawn through each surface's warp, number
+  = position in `surfaceIds` + 1, to check alignment on the real object).
+- Command `cmd show.solo { surfaceIds, fill?, seconds? }` (also `POST /show/solo`). `fill` defaults to `content`,
+  `seconds` 1…600 (default 60). It sets `until` = now + seconds; sending it again renews. `surfaceIds: []` turns solo
+  off. At `until` the server sets `solo` to null and broadcasts the show; renderers also stop drawing a solo whose
+  `until` has passed (server clock), like test patterns.
+- `cmd show.preview { draftId, t?, play? }` (also `POST /show/preview`) plays a draft on the wall from `t` (the
+  editor's "wall follows editor" in backstage); an empty `draftId` ends the preview (as `show.stop` does).
+
+### Editor preview (frontend, no wire change)
+
+The editor plays its own clock: space plays the stage, the content view and thumbnails without sending anything.
+Only with **wall follows editor** on does it send `show.seek` / `show.play` / `show.pause` (or `show.preview` with its
+draft in backstage). GO and on air stay separate controls.

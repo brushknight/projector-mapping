@@ -107,6 +107,58 @@ export interface EffectInstance {
   params: Params
 }
 
+/** A picture or gradient in a surface's UV or across an object's atlas (protocol §12). */
+export type ContentLayerKind = 'media' | 'gradient'
+export type MediaFit = 'fill' | 'fit' | 'stretch'
+export interface Crop {
+  x: number
+  y: number
+  w: number
+  h: number
+}
+export interface ContentLayer {
+  id: string
+  kind: ContentLayerKind
+  name: string
+  visible: boolean
+  opacity: number
+  blend: BlendMode
+  /** centre offset in canvas fractions */
+  x: number
+  y: number
+  scale: number
+  /** degrees, clockwise */
+  rotation: number
+  /** 0..1 wipe along revealAngle */
+  reveal: number
+  revealAngle: number
+  /** media: scenery id or asset:<sha> */
+  src?: string
+  media?: 'image' | 'video'
+  fit?: MediaFit
+  crop?: Crop
+  /** gradient */
+  stops?: GradientStop[]
+  angle?: number
+  offset?: number
+  repeat?: boolean
+}
+
+/** Where a face sits in its object's atlas, in atlas px; rotation turns its UV clockwise (protocol §12). */
+export type AtlasRotation = 0 | 90 | 180 | 270
+export interface AtlasRect {
+  x: number
+  y: number
+  w: number
+  h: number
+  rotation: AtlasRotation
+}
+export interface Atlas {
+  width: number
+  height: number
+  faces: Record<string, AtlasRect>
+}
+
 export interface Surface {
   id: string
   name: string
@@ -119,6 +171,8 @@ export interface Surface {
   effects: EffectInstance[]
   opacity: number
   softEdge: number
+  /** optional on the wire (absent = []), bottom → top, under the effects */
+  layers?: ContentLayer[]
 }
 
 export interface SceneObject {
@@ -127,9 +181,13 @@ export interface SceneObject {
   tags: string[]
   visible: boolean
   surfaces: Surface[]
+  /** the unfolded faces (absent or null = auto layout, computed on the fly) */
+  atlas?: Atlas | null
+  /** object layers drawn on the atlas canvas; each face shows its rect of it */
+  layers?: ContentLayer[]
 }
 
-export type TrackTarget = { kind: 'surface' | 'object'; id: string } | { kind: 'all'; id: null }
+export type TrackTarget = { kind: 'surface' | 'object' | 'layer'; id: string } | { kind: 'all'; id: null }
 
 export interface Track {
   id: string

@@ -17,9 +17,18 @@ export interface Show {
   version: number
   /** (backend §9) an agent previews a draft on the wall; the output renders it instead of the live scene */
   preview?: { draftId: string; until?: number | string | null } | null
+  /** (§12) the wall draws only these surfaces until `until` (server Unix ns) */
+  solo?: ShowSolo | null
 }
 
-export type ShowAction = 'go' | 'back' | 'play' | 'pause' | 'stop' | 'seek' | 'blackout' | 'activate'
+export type SoloFill = 'content' | 'white' | 'grid'
+export interface ShowSolo {
+  surfaceIds: string[]
+  fill: SoloFill
+  until: number
+}
+
+export type ShowAction = 'go' | 'back' | 'play' | 'pause' | 'stop' | 'seek' | 'blackout' | 'activate' | 'solo' | 'preview'
 
 /**
  * The playhead in seconds. `serverNowMs` is the server clock in milliseconds (local clock + measured offset).

@@ -123,3 +123,124 @@ export function makeTextCanvas(text: string, sizePx: number, color: string, widt
   ctx.fillText(text, width / 2, height / 2)
   return cv
 }
+
+/** Looping, muted videos (media layers); each get() uploads the current frame. Not deterministic: videos play on their own clock. */
+export class VideoCache {
+  private map = new Map<string, { el: HTMLVideoElement; tex: WebGLTexture; ready: boolean; promise: Promise<void> }>()
+  onLoad: (() => void) | null = null
+  constructor(private gl: WebGL2RenderingContext) {}
+
+  get(url: string): ImageTex | null {
+    if (typeof document === 'undefined') return null
+    let e = this.map.get(url)
+    if (!e) e = this.load(url)
+    if (!e.ready || e.el.readyState < 2) return null
+    const gl = this.gl
+    gl.bindTexture(gl.TEXTURE_2D, e.tex)
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false)
+    try {
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, e.el)
+    } catch {
+      return null
+    }
+    return { tex: e.tex, width: e.el.videoWidth, height: e.el.videoHeight }
+  }
+
+  wait(url: string): Promise<void> {
+    if (typeof document === 'undefined') return Promise.resolve()
+    return (this.map.get(url) ?? this.load(url)).promise
+  }
+
+  private load(url: string) {
+    const gl = this.gl
+    const el = document.createElement('video')
+    el.muted = true
+    el.loop = true
+    el.playsInline = true
+    el.crossOrigin = 'anonymous'
+    el.preload = 'auto'
+    const tex = gl.createTexture()!
+    gl.bindTexture(gl.TEXTURE_2D, tex)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+    const entry = { el, tex, ready: false, promise: Promise.resolve() }
+    entry.promise = new Promise<void>((done) => {
+      const ok = () => {
+        entry.ready = true
+        el.play().catch(() => {})
+        this.onLoad?.()
+        done()
+      }
+      el.addEventListener('loadeddata', ok, { once: true })
+      el.addEventListener('error', () => done(), { once: true })
+    })
+    el.src = url
+    this.map.set(url, entry)
+    return entry
+  }
+
+  dispose() {
+    for (const e of this.map.values()) {
+      e.el.pause()
+      e.el.removeAttribute('src')
+      this.gl.deleteTexture(e.tex)
+    }
+    this.map.clear()
+  }
+}
+
+/**
+ * A numbered test grid for solo (protocol §12): white lines on black, 8 × 8 cells, the diagonals, a centre ring and
+ * the face's number and name, so you can check a face's warp on the real object.
+ */
+export function makeGridCanvas(n: number, name: string, width: number, height: number): OffscreenCanvas | HTMLCanvasElement {
+  const cv: OffscreenCanvas | HTMLCanvasElement =
+    typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(width, height) : Object.assign(document.createElement('canvas'), { width, height })
+  const ctx = cv.getContext('2d') as CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null
+  if (!ctx) return cv
+  ctx.fillStyle = 'rgb(0,0,0)'
+  ctx.fillRect(0, 0, width, height)
+  ctx.strokeStyle = 'rgb(255,255,255)'
+  const lw = Math.max(1, Math.round(Math.min(width, height) / 220))
+  ctx.lineWidth = lw
+  ctx.beginPath()
+  for (let i = 1; i < 8; i++) {
+    const x = Math.round((i * width) / 8) + 0.5
+    const y = Math.round((i * height) / 8) + 0.5
+    ctx.moveTo(x, 0)
+    ctx.lineTo(x, height)
+    ctx.moveTo(0, y)
+    ctx.lineTo(width, y)
+  }
+  ctx.moveTo(0, 0)
+  ctx.lineTo(width, height)
+  ctx.moveTo(width, 0)
+  ctx.lineTo(0, height)
+  ctx.stroke()
+  ctx.lineWidth = lw * 3
+  ctx.strokeRect(lw * 1.5, lw * 1.5, width - lw * 3, height - lw * 3)
+  const r = Math.min(width, height) * 0.22
+  ctx.beginPath()
+  ctx.arc(width / 2, height / 2, r, 0, Math.PI * 2)
+  ctx.fillStyle = 'rgb(0,0,0)'
+  ctx.fill()
+  ctx.stroke()
+  ctx.fillStyle = 'rgb(255,255,255)'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.font = `${Math.round(r * 1.1)}px 'Share Tech Mono', 'Roboto Mono', ui-monospace, monospace`
+  ctx.fillText(String(n), width / 2, height / 2 - r * 0.08)
+  ctx.font = `${Math.max(10, Math.round(r * 0.22))}px 'Share Tech Mono', 'Roboto Mono', ui-monospace, monospace`
+  ctx.fillText(name, width / 2, height / 2 + r * 0.62, r * 1.7)
+  // an arrow in the top left: which corner is uv (0, 0)
+  ctx.beginPath()
+  const a = Math.min(width, height) * 0.12
+  ctx.moveTo(lw * 4, lw * 4)
+  ctx.lineTo(lw * 4 + a, lw * 4)
+  ctx.lineTo(lw * 4, lw * 4 + a)
+  ctx.closePath()
+  ctx.fill()
+  return cv
+}

@@ -222,12 +222,41 @@ function showAction(action, args = {}) {
       Object.assign(t, { state: 'stopped', offset: 0, startedAt: 0, cue: 0 })
       break
     }
+    case 'solo': {
+      // protocol §12: only these surfaces on the wall until `until`, renewable, [] turns it off
+      const ids = Array.isArray(args.surfaceIds) ? args.surfaceIds.map(String) : []
+      const fill = args.fill ?? 'content'
+      if (!['content', 'white', 'grid'].includes(fill)) throw Object.assign(new Error('fill must be content, white or grid.'), { code: 'bad_request' })
+      const secs = args.seconds == null ? 60 : Number(args.seconds)
+      if (!(secs >= 1 && secs <= 600)) throw Object.assign(new Error('seconds must be 1..600.'), { code: 'bad_request' })
+      clearTimeout(soloTimer)
+      if (!ids.length) delete S.show.solo
+      else {
+        S.show.solo = { surfaceIds: ids, fill, until: nowNs() + secs * 1e9 }
+        soloTimer = setTimeout(() => {
+          delete S.show.solo
+          bumpShow()
+        }, secs * 1000)
+      }
+      break
+    }
+    case 'preview': {
+      if (!args.draftId) {
+        S.show.preview = null
+        Object.assign(t, { state: 'stopped', offset: 0, startedAt: 0, cue: 0 })
+      } else {
+        S.show.preview = { draftId: String(args.draftId) }
+        Object.assign(t, { state: args.play ? 'playing' : 'paused', offset: Number(args.t ?? 0), startedAt: nowNs() })
+      }
+      break
+    }
     default:
       throw Object.assign(new Error(`Unknown action ${action}.`), { code: 'bad_request' })
   }
   bumpShow()
   return S.show
 }
+let soloTimer = null
 
 // test patterns turn off by themselves after `seconds` (default 60), as the Go server does (protocol §1 Setup)
 const patternTimers = new Map()

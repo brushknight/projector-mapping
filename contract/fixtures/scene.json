@@ -522,7 +522,32 @@
      "mesh": null,
      "effects": [],
      "opacity": 1.0,
-     "softEdge": 8
+     "softEdge": 8,
+     "layers": [
+      {
+       "id": "cl_flowers",
+       "kind": "media",
+       "name": "flowers",
+       "visible": true,
+       "opacity": 0.8,
+       "blend": "normal",
+       "x": 0,
+       "y": 0,
+       "scale": 1,
+       "rotation": 0,
+       "reveal": 1,
+       "revealAngle": 0,
+       "src": "flowers",
+       "media": "image",
+       "fit": "fill",
+       "crop": {
+        "x": 0,
+        "y": 0,
+        "w": 1,
+        "h": 1
+       }
+      }
+     ]
     },
     {
      "id": "srf_edges",
@@ -651,6 +676,70 @@
      "opacity": 1.0,
      "softEdge": 0
     }
+   ],
+   "atlas": {
+    "width": 618,
+    "height": 609,
+    "faces": {
+     "srf_top": {
+      "x": 0,
+      "y": 0,
+      "w": 309,
+      "h": 309,
+      "rotation": 270
+     },
+     "srf_left": {
+      "x": 0,
+      "y": 309,
+      "w": 309,
+      "h": 300,
+      "rotation": 0
+     },
+     "srf_right": {
+      "x": 309,
+      "y": 309,
+      "w": 309,
+      "h": 300,
+      "rotation": 0
+     }
+    }
+   },
+   "layers": [
+    {
+     "id": "cl_sweep",
+     "kind": "gradient",
+     "name": "sweep",
+     "visible": true,
+     "opacity": 0.9,
+     "blend": "screen",
+     "x": 0,
+     "y": 0,
+     "scale": 1,
+     "rotation": 0,
+     "reveal": 1,
+     "revealAngle": 0,
+     "stops": [
+      {
+       "color": "#000000",
+       "pos": 0
+      },
+      {
+       "color": "#ff3b30",
+       "pos": 0.45
+      },
+      {
+       "color": "#e9fbff",
+       "pos": 0.5
+      },
+      {
+       "color": "#000000",
+       "pos": 0.6
+      }
+     ],
+     "angle": 30,
+     "offset": 0,
+     "repeat": true
+    }
    ]
   },
   {
@@ -776,6 +865,14 @@
      "kind": "all",
      "id": null
     }
+   },
+   {
+    "id": "trk_sweep",
+    "name": "zimacube · sweep",
+    "target": {
+     "kind": "layer",
+     "id": "cl_sweep"
+    }
    }
   ],
   "clips": [
@@ -884,6 +981,19 @@
     "fadeIn": 0.2,
     "fadeOut": 0.2,
     "params": {}
+   },
+   {
+    "id": "clp_sweep",
+    "trackId": "trk_sweep",
+    "effect": "sweep",
+    "start": 0,
+    "end": 4,
+    "fadeIn": 0,
+    "fadeOut": 0,
+    "params": {
+     "from": -1,
+     "to": 1
+    }
    }
   ],
   "cues": [

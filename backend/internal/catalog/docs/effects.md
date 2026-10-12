@@ -63,6 +63,10 @@ Clarifications from the web renderer (`frontend/src/render/`), additive to the c
   `params.strokes` (protocol §1) on a 2D canvas the size of the surface's content texture (at most 1024 px on the
   longest side, with the surface's aspect), caches it by the strokes and the reveal (to 1/1000), uploads it and samples
   it in a one-line effect. Widths and text sizes are in surface px, so they scale with the surface. `reveal` cuts the
-  total stroke length; in a clip the reveal is `reveal × progress`. The same rasterizer draws the editor's flat view,
+  total stroke length; in a clip the reveal is `reveal × progress`. The same rasterizer draws the face view of the editor's content space,
   so what you draw there is what the wall shows.
 
+- **Content layers (frontend, protocol §12).** Media and gradient layers are not effects: the engine draws them into
+  the surface's content target before the effects (object layers first, sampled from the object's atlas canvas
+  through the face's atlas rect, then the surface's own layers), with `src/render/shaders/content.ts`. Effects
+  composite on top of them in the same UV space.

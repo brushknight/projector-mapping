@@ -200,7 +200,7 @@ export function ComponentsPage() {
           <div className={s.col}>
             <TreeNode icon="folder" label="zimacube" meta="7 pts" onToggleVisible={() => {}} />
             {['top', 'left', 'edges'].map((n) => (
-              <TreeNode key={n} depth={1} icon={n === 'edges' ? 'line' : 'quad'} label={n} meta={n === 'edges' ? '9' : 'face'} selected={sel === n} onClick={() => setSel(n)} onToggleVisible={() => {}} />
+              <TreeNode key={n} depth={1} icon={n === 'edges' ? 'line' : 'quad'} label={n} meta={n === 'edges' ? '9' : 'face'} selected={sel === n} onClick={() => setSel(n)} onToggleVisible={() => {}} action={n === 'edges' ? undefined : <Pill size="sm" on={sel === n} icon="edit">edit</Pill>} />
             ))}
             <TreeNode icon="folder" label="desk lamp" meta="8 pts" dim onToggleVisible={() => {}} />
             <TreeNode icon="mask" label="monitor" meta="mask" visible={false} onToggleVisible={() => {}} />

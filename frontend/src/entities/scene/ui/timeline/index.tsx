@@ -3,39 +3,50 @@ import { Icon, Menu, Pill } from '../../../../shared/components'
 import { cx } from '../../../../shared/lib/cx'
 import { newId } from '../../../../shared/lib/ids'
 import { useRaf } from '../../../../shared/lib/useRaf'
-import { playheadNow } from '../../../show/live'
+import { LAYER_CLIP_DEFAULTS } from '../../../../render/timeline'
 import { useEditor } from '../../editor/context'
 import { addClip, addCue, addTrack, cuePath, removeCue, removeTrack, round3, setClipTimes, sortedCues } from '../../ops'
-import type { Clip, Scene, Track } from '../../types'
+import type { Clip, ContentLayer, Scene, Track } from '../../types'
+import { formatTime } from './time'
 import s from './styles.module.css'
+
+export { formatTime }
 
 const EDGE_PX = 7
 const SNAP_PX = 6
 
-export function formatTime(t: number): string {
-  const v = Math.max(0, t)
-  const m = Math.floor(v / 60)
-  const sec = v - m * 60
-  return `${String(m).padStart(2, '0')}:${sec.toFixed(2).padStart(5, '0')}`
+/** Every content layer of the scene with a readable owner name (layer tracks target them). */
+function contentLayers(scene: Scene): Array<{ layer: ContentLayer; owner: string }> {
+  return scene.objects.flatMap((o) => [
+    ...(o.layers ?? []).map((layer) => ({ layer, owner: o.name })),
+    ...o.surfaces.flatMap((x) => (x.layers ?? []).map((layer) => ({ layer, owner: `${o.name} · ${x.name}` }))),
+  ])
 }
 
 type ClipDrag = { id: string; mode: 'move' | 'start' | 'end'; x0: number; y0: number; start: number; end: number; trackId: string; moved: boolean }
 
-/** The timeline: transport, ruler with cues, tracks and clips. Drag clips to move, their edges to resize. */
+/**
+ * Under the stage in both spaces. Collapsed it is the editor's transport bar (play, loop, time, scrub); open it shows
+ * the ruler with cues, tracks and clips. Every control here moves the editor preview only; the wall follows it only
+ * with "wall follows" on. Drag clips to move them, their edges to resize.
+ */
 export function Timeline() {
   const ed = useEditor()
   const scene = ed.scene
+  const open = ed.timelineOpen
   const lanesRef = useRef<HTMLDivElement>(null)
   const phRef = useRef<HTMLElement>(null)
   const tcRef = useRef<HTMLSpanElement>(null)
+  const scrubRef = useRef<HTMLDivElement>(null)
+  const scrubHead = useRef<HTMLElement>(null)
   const [laneW, setLaneW] = useState(800)
   const [drag, setDrag] = useState<ClipDrag | null>(null)
   const [override, setOverride] = useState<{ id: string; start: number; end: number; trackId: string } | null>(null)
   const [scrub, setScrub] = useState<number | null>(null)
-  const loopFired = useRef(false)
   const duration = Math.max(1, scene?.timeline.duration ?? 20)
   const pps = laneW / duration
-  const playing = ed.show?.transport.state === 'playing'
+  const playing = ed.preview.playing
+  const seek = (t: number) => ed.preview.seek(round3(t))
 
   useLayoutEffect(() => {
     const el = lanesRef.current
@@ -44,22 +55,20 @@ export function Timeline() {
     ro.observe(el)
     setLaneW(el.clientWidth)
     return () => ro.disconnect()
-  }, [])
+  }, [open, !!scene])
 
   // the playhead and the timecode move every frame without re-rendering the timeline
   useRaf(() => {
-    const t = scrub ?? playheadNow(ed.hub, ed.show)
-    if (phRef.current) phRef.current.style.left = `${Math.min(1, Math.max(0, t / duration)) * 100}%`
+    const t = scrub ?? ed.preview.t()
+    const f = `${Math.min(1, Math.max(0, t / duration)) * 100}%`
+    if (phRef.current) phRef.current.style.left = f
+    if (scrubHead.current) scrubHead.current.style.left = f
     if (tcRef.current) tcRef.current.textContent = formatTime(t)
-    if (ed.loop && playing && t >= duration) {
-      if (!loopFired.current) {
-        loopFired.current = true
-        void ed.command('show.seek', { t: 0 }).finally(() => setTimeout(() => (loopFired.current = false), 500))
-      }
-    }
+    // the preview holds at the end unless it loops
+    if (ed.preview.playing && !ed.preview.loop && t >= duration - 1e-3) ed.preview.pause()
   })
 
-  if (!scene) return <section className={s.tl} aria-label="timeline" />
+  if (!scene) return <section className={s.tl} aria-label="timeline" data-open={open} />
 
   const tracks = scene.timeline.tracks
   const cues = sortedCues(scene)
@@ -121,6 +130,22 @@ export function Timeline() {
     setOverride({ id: drag.id, start, end, trackId })
   }
 
+  const scrubAt = (clientX: number) => {
+    const r = scrubRef.current!.getBoundingClientRect()
+    return Math.min(duration, Math.max(0, ((clientX - r.left) / r.width) * duration))
+  }
+  const onScrubDown = (e: PointerEvent) => {
+    if (e.button !== 0) return
+    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+    seek(scrubAt(e.clientX))
+    setScrub(scrubAt(e.clientX))
+  }
+  const onScrubMove = (e: PointerEvent) => {
+    if (scrub === null) return
+    setScrub(scrubAt(e.clientX))
+    seek(scrubAt(e.clientX))
+  }
+
   const onClipUp = () => {
     const d = drag
     const o = override
@@ -134,6 +159,10 @@ export function Timeline() {
     const data = e.dataTransfer.getData('text/plain')
     if (!data.startsWith('effect:')) return
     e.preventDefault()
+    if (track.target.kind === 'layer') {
+      ed.toast('A layer track takes reveal and sweep clips: use its ⋯ menu.')
+      return
+    }
     const effect = data.slice(7)
     const start = round3(Math.min(duration - 0.5, Math.round(timeAt(e.clientX) * 10) / 10))
     const clip: Clip = { id: newId('clp'), trackId: track.id, effect, start, end: round3(Math.min(duration, start + 2)), fadeIn: 0.2, fadeOut: 0.2, params: {} }
@@ -146,16 +175,20 @@ export function Timeline() {
     ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
     setScrub(timeAt(e.clientX))
   }
-  const onRulerMove = (e: PointerEvent) => scrub !== null && setScrub(timeAt(e.clientX))
+  const onRulerMove = (e: PointerEvent) => {
+    if (scrub === null) return
+    setScrub(timeAt(e.clientX))
+    seek(timeAt(e.clientX))
+  }
   const onRulerUp = () => {
     if (scrub === null) return
     const t = round3(scrub)
     setScrub(null)
-    void ed.command('show.seek', { t })
+    seek(t)
   }
 
   const addCueHere = () => {
-    const at = round3(playheadNow(ed.hub, ed.show))
+    const at = round3(ed.preview.t())
     void ed.editing.edit(() => addCue({ id: newId('cue'), at: Math.min(duration, at), label: `cue ${cues.length + 1}`, autoFollow: false }))
   }
 
@@ -165,33 +198,51 @@ export function Timeline() {
   const step = duration <= 30 ? 2 : duration <= 120 ? 10 : 30
   for (let t = 0; t < duration; t += step) ticks.push(t)
 
+  const layers = contentLayers(scene)
   const trackOptions = [
     { key: 'all', label: 'every surface', target: { kind: 'all' as const, id: null }, name: 'all' },
     ...scene.objects.map((o) => ({ key: o.id, label: o.name, target: { kind: 'object' as const, id: o.id }, name: o.name })),
     ...scene.objects.flatMap((o) => o.surfaces.map((x) => ({ key: x.id, label: `${o.name} · ${x.name}`, target: { kind: 'surface' as const, id: x.id }, name: `${o.name} · ${x.name}` }))),
+    ...layers.map(({ layer, owner }) => ({ key: layer.id, label: `layer · ${owner} · ${layer.name}`, target: { kind: 'layer' as const, id: layer.id }, name: `${owner} · ${layer.name}` })),
   ]
 
   return (
-    <section className={s.tl} aria-label="timeline">
+    <section className={s.tl} aria-label="timeline" data-open={open} data-testid="timeline">
       <div className={s.tlh}>
-        <Pill icon="toStart" aria-label="to start" onClick={() => ed.command('show.seek', { t: 0 })} />
-        <Pill icon={playing ? 'pause' : 'play'} iconSize={14} on aria-label={playing ? 'pause' : 'play'} onClick={() => ed.command(playing ? 'show.pause' : 'show.play')} data-testid="play" />
-        <Pill icon="stop" iconSize={13} aria-label="stop" onClick={() => ed.command('show.stop')} />
-        <Pill icon="loop" aria-label="loop" on={ed.loop} aria-pressed={ed.loop} onClick={() => ed.setLoop(!ed.loop)} />
+        <Pill size="sm" icon="toStart" aria-label="to start (home)" title="to start (home)" onClick={() => seek(0)} />
+        <Pill icon={playing ? 'pause' : 'play'} iconSize={14} on aria-label={playing ? 'pause the preview' : 'play the preview'} title="play or pause the editor preview (space); the wall keeps going" onClick={ed.preview.toggle} data-testid="play" />
+        <Pill size="sm" icon="loop" aria-label="loop (L)" title="loop the preview (L)" on={ed.preview.loop} aria-pressed={ed.preview.loop} onClick={() => ed.preview.setLoop(!ed.preview.loop)} data-testid="loop" />
         <span className={s.tc}>
-          <span ref={tcRef}>00:00.00</span> <span className={s.dim}>/ {formatTime(duration)}</span>
+          <span ref={tcRef} data-testid="timecode">00:00.00</span> <span className={s.dim}>/ {formatTime(duration)}</span>
         </span>
-        <Pill icon="flag" iconSize={14} onClick={addCueHere}>
-          add cue
-        </Pill>
-        <Pill icon="next" iconSize={14} onClick={() => ed.command('show.go')} title="jump to the next cue and play">
-          go
-        </Pill>
-        <span className={s.sp} />
-        <Pill icon="phone" iconSize={14} onClick={sendToPhone} title="make this the active scene for the phone and the wall">
-          send to phone
+        <div ref={scrubRef} className={s.scrub} onPointerDown={onScrubDown} onPointerMove={onScrubMove} onPointerUp={() => setScrub(null)} onPointerCancel={() => setScrub(null)} data-testid="scrub" title="drag to scrub the preview (J and K step a frame)">
+          <span className={s.scrubTrack} />
+          {cues.map((c) => (
+            <i key={c.id} className={s.scrubCue} style={{ left: `${(c.at / duration) * 100}%` }} />
+          ))}
+          <i ref={scrubHead} className={s.scrubHead} />
+        </div>
+        {ed.solo && (
+          <Pill size="sm" on icon="solo" onClick={ed.clearSolo} title="only the soloed surfaces show; click (or esc) to show everything" data-testid="solo-chip">
+            solo · {ed.solo.length} {ed.solo.length === 1 ? 'surface' : 'surfaces'} · end
+          </Pill>
+        )}
+        {open && (
+          <>
+            <Pill size="sm" icon="flag" iconSize={14} onClick={addCueHere} title="add a cue at the editor playhead">
+              add cue
+            </Pill>
+            <Pill size="sm" ghost icon="phone" iconSize={14} onClick={sendToPhone} title="make this the active scene for the phone and the wall">
+              play this scene on the wall
+            </Pill>
+          </>
+        )}
+        <Pill size="sm" ghost={!open} on={open} icon="chevronDown" onClick={() => ed.setTimelineOpen(!open)} aria-expanded={open} title={open ? 'fold the timeline away' : 'open the timeline: tracks, clips and cues'} data-testid="timeline-toggle">
+          {open ? 'hide tracks' : `timeline · ${tracks.length} tracks`}
         </Pill>
       </div>
+      {open && (
+        <>
       <div className={s.corner}>
         <Menu
           width={260}
@@ -228,9 +279,9 @@ export function Timeline() {
             )}
             items={[
               { key: 'l', caption: true, label: c.label },
-              { key: 'go', label: 'jump here', icon: 'play', onSelect: () => void ed.command('show.seek', { t: c.at }) },
+              { key: 'go', label: 'jump here', icon: 'play', onSelect: () => seek(c.at) },
               { key: 'af', label: c.autoFollow ? 'hold at the next cue' : 'follow on to the next cue', icon: 'next', onSelect: () => { const p = cuePath(scene, c.id, 'autoFollow'); if (p) ed.editing.setValue(p, !c.autoFollow, 'final') } },
-              { key: 'mv', label: 'move to the playhead', icon: 'flag', onSelect: () => { const p = cuePath(scene, c.id, 'at'); if (p) ed.editing.setValue(p, round3(playheadNow(ed.hub, ed.show)), 'final') } },
+              { key: 'mv', label: 'move to the playhead', icon: 'flag', onSelect: () => { const p = cuePath(scene, c.id, 'at'); if (p) ed.editing.setValue(p, round3(ed.preview.t()), 'final') } },
               { key: 'rm', label: 'delete cue', icon: 'trash', danger: true, onSelect: () => void ed.editing.edit((sc) => removeCue(sc, c.id)) },
             ]}
           />
@@ -250,7 +301,7 @@ export function Timeline() {
             data-lane={t.id}
             onDragOver={(e) => e.dataTransfer.types.includes('text/plain') && e.preventDefault()}
             onDrop={(e) => onLaneDrop(e, t)}
-            onPointerDown={(e) => e.button === 0 && ed.command('show.seek', { t: round3(timeAt(e.clientX)) })}
+            onPointerDown={(e) => e.button === 0 && seek(timeAt(e.clientX))}
           >
             {scene.timeline.clips
               .filter((c) => (override?.id === c.id ? override.trackId : c.trackId) === t.id)
@@ -287,6 +338,8 @@ export function Timeline() {
       <div className={s.phLayer} aria-hidden="true">
         <i ref={phRef} className={s.phd} />
       </div>
+        </>
+      )}
     </section>
   )
 }
@@ -308,7 +361,22 @@ function TrackName({ scene, track }: { scene: Scene; track: Track }) {
             <Icon name="more" size={13} />
           </button>
         )}
-        items={[{ key: 'rm', label: 'delete track and its clips', icon: 'trash', danger: true, onSelect: () => void ed.editing.edit((sc) => removeTrack(sc, track.id)) }]}
+        items={[
+          ...(track.target.kind === 'layer'
+            ? (['reveal', 'sweep'] as const).map((effect) => ({
+                key: effect,
+                icon: effect === 'reveal' ? 'play' : 'gradient',
+                label: effect === 'reveal' ? 'add a reveal clip here (wipes it on)' : 'add a sweep clip here (moves it across)',
+                onSelect: () => {
+                  const at = round3(Math.min(scene.timeline.duration - 0.5, ed.preview.t()))
+                  const clip: Clip = { id: newId('clp'), trackId: track.id, effect, start: at, end: round3(Math.min(scene.timeline.duration, at + 3)), fadeIn: 0, fadeOut: 0, params: { ...LAYER_CLIP_DEFAULTS[effect] } }
+                  void ed.editing.edit(() => addClip(clip))
+                  ed.select({ clipId: clip.id, focus: 'clip' })
+                },
+              }))
+            : []),
+          { key: 'rm', label: 'delete track and its clips', icon: 'trash', danger: true, onSelect: () => void ed.editing.edit((sc) => removeTrack(sc, track.id)) },
+        ]}
       />
       <button type="button" className={s.trBtn} aria-label={muted ? `unmute ${track.name}` : `mute ${track.name}`} onClick={() => ed.toggleTrack(track.id)}>
         <Icon name={muted ? 'eyeOff' : 'eye'} size={13} />

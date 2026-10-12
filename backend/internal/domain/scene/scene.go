@@ -161,6 +161,10 @@ type Object struct {
 	Tags     []string  `json:"tags"`
 	Visible  bool      `json:"visible"`
 	Surfaces []Surface `json:"surfaces"`
+	// Atlas is the faces' unfolded layout for object layers; nil means not laid out yet (protocol §12).
+	Atlas *Atlas `json:"atlas,omitempty"`
+	// Layers are the object's content layers, bottom to top, drawn on the atlas.
+	Layers []ContentLayer `json:"layers,omitempty"`
 }
 
 // Surface is one mapped shape.
@@ -176,6 +180,8 @@ type Surface struct {
 	Effects  []SurfaceEffect `json:"effects"`
 	Opacity  float64         `json:"opacity"`
 	SoftEdge float64         `json:"softEdge"`
+	// Layers are the surface's content layers, bottom to top (protocol §12).
+	Layers []ContentLayer `json:"layers,omitempty"`
 }
 
 // Mesh is a quad's warp grid.
@@ -273,6 +279,9 @@ func (s *Scene) Normalize() {
 		}
 		if o.Surfaces == nil {
 			o.Surfaces = []Surface{}
+		}
+		if o.Atlas != nil && o.Atlas.Faces == nil {
+			o.Atlas.Faces = map[string]AtlasRect{}
 		}
 		for j := range o.Surfaces {
 			sf := &o.Surfaces[j]

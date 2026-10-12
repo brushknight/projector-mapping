@@ -94,3 +94,44 @@
   gap: 6px;
   padding: 0 14px 6px;
 }
+.layerRows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.layerRow,
+.layerOn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: var(--track-row);
+  padding: 0 4px 0 8px;
+  border-radius: 9px;
+  cursor: pointer;
+  font-size: var(--fs-sm);
+}
+.layerRow:hover {
+  background: var(--control);
+}
+.layerOn {
+  background: var(--ink);
+  color: var(--on-ink);
+}
+.layerOn .dim {
+  color: var(--on-ink-dim);
+}
+.layerName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.eyeBtn {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  display: inline-flex;
+  padding: 4px;
+  cursor: pointer;
+}

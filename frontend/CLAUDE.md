@@ -8,7 +8,7 @@ run commands: `docs/progress/frontend.md`. The wire contract is `docs/protocol.m
 
 ```
 src/
-  main.tsx, router.tsx                 routes: /out, /preview, /editor(/map|/animate|/automap), /components
+  main.tsx, router.tsx                 routes: /out, /preview, /editor/$space (map | content | automap; animate = map with the timeline open), /components
   shared/
     components/<camelCase>/            domain-agnostic building blocks (index.tsx + styles.module.css), barrel index.ts
     lib/                               http.ts, ws.ts (hub client), jsonPatch.ts, guard.ts, useHub.ts, useRaf.ts, ids.ts

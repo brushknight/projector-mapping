@@ -10,7 +10,9 @@ import { layerParamSchema } from '../entities/catalog/layers'
 import { resolveParams } from '../entities/effect/params'
 import type { EffectDef, ParamSchema } from '../entities/effect/types'
 import { allLayers, onAirPlan } from '../entities/scene/lib'
-import type { Layer, Point, Scene, Surface } from '../entities/scene/types'
+import type { ContentLayer, Layer, Point, Scene, SceneObject, Surface } from '../entities/scene/types'
+import { atlasAffines, resolveAtlas, type Affine } from './atlas'
+import { CONTENT_FS, MAX_STOPS } from './shaders/content'
 import { BUILTINS } from './effects/builtins'
 import { makeDrawingCanvas, parseStrokes, strokesKey } from './effects/drawing'
 import { BUILTIN_SCHEMAS } from './effects/builtinSchemas'
@@ -26,13 +28,30 @@ import { toGlMat3 } from './math/homography'
 import { ORIENTATION_CODE, sceneSizeOf } from './math/orientation'
 import { BLIT_FS, FINAL_FS, FULLSCREEN_VS, KAWASE_DOWN_FS, KAWASE_UP_FS, WARP_FS, WARP_VS } from './shaders/passes'
 import { GOBO_IDS, KIND_CODE, LAYER_FS, PROCEDURAL_IDS } from './shaders/layer'
-import { DynamicTextures, ImageCache, makeTextCanvas } from './textures'
-import { evaluateTimeline, type ActiveClip } from './timeline'
+import { DynamicTextures, ImageCache, makeGridCanvas, makeTextCanvas, VideoCache, type ImageTex } from './textures'
+import { evaluateLayerClips, evaluateTimeline, type ActiveClip, type LayerAnim } from './timeline'
 import type { EffectError, RenderInput, RendererOptions } from './types'
 
 const BLEND_CODE = { normal: 0, multiply: 1, screen: 2, add: 3 } as const
 const TEST_CODE = { off: 0, grid: 1, white: 2, crosshair: 3, corners: 4 } as const
 const CONTENT_MAX = 1024
+const ATLAS_MAX = 2048
+const FIT_CODE = { fill: 0, fit: 1, stretch: 2 } as const
+
+/** What a surface's content draws under its effects: its object's atlas (through its rect) and its own layers. */
+interface SurfaceExtra {
+  atlas: { tex: WebGLTexture; aff: Affine; width: number; height: number } | null
+  anim: Map<string, LayerAnim>
+  /** solo grid: draw the numbered grid instead of the content */
+  grid?: { n: number; name: string } | null
+}
+
+/** Every surface id a solo shows: the listed ones, plus their details when the fill is the content. */
+export function soloSurfaces(scene: Scene, solo: NonNullable<RenderInput['solo']>): Set<string> {
+  const ids = new Set(solo.surfaceIds)
+  if (solo.fill === 'content') for (const o of scene.objects) for (const s of o.surfaces) if (s.parentId && ids.has(s.parentId)) ids.add(s.id)
+  return ids
+}
 
 type EffectProgram = { prog: GLProgram; uniforms: ParamUniform[]; text: boolean; drawing: boolean } | { error: string }
 
@@ -77,6 +96,11 @@ export class Renderer {
   private blitProg: GLProgram
   private warpProg: GLProgram
   private finalProg: GLProgram
+  private contentProg: GLProgram
+  private videos: VideoCache
+  private gridCanvases = new Map<string, OffscreenCanvas | HTMLCanvasElement>()
+  /** object atlas targets drawn in this render call */
+  private objFrame = new Map<string, SurfaceExtra['atlas'] | null>()
   private effectProgs = new Map<string, EffectProgram>()
   private errors = new Map<string, string>()
   private images: ImageCache
@@ -112,8 +136,11 @@ export class Renderer {
     this.blitProg = createProgram(gl, FULLSCREEN_VS, BLIT_FS)
     this.warpProg = createProgram(gl, WARP_VS, WARP_FS)
     this.finalProg = createProgram(gl, FULLSCREEN_VS, FINAL_FS)
+    this.contentProg = createProgram(gl, FULLSCREEN_VS, CONTENT_FS)
     this.images = new ImageCache(gl)
     this.images.onLoad = () => this.onInvalidate?.()
+    this.videos = new VideoCache(gl)
+    this.videos.onLoad = () => this.onInvalidate?.()
     this.dyn = new DynamicTextures(gl)
     this.js.onError = (key, message) => this.reportError(key.split('|')[0], message)
     this.js.onFrame = () => this.onInvalidate?.()
@@ -154,8 +181,10 @@ export class Renderer {
     gl.clearStencil(0)
     gl.clear(gl.COLOR_BUFFER_BIT | gl.STENCIL_BUFFER_BIT)
 
-    const plan = input.scene ? this.plan(input, input.scene) : null
+    const solo = input.solo && input.solo.surfaceIds.length ? input.solo : null
+    const plan = input.scene ? (solo ? { layers: [], level: 0, objects: true } : this.plan(input, input.scene)) : null
     if (input.scene && plan && !input.hideBackdrop) this.renderBackdrop(input, plan.layers, plan.level, scene)
+    this.objFrame.clear()
 
     const keep = new Set<string>()
     const dynKeep = new Set<string>()
@@ -163,6 +192,7 @@ export class Renderer {
     this.pool.prune('content:', keep)
     for (const k of this.textCanvases.keys()) if (!dynKeep.has('text:' + k)) this.textCanvases.delete(k)
     for (const k of this.drawCanvases.keys()) if (!dynKeep.has(k)) this.drawCanvases.delete(k)
+    for (const k of this.gridCanvases.keys()) if (!dynKeep.has(k)) this.gridCanvases.delete(k)
     this.dyn.prune(dynKeep)
 
     let overlay: Target | null = null
@@ -183,15 +213,17 @@ export class Renderer {
     const dynKeep = new Set<string>()
     let content: Target | null = null
     let found = false
+    this.objFrame.clear()
     if (scene) {
       const pts = new Map<string, Point>(scene.points.map((p) => [p.id, p]))
+      const anim = evaluateLayerClips(scene, input.t, input.mutedTracks)
       for (const o of scene.objects) for (const s of o.surfaces) {
         if (s.id !== surfaceId) continue
         const geo = surfaceGeometry(s, pts)
         if (!geo) continue
         found = true
         const active = evaluateTimeline(scene, input.t, input.mutedTracks).get(s.id) ?? []
-        content = this.drawContent(input, s, geo, active, keep, dynKeep)
+        content = this.drawContent(input, s, geo, active, keep, dynKeep, this.extraFor(input, scene, o, s.id, anim, keep))
       }
     }
     this.pool.prune('content:', keep)
@@ -208,6 +240,66 @@ export class Renderer {
     return found
   }
 
+  /**
+   * Draws an object unfolded (protocol §12 Atlas) over the whole canvas: each face's content in its atlas rect, the
+   * details inside their parents, at the input's playhead. The canvas should have the atlas's aspect. Returns false
+   * when the object does not exist.
+   */
+  renderAtlas(input: RenderInput, objectId: string, opts: { only?: string | null; view?: Affine | null } = {}): boolean {
+    const gl = this.gl
+    const scene = input.scene
+    const obj = scene?.objects.find((o) => o.id === objectId)
+    const keep = new Set<string>()
+    const dynKeep = new Set<string>()
+    this.objFrame.clear()
+    bindTarget(gl, null, this.canvas.width, this.canvas.height)
+    gl.clearColor(0, 0, 0, 1)
+    gl.clear(gl.COLOR_BUFFER_BIT)
+    if (!scene || !obj) return false
+    const atlas = resolveAtlas(scene, obj)
+    const affs = atlasAffines(scene, obj, atlas)
+    const pts = new Map<string, Point>(scene.points.map((p) => [p.id, p]))
+    const anim = evaluateLayerClips(scene, input.t, input.mutedTracks)
+    const clips = evaluateTimeline(scene, input.t, input.mutedTracks)
+    const fake = { width: this.canvas.width, height: this.canvas.height } as Target
+    const sx = this.canvas.width / Math.max(1, atlas.width)
+    const sy = this.canvas.height / Math.max(1, atlas.height)
+    // with a view (a face's frame), atlas px → that face's uv → canvas px; else atlas px scaled to the canvas
+    const vw = opts.view
+    const det = vw ? vw.u[0] * vw.v[1] - vw.u[1] * vw.v[0] : 1
+    const place = (x: number, y: number): [number, number] => {
+      if (!vw || Math.abs(det) < 1e-9) return [x, y]
+      const dx = x - vw.o[0], dy = y - vw.o[1]
+      return [((dx * vw.v[1] - dy * vw.v[0]) / det) * this.canvas.width, ((vw.u[0] * dy - vw.u[1] * dx) / det) * this.canvas.height]
+    }
+    const scale = vw ? { sx: 1, sy: 1 } : { sx, sy }
+    const order = [...obj.surfaces.filter((s) => !s.parentId), ...obj.surfaces.filter((s) => s.parentId)]
+    for (const s of order) {
+      const aff = affs.get(s.id)
+      if (!aff || (opts.only && s.id !== opts.only && s.parentId !== opts.only)) continue
+      const geo = surfaceGeometry(s, pts)
+      if (!geo) continue
+      const content = this.drawContent(input, s, geo, clips.get(s.id) ?? [], keep, dynKeep, this.extraFor(input, scene, obj, s.id, anim, keep))
+      if (!content) continue
+      // the surface's own triangles, moved to where their uv lands in the atlas
+      const verts = geo.verts.slice()
+      for (let i = 0; i < verts.length; i += 4) {
+        const u = verts[i + 2], v = verts[i + 3]
+        const pp = place(aff.o[0] + u * aff.u[0] + v * aff.v[0], aff.o[1] + u * aff.u[1] + v * aff.v[1])
+        verts[i] = pp[0]
+        verts[i + 1] = pp[1]
+      }
+      const outline = geo.outlineUv.map(([u, v]) => place(aff.o[0] + u * aff.u[0] + v * aff.v[0], aff.o[1] + u * aff.u[1] + v * aff.v[1]))
+      bindTarget(gl, null, this.canvas.width, this.canvas.height)
+      this.drawWarp({ ...geo, verts, outline, hInv: null }, content.tex, { ...scale, mode: 0, color: [0, 0, 0, 0], opacity: 1, soft: 0 }, fake)
+    }
+    this.setBlend('none')
+    this.pool.prune('content:', keep)
+    for (const k of this.drawCanvases.keys()) if (!dynKeep.has(k)) this.drawCanvases.delete(k)
+    this.dyn.prune(dynKeep)
+    return true
+  }
+
   /** Resolves when every texture and JS effect frame the input needs has arrived. */
   async ready(input: RenderInput): Promise<void> {
     const scene = input.scene
@@ -217,6 +309,14 @@ export class Renderer {
       if (l.kind !== 'photo') continue
       if (!l.visible && input.layerOnly !== l.id) continue
       waits.push(this.images.wait(photoUrl(l.ref, this.opts.resolveUrl)))
+    }
+    for (const o of scene.objects) {
+      const all = [...(o.layers ?? []), ...o.surfaces.flatMap((s) => s.layers ?? [])]
+      for (const l of all) {
+        if (l.kind !== 'media' || !l.src || !l.visible) continue
+        const url = photoUrl(l.src, this.opts.resolveUrl)
+        waits.push(l.media === 'video' ? this.videos.wait(url) : this.images.wait(url))
+      }
     }
     await Promise.all(waits)
     // a dry render queues the JS effect frames; then wait for them
@@ -250,11 +350,12 @@ export class Renderer {
     const gl = this.gl
     this.pool.dispose()
     this.images.dispose()
+    this.videos.dispose()
     this.dyn.dispose()
     this.js.dispose()
     this.mesh.dispose()
     for (const p of this.effectProgs.values()) if ('prog' in p) gl.deleteProgram(p.prog.prog)
-    for (const p of [this.layerProg, this.downProg, this.upProg, this.blitProg, this.warpProg, this.finalProg]) gl.deleteProgram(p.prog)
+    for (const p of [this.layerProg, this.downProg, this.upProg, this.blitProg, this.warpProg, this.finalProg, this.contentProg]) gl.deleteProgram(p.prog)
     gl.deleteTexture(this.blackTex)
     if (loseContext) gl.getExtension('WEBGL_lose_context')?.loseContext()
   }
@@ -567,23 +668,33 @@ export class Renderer {
     }
     const byId = new Map<string, Surface>()
     for (const o of scene.objects) for (const s of o.surfaces) byId.set(s.id, s)
+    const anim = evaluateLayerClips(scene, input.t, input.mutedTracks)
+    const solo = input.solo && input.solo.surfaceIds.length ? input.solo : null
+    const soloIds = solo ? soloSurfaces(scene, solo) : null
+    const others = Math.max(0, Math.min(1, solo?.others ?? 0))
 
     for (const obj of scene.objects) {
-      if (!obj.visible) continue
+      if (!obj.visible && !soloIds) continue
       for (const s of obj.surfaces) {
-        if (!s.visible || input.hiddenSurfaces?.has(s.id)) continue
+        const inSolo = !!soloIds?.has(s.id)
+        if (soloIds && !inSolo && others <= 0) continue
+        if (!inSolo && (!s.visible || !obj.visible || input.hiddenSurfaces?.has(s.id))) continue
         const geo = geoOf(s)
         if (!geo) continue
+        const opacity = soloIds && !inSolo ? s.opacity * others : inSolo && solo!.fill !== 'content' ? 1 : s.opacity
         if (s.kind === 'mask') {
+          if (inSolo && solo!.fill !== 'content') continue
           bindTarget(gl, target)
           this.drawWarp(geo, null, { sx, sy, mode: 1, color: [0, 0, 0, 1], opacity: s.opacity, soft: s.softEdge }, target)
           continue
         }
-        const content = this.drawContent(input, s, geo, activeClips.get(s.id) ?? [], keep, dynKeep)
-        if (!content) continue
+        const white = inSolo && solo!.fill === 'white'
+        const grid = inSolo && solo!.fill === 'grid' ? { n: solo!.surfaceIds.indexOf(s.id) + 1, name: s.name } : null
+        const content = white ? null : this.drawContent(input, s, geo, activeClips.get(s.id) ?? [], keep, dynKeep, { ...this.extraFor(input, scene, obj, s.id, anim, keep), grid })
+        if (!content && !white) continue
 
         bindTarget(gl, target)
-        const parent = s.parentId ? byId.get(s.parentId) : undefined
+        const parent = s.parentId && !(inSolo && solo!.fill !== 'content' && !soloIds!.has(s.parentId)) ? byId.get(s.parentId) : undefined
         const parentGeo = parent ? geoOf(parent) : null
         if (parentGeo) {
           gl.enable(gl.STENCIL_TEST)
@@ -596,7 +707,8 @@ export class Renderer {
           gl.stencilFunc(gl.EQUAL, 1, 0xff)
           gl.stencilOp(gl.KEEP, gl.KEEP, gl.KEEP)
         }
-        this.drawWarp(geo, content.tex, { sx, sy, mode: 0, color: [0, 0, 0, 0], opacity: s.opacity, soft: s.kind === 'line' ? 0 : s.softEdge }, target)
+        if (white) this.drawWarp(geo, null, { sx, sy, mode: 1, color: [1, 1, 1, 1], opacity: 1, soft: 0 }, target)
+        else this.drawWarp(geo, content!.tex, { sx, sy, mode: 0, color: [0, 0, 0, 0], opacity, soft: s.kind === 'line' || grid ? 0 : s.softEdge }, target)
         if (parentGeo) gl.disable(gl.STENCIL_TEST)
       }
     }
@@ -607,12 +719,17 @@ export class Renderer {
    * Draws a surface's content (its always-on effects, then the active clips) into its content target in UV space,
    * at most CONTENT_MAX on the longest side with the surface's aspect. Returns null when nothing is on it.
    */
-  private drawContent(input: RenderInput, s: Surface, geo: SurfaceGeometry, active: ActiveClip[], keep: Set<string>, dynKeep: Set<string>): Target | null {
+  private drawContent(input: RenderInput, s: Surface, geo: SurfaceGeometry, active: ActiveClip[], keep: Set<string>, dynKeep: Set<string>, extra?: SurfaceExtra): Target | null {
     const gl = this.gl
     const layers: EffectLayer[] = []
-    for (const e of s.effects) if (e.enabled) layers.push({ inst: `${s.id}/${e.id}`, effect: e.effect, params: e.params as Record<string, unknown>, progress: 1, alpha: 1, time: input.clock })
-    for (const a of active) layers.push({ inst: `${s.id}/${a.clip.id}`, effect: a.effect, params: a.params as Record<string, unknown>, progress: a.progress, alpha: a.alpha, time: input.t })
-    if (!layers.length) return null
+    const lineOrMask = s.kind === 'line' || s.kind === 'mask'
+    const own = lineOrMask ? [] : (s.layers ?? []).filter((l) => l.visible && l.opacity > 0)
+    const atlas = lineOrMask ? null : extra?.atlas ?? null
+    if (!extra?.grid) {
+      for (const e of s.effects) if (e.enabled) layers.push({ inst: `${s.id}/${e.id}`, effect: e.effect, params: e.params as Record<string, unknown>, progress: 1, alpha: 1, time: input.clock })
+      for (const a of active) layers.push({ inst: `${s.id}/${a.clip.id}`, effect: a.effect, params: a.params as Record<string, unknown>, progress: a.progress, alpha: a.alpha, time: input.t })
+    }
+    if (!layers.length && !own.length && !atlas && !extra?.grid) return null
 
     const aspect = Math.max(1e-3, geo.aspect)
     const cw = aspect >= 1 ? CONTENT_MAX : Math.max(16, Math.round(CONTENT_MAX * aspect))
@@ -623,6 +740,23 @@ export class Renderer {
     bindTarget(gl, content)
     gl.clearColor(0, 0, 0, 0)
     gl.clear(gl.COLOR_BUFFER_BIT)
+    this.setBlend('over')
+    if (extra?.grid) {
+      const gk = `grid:${s.id}:${extra.grid.n}:${extra.grid.name}:${cw}x${ch}`
+      let cv = this.gridCanvases.get(gk)
+      if (!cv) {
+        cv = makeGridCanvas(extra.grid.n, extra.grid.name, cw, ch)
+        this.gridCanvases.set(gk, cv)
+      }
+      dynKeep.add(gk)
+      this.blit(this.dyn.upload(gk, cv as TexImageSource), 1, true)
+      return content
+    }
+    if (atlas) this.drawAtlasSample(atlas, cw, ch)
+    for (const l of own) {
+      this.drawContentLayer(l, cw, ch, extra?.anim)
+      bindTarget(gl, content)
+    }
     this.setBlend('over')
     const seed = hashString01(s.id)
     const outline = capOutline(geo.outlineUv)
@@ -703,6 +837,109 @@ export class Renderer {
     }
 
     return content
+  }
+
+  /** The atlas sample and layer animation a surface of `obj` draws under its effects. */
+  private extraFor(input: RenderInput, scene: Scene, obj: SceneObject, surfaceId: string, anim: Map<string, LayerAnim>, keep: Set<string>): SurfaceExtra {
+    let a = this.objFrame.get(obj.id)
+    if (a === undefined) {
+      a = this.objectAtlas(input, scene, obj, anim, keep)
+      this.objFrame.set(obj.id, a)
+    }
+    if (a) keep.add(`content:obj:${obj.id}`)
+    if (!a) return { atlas: null, anim }
+    const aff = atlasAffines(scene, obj, resolveAtlas(scene, obj)).get(surfaceId)
+    return { atlas: aff ? { ...a, aff } : null, anim }
+  }
+
+  /** Draws an object's layers on its atlas canvas (at most ATLAS_MAX px), or null when it has none. */
+  private objectAtlas(input: RenderInput, scene: Scene, obj: SceneObject, anim: Map<string, LayerAnim>, keep: Set<string>): SurfaceExtra['atlas'] | null {
+    void input
+    const layers = (obj.layers ?? []).filter((l) => l.visible && l.opacity > 0)
+    if (!layers.length) return null
+    const atlas = resolveAtlas(scene, obj)
+    const k = Math.min(1, ATLAS_MAX / Math.max(atlas.width, atlas.height))
+    const w = Math.max(8, Math.round(atlas.width * k))
+    const h = Math.max(8, Math.round(atlas.height * k))
+    const key = `content:obj:${obj.id}`
+    keep.add(key)
+    const t = this.pool.get(key, w, h)
+    const gl = this.gl
+    bindTarget(gl, t)
+    gl.clearColor(0, 0, 0, 0)
+    gl.clear(gl.COLOR_BUFFER_BIT)
+    for (const l of layers) {
+      this.drawContentLayer(l, w, h, anim)
+      bindTarget(gl, t)
+    }
+    this.setBlend('none')
+    return { tex: t.tex, aff: { o: [0, 0], u: [0, 0], v: [0, 0] }, width: atlas.width, height: atlas.height }
+  }
+
+  /** A face samples its rect of the object's atlas canvas into the bound content target. */
+  private drawAtlasSample(a: NonNullable<SurfaceExtra['atlas']>, cw: number, ch: number) {
+    const p = this.contentProg.use()
+    p.i1('u_kind', 2)
+    p.f2('u_canvas', cw, ch)
+    p.tex('u_tex', 0, a.tex)
+    p.f1('u_opacity', 1)
+    p.f2('u_ao', a.aff.o[0] / a.width, a.aff.o[1] / a.height)
+    p.f2('u_aU', a.aff.u[0] / a.width, a.aff.u[1] / a.height)
+    p.f2('u_aV', a.aff.v[0] / a.width, a.aff.v[1] / a.height)
+    this.setBlend('over')
+    this.drawFullscreen()
+  }
+
+  /** Draws one content layer (media or gradient) into the bound target of size w × h. */
+  private drawContentLayer(l: ContentLayer, w: number, h: number, anim?: Map<string, LayerAnim>) {
+    const a = anim?.get(l.id)
+    const reveal = Math.max(0, Math.min(1, a?.reveal ?? l.reveal ?? 1))
+    if (reveal <= 0) return
+    let x = l.x ?? 0
+    let offset = l.offset ?? 0
+    if (a?.sweep !== undefined) {
+      if (l.kind === 'gradient') offset = a.sweep
+      else x = a.sweep
+    }
+    let tex: ImageTex | null = null
+    if (l.kind === 'media') {
+      if (!l.src) return
+      const url = photoUrl(l.src, this.opts.resolveUrl)
+      tex = l.media === 'video' ? this.videos.get(url) : this.images.get(url)
+      if (!tex) return
+    }
+    const p = this.contentProg.use()
+    p.i1('u_kind', l.kind === 'gradient' ? 1 : 0)
+    p.f2('u_canvas', w, h)
+    p.tex('u_tex', 0, tex ? tex.tex : this.blackTex)
+    p.f2('u_texSize', tex?.width ?? 1, tex?.height ?? 1)
+    p.i1('u_premul', 0)
+    p.i1('u_texFlip', 0)
+    p.i1('u_fit', FIT_CODE[l.fit ?? 'fill'] ?? 0)
+    const c = l.crop ?? { x: 0, y: 0, w: 1, h: 1 }
+    p.f4('u_crop', c.x, c.y, Math.max(1e-4, c.w), Math.max(1e-4, c.h))
+    p.f2('u_xy', x, l.y ?? 0)
+    p.f1('u_scale', l.scale ?? 1)
+    p.f1('u_rot', ((l.rotation ?? 0) * Math.PI) / 180)
+    p.f1('u_opacity', Math.max(0, Math.min(1, l.opacity ?? 1)))
+    p.f1('u_reveal', reveal)
+    p.f1('u_revealAngle', ((l.revealAngle ?? 0) * Math.PI) / 180)
+    if (l.kind === 'gradient') {
+      const stops = [...(l.stops ?? [])].slice(0, MAX_STOPS).sort((a, b) => a.pos - b.pos)
+      if (!stops.length) stops.push({ color: '#ffffff', pos: 0 })
+      stops.forEach((st, i) => {
+        this.stopColors.set(hexToRgb(st.color, [1, 1, 1]), i * 3)
+        this.stopPos[i] = Number(st.pos) || 0
+      })
+      p.v3('u_stopColor', this.stopColors)
+      p.v1('u_stopPos', this.stopPos)
+      p.i1('u_stopN', stops.length)
+      p.f1('u_gAngle', ((l.angle ?? 0) * Math.PI) / 180)
+      p.f1('u_gOffset', offset)
+      p.i1('u_repeat', l.repeat ? 1 : 0)
+    }
+    this.setBlend(l.blend === 'normal' || !l.blend ? 'over' : l.blend)
+    this.drawFullscreen()
   }
 
   private drawWarp(

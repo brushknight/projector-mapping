@@ -1,6 +1,6 @@
 # Frontend progress
 
-Status as of 2026-10-11. React 18 + TypeScript + Vite + TanStack Router (code-based tree), CSS Modules, no UI
+Status as of 2026-10-12. React 18 + TypeScript + Vite + TanStack Router (code-based tree), CSS Modules, no UI
 library. Conventions follow `~/dev/brushknight/content-media-manager/web` (see `frontend/CLAUDE.md`).
 
 ## Run it
@@ -126,18 +126,73 @@ exact Gray-code pixels for x and y, bits and inverse; white/black; preview; rend
   on the cube's left face, the preview draws grid and white, a 2 s pattern turns itself off, a preset switches
   mode). The mock server speaks the new shapes, `scene.mode` and pattern expiry.
 
+## Editor B: two spaces, one screen (protocol §12, 2026-10-12)
+
+The editor follows option B of `docs/research/editor-ux.md`. Guide: `docs/mapping.md`.
+
+- **One route, two spaces.** `/editor/$space` (`map`, `content`, `automap`; `animate` opens map with the timeline
+  open; `/editor` redirects to map). Switching spaces never remounts the editor, so the hub, the selection and the
+  preview clock survive; **Tab** switches Map and Content.
+- **Top bar**: scene, Map | Content, the editor preview (play, time, **wall follows**), **set up** (projector panel
+  with the reference photo and test patterns, auto map, new scene from photo, devices), backstage | live, and the
+  **wall** group (draft preview stop, test pattern and solo countdowns, what is on air, the wall's playhead, go, on
+  air). The tools moved to the stage bar.
+- **Editor preview clock** (`entities/scene/editor/preview.ts`, pure + hook). Space, L (loop), J/K (a frame; Shift a
+  second), Home, the scrub on the transport bar. The stage, content views, PiP and thumbnails render at it. With
+  **wall follows** the editor sends `show.seek` + `show.play`/`show.pause` (live) or `show.preview { draftId, t, play }`
+  (backstage). Tools changed keys: line **E**, mask **M**; points step with **[ ]**.
+- **Timeline** folds to the transport bar (play, loop, time, scrub with cue ticks, solo chip); open it for tracks,
+  clips and cues. Layer tracks (`target.kind: "layer"`) take reveal and sweep clips from their ⋯ menu.
+- **Solo**: S solos the selection on the stage (others at 15 %, `RenderInput.solo`), Shift+S also on the wall
+  (`cmd show.solo`, fill from the stage bar's solo menu: grid, white or content), Esc ends both. `/out` and `/preview`
+  draw `show.solo` until its `until` (server clock); the grid is a numbered test card drawn through each face's warp.
+- **4-step rail** (`entities/scene/ui/rail`) replaces the coach: reference, faces, content, play; done steps light,
+  clicks go there; the line under it says what to do next (and what an armed tool needs).
+- **Edit face**: a button on each surface row, in the inspector and on the stage chip; **F**; double-click a face.
+- **Content space** (`entities/scene/ui/contentView`): the object's atlas (`render/atlas.ts`, auto layout per §12,
+  reproduces the fixture's dieline exactly), faces outlined and named, details inside parents, live render
+  (`Renderer.renderAtlas`), face zoom (`renderAtlas` with a view frame, so details show in the face's own uv) with
+  move / pen / line / rect / ellipse / text / erase (V, 1 to 6), layer handles (move, corner scale, rotate knob),
+  **arrange faces** (drag rects with edge snapping, turn 90°), a draggable, collapsible PiP of the warped stage,
+  [ ] to step faces, drop / paste / pick files → `/api/v1/assets` → media layer (on a face, or across the object with
+  alt or between faces).
+- **Content layers in the engine**: `shaders/content.ts` draws media (image cache or looping muted video) and gradient
+  layers with fit, crop, offset, scale, rotation, opacity, blend and the reveal wipe; object layers render into an
+  atlas target (≤ 2048 px) that each face samples through its rect affine; layer clips (`evaluateLayerClips`, hold
+  semantics) drive reveal and sweep. `ready()` waits for layer media.
+- **Templates** (`entities/scene/template.ts`): PNG and SVG of the atlas at its pixel size with outlines and names, a
+  store-only ZIP of per-face PNGs (CRC-32 tested), import artwork → stretched object layer (warns on a size mismatch).
+  Exporting or adding an object layer pins the auto atlas on the object.
+- **Inspector**: content layer inspector (look, fit, crop, gradient stops, placement, reveal, wipe on / sweep clips),
+  layer lists on faces ("pictures") and objects ("across the faces"), layer clip inspector (reveal/sweep, from/to).
+- **Ops**: content layer add (creates the list), remove (drops the list with the last layer, as the server omits it,
+  and the tracks that animate it), move; atlas set; deleting a face drops its atlas rect and its surface and layer
+  tracks; deleting an object drops its tracks.
+- Shared components: `Menu` can be controlled (`open`, `onOpenChange`), `TreeNode` takes an `action`; new icons
+  download, solo, edit, pip.
+- Tests: unit `render/atlas.test.ts`, `editor/preview.test.ts`, `scene/content.test.ts`, `template.test.ts`, layer
+  clips in `timeline.test.ts`; e2e `content.spec.ts` (Space plays the preview and the server transport stays stopped,
+  wall follows drives it; S and Shift+S solo with the server's `show.solo` and Esc; the white solo on `/out`; a dropped
+  PNG becomes a media layer drawn red through the shelf's warp on `/out`; the template PNG is 618×609 and the zip
+  holds the atlas and one PNG per face) and `mapping.spec.ts` (rail, Tab keeps the selection, the cube's three faces
+  share edges in the unfold, edit face + drawing + [ ] + Esc).
+
 ## Mock server
 
 `frontend/dev/mock-server.mjs` implements protocol §2/§3 well enough for the UI (fixtures, JSON Patch, param
 coalescing, stale rejects, drafts with ack + snapshot, scripted agent sessions, scripted calibration that drives the
-output's `output.pattern`, assets in memory). Test hooks: `/__mock/log`, `/__mock/state`, `/__mock/rpc`,
+output's `output.pattern`, assets in memory, `show.solo` with expiry and `show.preview`). Test hooks: `/__mock/log`, `/__mock/state`, `/__mock/rpc`,
 `/__mock/reset`. It is a dev tool, not the product.
 
 ## What's left / approximations
 
 - Looks are judged against the boards, not pixel-compared; no golden-image tests yet.
 - Clips have no name field, so a clip shows its effect name (or `params.label`). Track eyes mute locally only.
-- Loop is client-side (seeks to 0 at the end). Undo in backstage is not available (discard the draft instead).
+- The editor preview loops on its own clock; with **wall follows** the wall gets seek + play and is not frame-locked
+  to the editor. Videos in media layers play on their own clock (not the playhead), so renders with video are not
+  deterministic.
+- Surface layer handles show in the face view only (not on the unfold); details are placed by their corners in the
+  parent's uv (exact for quads, bounding box for circles and polygons). Undo in backstage is not available (discard the draft instead).
 - Content textures are always 1024 on the longest side; JS effects show one frame late live.
 - The editor is desktop only (min width 1100 px). The phone app is native and not part of this folder.
 - The ambient clock wraps hourly (one jump per hour in backdrop motion) to keep shader floats precise.

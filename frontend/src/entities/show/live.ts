@@ -54,3 +54,19 @@ export function useBlackout(onAir: boolean | undefined, fadeMs: number | undefin
     },
   }
 }
+
+/** The wall solo that is really on (protocol §12): null when off or when its `until` has passed by the server clock. */
+export function activeSolo(show: Show | null | undefined, serverNowMs: number): { surfaceIds: string[]; fill: 'content' | 'white' | 'grid'; others: number } | null {
+  const s = show?.solo
+  if (!s || !s.surfaceIds?.length) return null
+  if (s.until && s.until / 1e6 <= serverNowMs) return null
+  return { surfaceIds: s.surfaceIds, fill: s.fill ?? 'content', others: 0 }
+}
+
+/** Seconds left on the wall solo, or null when off. */
+export function soloSecondsLeft(show: Show | null | undefined, serverNowMs: number): number | null {
+  const s = show?.solo
+  if (!s || !s.surfaceIds?.length || !s.until) return null
+  const left = Math.ceil(s.until / 1e6 / 1000 - serverNowMs / 1000)
+  return left > 0 ? left : null
+}

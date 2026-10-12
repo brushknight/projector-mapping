@@ -1,11 +1,15 @@
 import { useNavigate } from '@tanstack/react-router'
-import { Cap, Menu, OnAirDot, Pill, Segmented, Tools, type ToolItem } from '../../../../shared/components'
-import { useChannel } from '../../../../shared/lib/useHub'
+import { useRef } from 'react'
+import { Cap, Icon, Menu, OnAirDot, Pill, Segmented, type ToolItem } from '../../../../shared/components'
+import { useChannel, useServerSecond } from '../../../../shared/lib/useHub'
+import { useRaf } from '../../../../shared/lib/useRaf'
 import type { Device } from '../../../device/types'
 import { SetupPanel } from '../../../setup'
-import { useEditor, type Tool, type Workspace } from '../../editor/context'
+import { playheadNow, soloSecondsLeft } from '../../../show/live'
+import { useEditor, type Space, type Tool } from '../../editor/context'
 import { SCENE_MODES, type SceneMode } from '../../types'
 import { sceneApi } from '../../api'
+import { formatTime } from '../timeline/time'
 import s from './styles.module.css'
 
 export const TOOL_ITEMS: Array<ToolItem<Tool>> = [
@@ -15,8 +19,8 @@ export const TOOL_ITEMS: Array<ToolItem<Tool>> = [
   { value: 'poly', icon: 'poly', label: 'poly', hotkey: 'P', hint: 'click each corner, then the first point or Enter' },
   { value: 'circle', icon: 'circle', label: 'circle', hotkey: 'C', hint: 'click the centre, then the rim' },
   { value: 'mesh', icon: 'mesh', label: 'mesh', hotkey: 'W', hint: 'click 4 corners, then bend the mesh points' },
-  { value: 'line', icon: 'line', label: 'line', hotkey: 'L', hint: 'click along an edge, Enter finishes' },
-  { value: 'mask', icon: 'mask', label: 'mask', hotkey: 'K', hint: 'click around an area to keep dark, Enter closes it' },
+  { value: 'line', icon: 'line', label: 'line', hotkey: 'E', hint: 'click along an edge, Enter finishes' },
+  { value: 'mask', icon: 'mask', label: 'mask', hotkey: 'M', hint: 'click around an area to keep dark, Enter closes it' },
 ]
 
 /** What each on-air mode shows (protocol §1 Scene.mode). */
@@ -28,26 +32,14 @@ export const MODE_META: Record<SceneMode, string> = {
   objects: 'mapped objects + timeline',
 }
 
-function ratio(w: number, h: number) {
-  const g = (a: number, b: number): number => (b ? g(b, a % b) : a)
-  const d = g(w, h)
-  const r = `${w / d}:${h / d}`
-  return r === '8:5' ? '16:10' : r
-}
-
-/** The editor's top bar: scene picker, workspaces, tools, iPhone, setup, backstage/live and on air. */
+/**
+ * The editor's top bar: scene, Map | Content, the editor's own preview transport, set up, and the wall's controls
+ * (what is on air, GO, the wall's playhead, on air) kept apart on the right.
+ */
 export function EditorBar() {
   const ed = useEditor()
-  const nav = useNavigate()
-  const devices = useChannel<Device[]>(ed.hub, 'devices').doc ?? []
-  const phones = devices.filter((d) => d.role === 'remote')
-  const phoneOnline = phones.some((d) => d.online)
-  const outputs = devices.filter((d) => d.role === 'output' && d.online)
-  const onAir = ed.show?.onAir ?? false
   const scene = ed.scene
   const setup = ed.setup
-
-  const goWorkspace = (w: Workspace) => nav({ to: w === 'map' ? '/editor/map' : w === 'animate' ? '/editor/animate' : '/editor/automap', search: ed.sceneId ? { scene: ed.sceneId } : {} })
 
   const newScene = async () => {
     const setupId = setup?.id ?? ed.show?.activeSetupId
@@ -69,10 +61,7 @@ export function EditorBar() {
         trigger={({ toggle }) => (
           <Pill onClick={toggle} aria-label="choose scene" data-testid="scene-picker">
             {scene ? scene.name.toLowerCase() : 'no scene'}
-            {setup && <span className={s.dim}>· {setup.name.toLowerCase()}</span>}
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M6 9l6 6 6-6" />
-            </svg>
+            <Icon name="chevronDown" size={14} />
           </Pill>
         )}
         items={[
@@ -88,93 +77,30 @@ export function EditorBar() {
           { key: 'photo', label: 'new scene from photo', icon: 'image', onSelect: ed.openFromPhoto },
         ]}
       />
-      <Segmented<Workspace>
-        ariaLabel="workspace"
-        width={250}
-        className={s.ws}
-        value={ed.workspace}
-        onChange={goWorkspace}
-        options={[
-          { value: 'map', label: 'map' },
-          { value: 'animate', label: 'animate' },
-          { value: 'automap', label: 'auto map' },
-        ]}
-      />
-      <div className={s.mid}>
-        <Tools items={TOOL_ITEMS} value={ed.tool} onChange={ed.setTool} />
-      </div>
-      <Menu
-        align="right"
-        width={300}
-        trigger={({ toggle }) => (
-          <Pill ghost={!phoneOnline} icon="phone" onClick={toggle} aria-label="devices">
-            iphone
-          </Pill>
-        )}
-        items={[
-          { key: 'c', caption: true, label: 'devices' },
-          ...(devices.length
-            ? devices.map((d) => ({
-                key: d.id,
-                icon: d.role === 'remote' ? 'phone' : d.role === 'output' ? 'projector' : 'select',
-                label: d.name,
-                meta: d.online ? (d.telemetry ? `${d.telemetry.fps} fps · ${d.telemetry.width}×${d.telemetry.height}` : d.role) : 'offline',
-                disabled: !d.online,
-              }))
-            : [{ key: 'none', label: 'no devices yet', disabled: true }]),
-        ]}
-      />
-      <Menu
-        align="right"
-        width={340}
-        trigger={({ toggle }) => (
-          <Pill icon="projector" onClick={toggle} aria-label="projector setup" data-testid="setup-chip" className={outputs.some((o) => (o.telemetry?.dropped ?? 0) > 5) ? s.warn : undefined}>
-            {setup ? `${ratio(setup.output.width, setup.output.height)} · ${setup.output.width}×${setup.output.height}` : 'no setup'}
-          </Pill>
-        )}
-      >
-        {() => (setup ? <SetupPanel hub={ed.hub} setup={setup} onError={(m) => ed.toast(m, { bad: true })} /> : <Cap>no setup</Cap>)}
-      </Menu>
-      {ed.show?.preview && (
-        <Pill on onClick={() => ed.command('show.stop')} title="an agent previews its draft on the wall; click to stop it">
-          agent preview · stop
+      {ed.workspace === 'automap' ? (
+        <Pill icon="close" onClick={() => ed.setSpace('map')} data-testid="close-automap">
+          close auto map
         </Pill>
+      ) : (
+        <Segmented<Space>
+          ariaLabel="space"
+          width={190}
+          className={s.ws}
+          value={ed.space}
+          onChange={ed.setSpace}
+          options={[
+            { value: 'map', label: 'map', title: 'place the faces on the object (tab)' },
+            { value: 'content', label: 'content', title: 'the faces unfolded flat, to put content on them (tab)' },
+          ]}
+        />
       )}
-      {ed.testPattern.pattern !== 'off' && (
-        <Pill
-          on
-          size="sm"
-          onClick={() => ed.setTestPattern(ed.testPattern.pattern)}
-          title="the projector shows a test pattern; click to keep it on for another 60 s"
-          data-testid="test-pattern-chip"
-        >
-          {ed.testPattern.pattern} · {ed.testPattern.secondsLeft ?? 60} s
-        </Pill>
-      )}
-      {ed.testPattern.pattern !== 'off' && (
-        <Pill size="sm" ghost onClick={() => ed.setTestPattern('off')} title="turn the test pattern off">
-          off
-        </Pill>
-      )}
-      <Menu
-        align="right"
-        width={280}
-        trigger={({ toggle }) => (
-          <Pill onClick={toggle} aria-label={`on air: ${ed.sceneMode}, click to switch`} title="what the wall shows: one mode at a time" data-testid="mode-picker">
-            {ed.sceneMode}
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M6 9l6 6 6-6" />
-            </svg>
-          </Pill>
-        )}
-        items={[
-          { key: 'cap', caption: true, label: 'on the wall' },
-          ...SCENE_MODES.map((m) => ({ key: `mode-${m}`, label: m, meta: MODE_META[m], on: m === ed.sceneMode, onSelect: () => ed.setSceneMode(m) })),
-        ]}
-      />
+      <PreviewMini />
+      <span className={s.sp} />
+      <SetUpMenu />
       <Segmented
         ariaLabel="output"
-        width={170}
+        size="sm"
+        width={150}
         value={ed.mode}
         onChange={ed.setMode}
         options={[
@@ -182,7 +108,181 @@ export function EditorBar() {
           { value: 'live', label: 'live', title: 'edits change the scene on the wall at once' },
         ]}
       />
+      <WallGroup />
+    </header>
+  )
+}
+
+/** The editor's own transport in the top bar: play the preview and see its time. */
+function PreviewMini() {
+  const ed = useEditor()
+  const tc = useRef<HTMLSpanElement>(null)
+  useRaf(() => {
+    if (tc.current) tc.current.textContent = formatTime(ed.preview.t())
+  })
+  const p = ed.preview
+  return (
+    <div className={s.preview} role="group" aria-label="editor preview">
       <Pill
+        size="sm"
+        icon={p.playing ? 'pause' : 'play'}
+        on
+        aria-label={p.playing ? 'pause the preview (space)' : 'play the preview (space)'}
+        title={p.playing ? 'pause the preview (space)' : 'play the preview here, the wall keeps going (space)'}
+        onClick={p.toggle}
+        data-testid="preview-play"
+      />
+      <span className={s.tc} title="editor playhead">
+        <span ref={tc} data-testid="preview-time">00:00.00</span>
+      </span>
+      <Pill
+        size="sm"
+        ghost={!ed.wallFollows}
+        on={ed.wallFollows}
+        icon="projector"
+        aria-pressed={ed.wallFollows}
+        onClick={() => ed.setWallFollows(!ed.wallFollows)}
+        title={ed.wallFollows ? 'the wall follows the editor: play, pause and scrub move it too. click to stop' : 'make the wall follow the editor preview (in backstage it previews your draft)'}
+        data-testid="wall-follows"
+      >
+        {ed.wallFollows ? 'wall follows' : 'wall apart'}
+      </Pill>
+    </div>
+  )
+}
+
+function ratio(w: number, h: number) {
+  const g = (a: number, b: number): number => (b ? g(b, a % b) : a)
+  const d = g(w, h)
+  const r = `${w / d}:${h / d}`
+  return r === '8:5' ? '16:10' : r
+}
+
+/** Set up: the projector (reference photo, test patterns, output), auto map with the iPhone, devices. */
+function SetUpMenu() {
+  const ed = useEditor()
+  const nav = useNavigate()
+  const devices = useChannel<Device[]>(ed.hub, 'devices').doc ?? []
+  const outputs = devices.filter((d) => d.role === 'output' && d.online)
+  const setup = ed.setup
+  return (
+    <Menu
+      align="right"
+      width={360}
+      open={ed.setupOpen}
+      onOpenChange={ed.setSetupOpen}
+      trigger={({ toggle }) => (
+        <Pill icon="projector" onClick={toggle} aria-label="set up" data-testid="setup-chip" className={outputs.some((o) => (o.telemetry?.dropped ?? 0) > 5) ? s.warn : undefined}>
+          set up
+          {setup && <span className={s.dim}>{`${ratio(setup.output.width, setup.output.height)} · ${setup.output.width}×${setup.output.height}`}</span>}
+        </Pill>
+      )}
+    >
+      {(close) => (
+        <div className={s.setup} data-testid="setup-menu">
+          <Cap>1 · reference: a photo from the lens, or the test grid</Cap>
+          {setup ? <SetupPanel hub={ed.hub} setup={setup} onError={(m) => ed.toast(m, { bad: true })} /> : <span className={s.dim}>no setup</span>}
+          <Cap>calibration</Cap>
+          <div className={s.setupRow}>
+            <Pill
+              size="sm"
+              icon="phone"
+              onClick={() => {
+                close()
+                nav({ to: '/editor/$space', params: { space: 'automap' }, search: ed.sceneId ? { scene: ed.sceneId } : {} })
+              }}
+              data-testid="open-automap"
+            >
+              auto map with the iphone
+            </Pill>
+            <Pill
+              size="sm"
+              ghost
+              icon="image"
+              onClick={() => {
+                close()
+                ed.openFromPhoto()
+              }}
+            >
+              new scene from photo
+            </Pill>
+          </div>
+          <Cap>devices</Cap>
+          <div className={s.devices}>
+            {devices.length === 0 && <span className={s.dim}>no devices yet</span>}
+            {devices.map((d) => (
+              <span key={d.id} className={d.online ? s.dev : s.devOff}>
+                <Icon name={d.role === 'remote' ? 'phone' : d.role === 'output' ? 'projector' : 'select'} size={13} />
+                {d.name}
+                <span className={s.dim}>{d.online ? (d.telemetry ? `${d.telemetry.fps} fps` : d.role) : 'offline'}</span>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </Menu>
+  )
+}
+
+/** The wall: what it shows, its playhead, GO, solo and test pattern countdowns, and on air. Kept apart from the editor's preview. */
+function WallGroup() {
+  const ed = useEditor()
+  const onAir = ed.show?.onAir ?? false
+  const tc = useRef<HTMLSpanElement>(null)
+  const now = useServerSecond(ed.hub)
+  const soloLeft = soloSecondsLeft(ed.show, now)
+  const playing = ed.show?.transport.state === 'playing'
+  useRaf(() => {
+    if (tc.current) tc.current.textContent = formatTime(playheadNow(ed.hub, ed.show))
+  })
+  return (
+    <div className={s.wall} role="group" aria-label="the wall" data-testid="wall-group">
+      <span className={s.wallCap}>wall</span>
+      {ed.show?.preview && (
+        <Pill size="sm" on onClick={() => ed.command('show.stop')} title="a draft plays on the wall; click to stop it">
+          draft preview · stop
+        </Pill>
+      )}
+      {ed.testPattern.pattern !== 'off' && (
+        <Pill size="sm" on onClick={() => ed.setTestPattern(ed.testPattern.pattern)} title="the projector shows a test pattern; click to keep it on for another 60 s" data-testid="test-pattern-chip">
+          {ed.testPattern.pattern} · {ed.testPattern.secondsLeft ?? 60} s
+        </Pill>
+      )}
+      {ed.testPattern.pattern !== 'off' && <Pill size="sm" ghost icon="close" aria-label="turn the test pattern off" title="turn the test pattern off" onClick={() => ed.setTestPattern('off')} />}
+      {soloLeft !== null && ed.show?.solo && (
+        <Pill
+          size="sm"
+          on
+          onClick={() => ed.command('show.solo', { surfaceIds: ed.show!.solo!.surfaceIds, fill: ed.show!.solo!.fill, seconds: 60 })}
+          title="the wall shows only the soloed faces; click to keep it for another 60 s, esc ends it"
+          data-testid="wall-solo-chip"
+        >
+          solo · {ed.show.solo.fill} · {soloLeft} s
+        </Pill>
+      )}
+      <Menu
+        align="right"
+        width={280}
+        trigger={({ toggle }) => (
+          <Pill size="sm" onClick={toggle} aria-label={`on air: ${ed.sceneMode}, click to switch`} title="what the wall shows: one mode at a time" data-testid="mode-picker">
+            {ed.sceneMode}
+            <Icon name="chevronDown" size={13} />
+          </Pill>
+        )}
+        items={[
+          { key: 'cap', caption: true, label: 'on the wall' },
+          ...SCENE_MODES.map((m) => ({ key: `mode-${m}`, label: m, meta: MODE_META[m], on: m === ed.sceneMode, onSelect: () => ed.setSceneMode(m) })),
+        ]}
+      />
+      <span className={s.wallTc} title={playing ? 'the wall is playing' : 'the wall playhead'}>
+        {playing && <i className={s.playDot} aria-hidden="true" />}
+        <span ref={tc} data-testid="wall-time">00:00.00</span>
+      </span>
+      <Pill size="sm" icon="next" iconSize={13} onClick={() => ed.command('show.go')} title="the wall jumps to the next cue and plays" data-testid="go">
+        go
+      </Pill>
+      <Pill
+        size="sm"
         onClick={() => ed.command('show.blackout', { on: onAir })}
         aria-label={onAir ? 'on air, click to black out' : 'blacked out, click to go on air'}
         data-testid="on-air"
@@ -190,6 +290,6 @@ export function EditorBar() {
         <OnAirDot off={!onAir} />
         {onAir ? 'on air' : 'blackout'}
       </Pill>
-    </header>
+    </div>
   )
 }

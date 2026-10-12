@@ -2,17 +2,16 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type Pointer
 import { draftApi } from '../../../draft/api'
 import { assetUrl } from '../../../asset/types'
 import { sceneSize } from '../../../setup/types'
-import { ambientClock, playheadNow } from '../../../show/live'
+import { ambientClock } from '../../../show/live'
 import { Renderer } from '../../../../render'
-import { Cap, FillSlider, HintBar, Menu, Pill, Readout, Row, Segmented, Switch } from '../../../../shared/components'
+import { Cap, FillSlider, HintBar, Menu, Pill, Row, Segmented, Switch, Tools } from '../../../../shared/components'
 import { pointer } from '../../../../shared/lib/jsonPatch'
 import { useRaf } from '../../../../shared/lib/useRaf'
-import { useEditor, type StageView } from '../../editor/context'
+import { useEditor, type SoloFill, type StageView } from '../../editor/context'
 import { underlayOf } from '../../lib'
 import { locateSurface, setUnderlay, surfacePath } from '../../ops'
 import { BACKDROP_MODES, type BackdropMode, type Point } from '../../types'
-import { FlatView } from '../flatView'
-import { Coach } from './coach'
+import { TOOL_ITEMS } from '../editorBar'
 import { StageOverlay, type OverlayApi } from './overlay'
 import s from './styles.module.css'
 
@@ -100,13 +99,15 @@ export function Stage() {
       scene: ed.scene,
       catalog: ed.catalog,
       effects: ed.userEffects,
-      t: playheadNow(ed.hub, ed.show),
+      // the editor's own playhead: previewing never touches the wall
+      t: ed.preview.t(),
       clock: ambientClock(ed.hub),
       blackout: 0,
       testPattern: ed.testGrid ? 'grid' : 'off',
       mutedTracks: ed.mutedTracks,
       // the stage always previews objects mode so the mapping shows; the wall keeps scene.mode
       mode: 'objects',
+      solo: ed.solo ? { surfaceIds: ed.solo, fill: 'content', others: 0.15 } : null,
     })
     drawLoupe()
   })
@@ -217,11 +218,16 @@ export function Stage() {
       const t = e.target as HTMLElement
       if (t.closest('input, textarea, [contenteditable="true"]')) return
       const scene = ed.scene
-      if (!scene || ed.flat) return
+      if (!scene) return
       if (e.key === 'Escape') {
-        if (overlayApi.current?.cancelDrawing()) return
-        if (ed.tool !== 'select') ed.setTool('select')
-        else ed.select({ pointId: null, meshIndex: null })
+        if (overlayApi.current?.cancelDrawing()) {
+          e.preventDefault()
+          return
+        }
+        if (ed.tool !== 'select') {
+          e.preventDefault()
+          ed.setTool('select')
+        } else if (ed.sel.pointId) ed.select({ pointId: null, meshIndex: null })
         return
       }
       if (e.key === 'Enter' && overlayApi.current?.drawing) {
@@ -256,13 +262,14 @@ export function Stage() {
         ed.editing.setValues(entries, 'final')
         return
       }
-      if (e.key === 'Tab' && ed.sel.surfaceId) {
+      // [ and ] step through the selected surface's points (tab switches Map and Content)
+      if ((e.key === ']' || e.key === '[') && ed.sel.surfaceId) {
         const srf = scene.objects.flatMap((o) => o.surfaces).find((x) => x.id === ed.sel.surfaceId)
         if (!srf || !srf.pointIds.length) return
         e.preventDefault()
         const i = ed.sel.pointId ? srf.pointIds.indexOf(ed.sel.pointId) : -1
         const n = srf.pointIds.length
-        ed.select({ pointId: srf.pointIds[(i + (e.shiftKey ? -1 : 1) + n) % n], meshIndex: null, focus: 'surface' })
+        ed.select({ pointId: srf.pointIds[(i + (e.key === '[' ? -1 : 1) + n) % n], meshIndex: null, focus: 'surface' })
       }
     }
     window.addEventListener('keydown', key)
@@ -275,8 +282,8 @@ export function Stage() {
   }, [])
 
   const draft = ed.mode === 'backstage' ? ed.editing.draft : null
-  const hasSurfaces = !!ed.scene?.objects.some((o) => o.surfaces.length > 0)
   const pxPerScreen = 1 / k
+  void drawingPts
 
   const frame = (kind: 'input' | 'output', slot: number) => {
     const cx = slot * (slotW + 8) + slotW / 2 + pan.x
@@ -306,31 +313,33 @@ export function Stage() {
   return (
     <section className={s.stage} aria-label="stage">
       <div className={s.sbar}>
+        <Tools items={TOOL_ITEMS} value={ed.tool} onChange={ed.setTool} />
         <Segmented<StageView>
           ariaLabel="view"
-          width={230}
+          size="sm"
+          width={150}
           value={ed.view}
           onChange={ed.setView}
           options={[
             { value: 'input', label: 'input' },
             { value: 'output', label: 'output' },
-            { value: 'split', label: 'split', icon: 'split' },
+            { value: 'split', label: 'split' },
           ]}
         />
-        <Pill icon="image" on={ed.reference} onClick={() => ed.setReference(!ed.reference)} aria-pressed={ed.reference}>
+        <Pill size="sm" icon="image" on={ed.reference} onClick={() => ed.setReference(!ed.reference)} aria-pressed={ed.reference} title="show the reference photo behind the stage">
           reference
         </Pill>
-        <Pill icon="magnet" on={ed.magnet} onClick={() => ed.setMagnet(!ed.magnet)} aria-pressed={ed.magnet}>
+        <Pill size="sm" icon="magnet" on={ed.magnet} onClick={() => ed.setMagnet(!ed.magnet)} aria-pressed={ed.magnet} title="snap corners to nearby points (hold ⌘ to skip)">
           magnet
         </Pill>
-        <Pill icon="testGrid" on={ed.testGrid} onClick={() => ed.setTestGrid(!ed.testGrid)} aria-pressed={ed.testGrid} title="show the grid test pattern here and on the projector">
-          test grid
+        <Pill size="sm" icon="testGrid" on={ed.testGrid} onClick={() => ed.setTestGrid(!ed.testGrid)} aria-pressed={ed.testGrid} title="show the grid test pattern here and on the projector for 60 s">
+          grid
         </Pill>
+        <SoloControl />
         <span className={s.sp} />
-        <Pill ghost onClick={fitView}>
-          fit
+        <Pill size="sm" ghost onClick={fitView} title="fit the frame (zoom with ⌘ + scroll)">
+          {Math.round(k * 100)}%
         </Pill>
-        <Readout prefix="zoom">{Math.round(k * 100)}%</Readout>
       </div>
       <div ref={areaRef} className={s.area} onWheel={onWheel} onPointerDown={onAreaDown} onPointerMove={onAreaMove} onPointerUp={onAreaUp} onPointerCancel={onAreaUp}>
         {ed.view === 'input' && frame('input', 0)}
@@ -362,21 +371,20 @@ export function Stage() {
           </div>
         )}
         <WallChip />
-        {ed.coach && (ed.tool === 'select' ? !hasSurfaces : !drawingPts) && <Coach empty={!hasSurfaces} />}
         {glError && <div className={s.glError}>The stage can't draw the output here: {glError}</div>}
         <div className={s.hints}>
           <HintBar
             hints={[
               { keys: '←↑↓→', text: '1 px' },
               { keys: '⇧', text: '10 px' },
-              { keys: 'tab', text: 'next point' },
-              { keys: 'alt', text: 'mesh point' },
+              { keys: '[ ]', text: 'points' },
+              { keys: 'F', text: 'edit face' },
+              { keys: 'S', text: 'solo' },
               { keys: '⌘', text: ed.magnet ? 'no snap' : 'snap' },
             ]}
           />
         </div>
       </div>
-      <FlatView />
     </section>
   )
 }
@@ -386,8 +394,7 @@ function WallChip() {
   const ed = useEditor()
   const scene = ed.scene
   if (!scene) return null
-  const selObj = ed.sel.objectId ?? (ed.sel.surfaceId ? scene.objects.find((o) => o.surfaces.some((x) => x.id === ed.sel.surfaceId))?.id : null)
-  const flatable = ed.sel.surfaceId ? scene.objects.flatMap((o) => o.surfaces).find((x) => x.id === ed.sel.surfaceId && x.kind !== 'line' && x.kind !== 'mask') : null
+  const editable = ed.sel.surfaceId ? scene.objects.flatMap((o) => o.surfaces).find((x) => x.id === ed.sel.surfaceId && x.kind !== 'line' && x.kind !== 'mask') : null
   return (
     <div className={s.wallChip} data-testid="wall-chip">
       {scene.mode === 'objects' ? (
@@ -403,17 +410,50 @@ function WallChip() {
         </>
       )}
       <UnderlayMenu />
-      {flatable && (
-        <Pill size="sm" ghost icon="quad" onClick={() => ed.openFlat(flatable.id)} title="open the selected surface flat to see and draw on it (or double-click it)" data-testid="open-flat">
-          flat
-        </Pill>
-      )}
-      {selObj && (
-        <Pill size="sm" ghost icon="layers" onClick={() => ed.openUnfold(selObj)} title="show every face of the object flat, side by side" data-testid="open-unfold">
-          unfold
+      {editable && (
+        <Pill size="sm" on icon="edit" onClick={() => ed.editFace(editable.id)} title="edit what this face shows, flat at its real proportions (F, or double-click it)" data-testid="stage-edit-face">
+          edit face
         </Pill>
       )}
     </div>
+  )
+}
+
+const FILLS: Array<{ value: SoloFill; label: string; meta: string }> = [
+  { value: 'grid', label: 'numbered grid', meta: 'check the warp' },
+  { value: 'white', label: 'white', meta: 'see the edges' },
+  { value: 'content', label: 'its content', meta: 'as on air' },
+]
+
+/** Solo: S shows only the selection here (the rest dims to 15 %); on the wall it lasts 60 s and Esc ends it. */
+function SoloControl() {
+  const ed = useEditor()
+  const wall = !!ed.show?.solo?.surfaceIds?.length
+  return (
+    <Menu
+      width={270}
+      trigger={({ toggle }) => (
+        <Pill size="sm" icon="solo" on={!!ed.solo || wall} aria-pressed={!!ed.solo} onClick={toggle} title="solo the selection: here (S) or on the wall too (shift+S)" data-testid="solo">
+          {wall ? 'solo · wall' : ed.solo ? 'solo' : 'solo'}
+        </Pill>
+      )}
+    >
+      {(close) => (
+        <div className={s.underlay}>
+          <Row>
+            <Pill size="sm" on={!!ed.solo} onClick={() => { ed.solo ? ed.clearSolo() : ed.soloSelection(false); close() }} data-testid="solo-here">
+              {ed.solo ? 'end solo' : 'solo here (S)'}
+            </Pill>
+            <Pill size="sm" onClick={() => { ed.soloSelection(true); close() }} data-testid="solo-wall">
+              solo on the wall (⇧S)
+            </Pill>
+          </Row>
+          <Cap>the wall shows</Cap>
+          <Segmented<SoloFill> ariaLabel="wall solo fill" size="sm" width="100%" value={ed.wallSoloFill} onChange={ed.setWallSoloFill} options={FILLS.map((f) => ({ value: f.value, label: f.label, title: f.meta }))} />
+          <span className={s.menuNote}>the wall solo turns itself off after 60 s; esc ends it now.</span>
+        </div>
+      )}
+    </Menu>
   )
 }
 

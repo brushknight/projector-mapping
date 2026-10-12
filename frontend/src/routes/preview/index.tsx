@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useCatalog } from '../../entities/catalog'
 import { effectApi, type EffectDef } from '../../entities/effect'
 import { activeTestPattern, sceneSize } from '../../entities/setup'
-import { ambientClock, playheadNow, useBlackout, useLiveDocs } from '../../entities/show'
+import { ambientClock, playheadNow, useBlackout, useLiveDocs, activeSolo } from '../../entities/show'
 import { Renderer } from '../../render'
 import { setAuthToken } from '../../shared/lib/http'
 import { useOwnHub } from '../../shared/lib/useHub'
@@ -68,6 +68,7 @@ export function PreviewPage() {
       hideMapping: layerMode,
       // the hero shows exactly what /out shows, test pattern included (expired patterns draw nothing)
       testPattern: layerMode ? 'off' : activeTestPattern(setup, hub.serverNow()),
+      solo: layerMode ? null : activeSolo(show, hub.serverNow()),
     })
     if (!announced.current) {
       announced.current = true

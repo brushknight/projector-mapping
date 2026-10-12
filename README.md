@@ -21,8 +21,9 @@ One mode is on air at a time, and each keeps its own settings when you switch aw
 - **Blurred scenery.** A photo (built in, or one from your phone) as a soft, out-of-focus backdrop with warmth,
   brightness and a slow drift.
 - **Object mapping.** Draw faces over real objects in the editor (quads, triangles, polygons, circles, lines, mesh
-  warps and masks), weld shared corners, draw on a face in its flat view, and put effects on each face. Animate
-  them on a timeline with cues and step through the cues with GO on the phone.
+  warps and masks), weld shared corners, and put pictures, drawings and effects on each face in the unfolded content
+  view, where content runs on across shared edges. Preview in the editor without touching the wall, animate it on a
+  timeline with cues and step through the cues with GO on the phone.
 - **Auto map.** Put the iPhone on a stand next to the projector. The projector flashes Gray-code stripes, the phone
   photographs each one, and the server builds a dense camera to projector map and proposes surfaces to map.
 - **Agents.** Claude Code and Codex connect over MCP. They read the scene, look at renders and camera frames, write

@@ -6,6 +6,33 @@ version section, and the release workflow uses that section as the GitHub releas
 
 ## [Unreleased]
 
+### Editor: two spaces, one screen
+
+- **Map | Content.** Tab switches between the stage (place the faces) and the content space: the selected object
+  unfolded like a dieline, its faces edge to edge at real proportions with details inside them, rendering live. Double
+  click a face, press F or **edit face** to work on it alone; [ and ] step through faces. A live picture of the warped
+  stage sits in a corner.
+- **Preview without touching the wall.** The editor has its own playhead: Space, L (loop), J/K, Home and a scrub bar
+  under the stage in both spaces. The wall only follows it with **wall follows** on (in backstage it previews your
+  draft). The wall's own controls (mode, its playhead, go, on air) sit apart in the top bar.
+- **Pictures, videos and sweeps on faces.** Drop, paste or pick an image or a video onto a face, or across the whole
+  object so it runs on across shared edges. Move, scale and turn it with handles; set fit, crop, opacity, blend and a
+  reveal wipe. A gradient **sweep** runs a band of light across every face; timeline layer tracks animate reveal and
+  sweep.
+- **Templates.** Save the unfold as a PNG or SVG at its true size (or each face in a zip), paint on it, and import the
+  artwork back onto the faces.
+- **Solo.** S shows only the selection on the stage; Shift+S also on the wall for 60 s as a numbered grid through each
+  face's warp (or white, or its content). Esc ends it.
+- **Simpler layout.** A 4-step rail (reference, faces, content, play) replaces the tips panel; **set up** holds the
+  projector, reference photo, auto map and devices; the timeline folds into the transport bar; the tools moved onto
+  the stage bar. Line is now E and mask M; [ and ] step through points.
+
+### Protocol (§12)
+
+- `surface.layers` and `object.layers` (content layers: media and gradient), `object.atlas`, track target `layer`
+  with `reveal` and `sweep` clips, `show.solo` with `cmd show.solo` (expires like test patterns), and `cmd
+  show.preview`. The server validates them; older scenes load unchanged; the iPhone app decodes them.
+
 ## [0.1.0] - 2026-10-11
 
 The first release: one Go server with the web app embedded, the iPhone app built from source, and MCP for Claude

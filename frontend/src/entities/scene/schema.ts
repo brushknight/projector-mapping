@@ -20,15 +20,23 @@ export const strokeShape = obj({
 export const pointShape = obj({ id: str, x: num, y: num })
 export const meshShape = obj({ cols: int, rows: int, bezier: bool, offsets: arr(tuple(num, num)) })
 export const effectInstanceShape = obj({ id: str, effect: str, enabled: bool, params: record(any) })
+const stopShape = obj({ color: str, pos: num })
+export const contentLayerShape = obj({
+  id: str, kind: lit('media', 'gradient'), name: str, visible: bool, opacity: num, blend: lit('normal', 'multiply', 'screen', 'add'),
+  x: num, y: num, scale: num, rotation: num, reveal: num, revealAngle: num,
+  src: optional(str), media: optional(lit('image', 'video')), fit: optional(lit('fill', 'fit', 'stretch')), crop: optional(obj({ x: num, y: num, w: num, h: num })),
+  stops: optional(arr(stopShape)), angle: optional(num), offset: optional(num), repeat: optional(bool),
+})
+export const atlasShape = obj({ width: num, height: num, faces: record(obj({ x: num, y: num, w: num, h: num, rotation: lit(0, 90, 180, 270) })) })
 export const surfaceShape = obj({
   id: str, name: str, kind: lit('quad', 'tri', 'poly', 'circle', 'line', 'mask'), role: lit('face', 'edge', 'detail'),
   pointIds: arr(str), parentId: nullable(str), visible: bool, mesh: nullable(meshShape), effects: arr(effectInstanceShape),
-  opacity: num, softEdge: num,
+  opacity: num, softEdge: num, layers: optional(arr(contentLayerShape)),
 })
-export const objectShape = obj({ id: str, name: str, tags: arr(str), visible: bool, surfaces: arr(surfaceShape) })
+export const objectShape = obj({ id: str, name: str, tags: arr(str), visible: bool, surfaces: arr(surfaceShape), atlas: optional(atlasShape), layers: optional(arr(contentLayerShape)) })
 export const trackShape = obj({
   id: str, name: str,
-  target: oneOf(obj({ kind: lit('surface', 'object'), id: str }), obj({ kind: lit('all'), id: lit(null) })),
+  target: oneOf(obj({ kind: lit('surface', 'object', 'layer'), id: str }), obj({ kind: lit('all'), id: lit(null) })),
 })
 export const clipShape = obj({ id: str, trackId: str, effect: str, start: num, end: num, fadeIn: num, fadeOut: num, params: record(any) })
 export const cueShape = obj({ id: str, at: num, label: str, autoFollow: bool })

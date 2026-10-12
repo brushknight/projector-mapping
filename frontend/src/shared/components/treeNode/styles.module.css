@@ -49,3 +49,12 @@
 .node.dimn {
   color: var(--dim-3);
 }
+.act {
+  display: inline-flex;
+  margin-left: 4px;
+  opacity: 0.55;
+}
+.node:hover .act,
+.sel .act {
+  opacity: 1;
+}

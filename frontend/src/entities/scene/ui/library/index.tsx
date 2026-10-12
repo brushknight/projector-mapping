@@ -8,7 +8,7 @@ import { effectIcon, schemaDefaults, type EffectDef } from '../../../effect'
 import { presetApi, type Preset } from '../../../preset'
 import { useEditor } from '../../editor/context'
 import { stackLayers } from '../../lib'
-import { addLayer, addSurfaceEffect, applyPresetOps, layerPath, pickSingle, setMode } from '../../ops'
+import { addContentLayer, addLayer, addSurfaceEffect, applyPresetOps, layerPath, mediaLayer, pickSingle, setMode } from '../../ops'
 import { BACKDROP_MODES, type BackdropMode, type GradientStop, type Layer, type LayerKind } from '../../types'
 import s from './styles.module.css'
 
@@ -108,23 +108,48 @@ function MediaTab() {
   const pick = usePick()
   const file = useRef<HTMLInputElement>(null)
   const cat = ed.catalog
+  // in content (or with a face selected) pictures go onto faces as media layers; else they are scenery backdrops
+  const target = (): { kind: 'surface' | 'object'; id: string } | null => {
+    const sid = ed.faceZoom ?? (ed.sel.surfaceId && ed.sel.focus !== 'object' ? ed.sel.surfaceId : null)
+    if (sid) return { kind: 'surface', id: sid }
+    if (ed.space === 'content' && ed.contentObjectId) return { kind: 'object', id: ed.contentObjectId }
+    return null
+  }
+  const onFaces = ed.space === 'content' || !!ed.sel.surfaceId
+  const place = (src: string, name: string) => {
+    const t = target()
+    if (!t) return false
+    const layer = mediaLayer(newId('cl'), src, name)
+    void ed.editing.edit((sc) => addContentLayer(sc, t, layer))
+    ed.select({ contentLayerId: layer.id, focus: 'content' })
+    return true
+  }
   return (
     <>
       <div className={s.grid}>
-        <LibTile icon="upload" label="my photo" title="upload a photo and put it on air (scenery)" onClick={() => file.current?.click()} />
+        <LibTile icon="upload" label={onFaces ? 'my picture' : 'my photo'} title={onFaces ? 'upload a picture or video onto the selected face (or across the object)' : 'upload a photo and put it on air (scenery)'} onClick={() => file.current?.click()} />
         {cat?.scenery.map((sc) => (
-          <LibTile key={sc.id} label={sc.name} swatch={`center / cover no-repeat url("${sceneryUrl(sc)}")`} title={`${sc.name} · ${sc.credit}: click to put it on air`} onClick={() => pick('scenery', 'photo', sc.id)} />
+          <LibTile
+            key={sc.id}
+            label={sc.name}
+            swatch={`center / cover no-repeat url("${sceneryUrl(sc)}")`}
+            dragData={`media:${sc.id}|${sc.name}`}
+            title={onFaces ? `${sc.name}: click to put it on the selected face, or drag it onto a face` : `${sc.name} · ${sc.credit}: click to put it on air, or drag it onto a face`}
+            onClick={() => place(sc.id, sc.name) || pick('scenery', 'photo', sc.id)}
+          />
         ))}
       </div>
       <input
         ref={file}
         type="file"
-        accept="image/*"
+        accept="image/*,video/*"
         hidden
         onChange={async (e) => {
           const f = e.target.files?.[0]
           e.target.value = ''
           if (!f) return
+          const t = target()
+          if (t) return void ed.addMedia([f], t)
           try {
             const a = await assetApi.upload(f, 'photo', f.name)
             pick('scenery', 'photo', `asset:${a.sha}`, { name: f.name.replace(/\.[^.]+$/, '').slice(0, 40) })

@@ -37,7 +37,7 @@ export function SurfaceTree({ header = true }: { header?: boolean }) {
             icon="plus"
             className={s.face}
             onClick={() => {
-              ed.setCoach(true)
+              if (ed.space !== 'map') ed.setSpace('map')
               ed.setTool('quad')
             }}
             title="draw a face: click its 4 corners on the stage (Q)"
@@ -88,12 +88,20 @@ export function SurfaceTree({ header = true }: { header?: boolean }) {
                     depth={1}
                     icon={KIND_ICON[srf.kind]}
                     label={srf.name}
-                    meta={surfaceMeta(srf)}
+                    meta={srf.kind !== 'line' && srf.kind !== 'mask' ? undefined : surfaceMeta(srf)}
                     selected={ed.sel.surfaceId === srf.id && ed.sel.focus !== 'object'}
                     dim={dim}
                     visible={srf.visible}
                     onToggleVisible={() => ed.editing.edit((sc) => setSurfaceField(sc, srf.id, 'visible', !srf.visible))}
                     onClick={() => ed.select({ objectId: obj.id, surfaceId: srf.id, pointId: null, meshIndex: null, focus: 'surface' })}
+                    onDoubleClick={() => srf.kind !== 'line' && srf.kind !== 'mask' && ed.editFace(srf.id)}
+                    action={
+                      srf.kind !== 'line' && srf.kind !== 'mask' ? (
+                        <Pill size="sm" on={ed.sel.surfaceId === srf.id} icon="edit" iconSize={12} className={s.edit} onClick={() => ed.editFace(srf.id)} title={`edit what ${srf.name} shows, flat (F)`} data-testid={`edit-face-${srf.id}`}>
+                          edit
+                        </Pill>
+                      ) : undefined
+                    }
                     draggable
                     onDragStart={(e) => e.dataTransfer.setData('text/plain', `surface:${srf.id}`)}
                     testId={`tree-surface-${srf.id}`}

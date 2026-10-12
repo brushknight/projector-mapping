@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import type { Scene } from '../entities/scene/types'
 import type { Catalog } from '../entities/catalog/types'
 import { resolveParams, schemaDefaults } from '../entities/effect/params'
-import { clipAlpha, evaluateTimeline } from './timeline'
+import { clipAlpha, evaluateLayerClips, evaluateTimeline } from './timeline'
 import { lightFx } from './fx'
 import { BUILTINS } from './effects/builtins'
 import { BUILTIN_SCHEMAS } from './effects/builtinSchemas'
@@ -92,5 +92,30 @@ describe('light fx', () => {
     const colours = new Set<string>()
     for (let t = 0; t < 3; t += 0.05) colours.add(lightFx('police', t, 0.35).rgb.join(','))
     expect(colours.size).toBe(2)
+  })
+})
+
+describe('layer clips', () => {
+  const base = {
+    id: 's', setupId: 'x', name: 'n', version: 1, mode: 'objects', backdrop: { static: { layers: [] }, live: { layers: [] }, color: { layers: [] }, scenery: { layers: [] } }, points: [], objects: [],
+    timeline: {
+      duration: 20,
+      tracks: [{ id: 'tl', name: 'sweep', target: { kind: 'layer', id: 'cl_1' } }],
+      clips: [
+        { id: 'c1', trackId: 'tl', effect: 'reveal', start: 2, end: 4, fadeIn: 0, fadeOut: 0, params: {} },
+        { id: 'c2', trackId: 'tl', effect: 'sweep', start: 0, end: 10, fadeIn: 0, fadeOut: 0, params: { from: 0, to: 2 } },
+      ],
+      cues: [],
+    },
+  } as unknown as Scene
+  it('holds from before, interpolates during, holds to after', () => {
+    expect(evaluateLayerClips(base, 1).get('cl_1')?.reveal).toBe(0)
+    expect(evaluateLayerClips(base, 3).get('cl_1')?.reveal).toBeCloseTo(0.5)
+    expect(evaluateLayerClips(base, 9).get('cl_1')?.reveal).toBe(1)
+    expect(evaluateLayerClips(base, 5).get('cl_1')?.sweep).toBeCloseTo(1)
+    expect(evaluateLayerClips(base, 15).get('cl_1')?.sweep).toBe(2)
+  })
+  it('layer tracks put no clips on surfaces', () => {
+    expect(evaluateTimeline(base, 3).size).toBe(0)
   })
 })

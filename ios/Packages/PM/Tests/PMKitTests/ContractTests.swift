@@ -65,6 +65,20 @@ import PMTestSupport
         // playhead = offset + (serverNow − startedAt) / 1e9
         let t = show.transport.playhead(serverNowMs: 1_791_700_002_123.456789)
         #expect(abs(t - 8.4) < 0.001)
+        #expect(show.solo == Solo(surfaceIds: ["srf_top", "srf_left"], fill: "grid", until: 1_791_700_060_123_456_789))
+    }
+
+    @Test func contentLayersDecodeAndSurviveARoundTrip() throws {
+        let scene = try JSONDecoder().decode(Scene.self, from: Fixtures.data("scene"))
+        let cube = scene.objects[0]
+        #expect(cube.atlas?["width"]?.double == 618)
+        #expect(cube.layers?.array?.first?["id"] == "cl_sweep")
+        #expect(cube.surfaces.first { $0.id == "srf_right" }?.layers?.array?.first?["src"] == "flowers")
+        #expect(scene.objects[1].layers == nil && scene.objects[1].atlas == nil)
+        #expect(scene.timeline.tracks.last?.target.kind == "layer")
+        #expect(scene.timeline.tracks.last?.target.id == "cl_sweep")
+        let again = try JSONDecoder().decode(MapObject.self, from: JSONEncoder().encode(cube))
+        #expect(again == cube)
     }
 
     @Test func setupTestPatternExpiry() throws {

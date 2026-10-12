@@ -11,21 +11,98 @@
   font-weight: 700;
   font-size: var(--fs-wordmark);
   letter-spacing: -0.4px;
-  margin-right: 6px;
+  margin-right: 4px;
   white-space: nowrap;
 }
 .dim {
   color: var(--dim);
 }
 .ws {
-  margin-left: 6px;
+  margin-left: 4px;
 }
-.mid {
+.sp {
   flex: 1;
-  display: flex;
-  justify-content: center;
-  min-width: 0;
+  min-width: 8px;
 }
 .warn {
   box-shadow: inset 0 0 0 1px var(--dim);
+}
+.preview {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 6px;
+  padding: 3px 4px 3px 3px;
+  border-radius: 999px;
+  background: var(--panel);
+}
+.tc {
+  font-family: var(--num);
+  font-size: var(--fs);
+  min-width: 70px;
+  font-variant-numeric: tabular-nums;
+}
+.wall {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 3px 3px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--control-line);
+  white-space: nowrap;
+}
+.wallCap {
+  font-size: var(--fs-xxs);
+  letter-spacing: var(--cap-spacing);
+  text-transform: uppercase;
+  color: var(--dim);
+  margin-right: 2px;
+}
+.wallTc {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--num);
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+  min-width: 68px;
+  font-variant-numeric: tabular-nums;
+}
+.playDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--red);
+}
+.setup {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 6px 4px 4px;
+  max-height: 78vh;
+  overflow: auto;
+}
+.setupRow {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.devices {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: var(--fs-sm);
+}
+.dev,
+.devOff {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.devOff {
+  color: var(--dim);
+}
+.dev .dim,
+.devOff .dim {
+  margin-left: auto;
 }

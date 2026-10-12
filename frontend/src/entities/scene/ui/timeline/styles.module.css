@@ -230,3 +230,45 @@
   font-size: var(--fs-sm);
   padding: 10px 0;
 }
+.tl[data-open='false'] {
+  grid-template-rows: 52px;
+}
+.tl[data-open='false'] .tlh {
+  height: 52px;
+}
+.scrub {
+  flex: 1;
+  min-width: 120px;
+  height: 28px;
+  position: relative;
+  cursor: col-resize;
+  margin: 0 8px;
+  touch-action: none;
+}
+.scrubTrack {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 13px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--control-3);
+}
+.scrubCue {
+  position: absolute;
+  top: 9px;
+  width: 2px;
+  height: 10px;
+  margin-left: -1px;
+  background: var(--dim-3);
+  border-radius: 1px;
+}
+.scrubHead {
+  position: absolute;
+  top: 6px;
+  width: 4px;
+  height: 16px;
+  margin-left: -2px;
+  border-radius: 2px;
+  background: var(--red);
+}

@@ -9,6 +9,9 @@ test('the editor loads the fixture scene from the server', async ({ page }) => {
   await expect(page.getByTestId('tree-object-obj_cube')).toContainText('zimacube')
   await expect(page.getByTestId('tree-surface-srf_top')).toBeVisible()
   await expect(page.getByTestId('setup-chip')).toContainText('1920×1080')
+  // the timeline is folded to its transport bar; opening it shows the clips
+  await expect(page.getByTestId('clip-clp_grid')).toHaveCount(0)
+  await page.getByTestId('timeline-toggle').click()
   await expect(page.getByTestId('clip-clp_grid')).toContainText('grid build')
   await expect(page.locator('[data-point="p_r"]')).toBeVisible()
 })

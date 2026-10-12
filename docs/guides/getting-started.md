@@ -62,8 +62,10 @@ projmap open
 This opens `http://127.0.0.1:7400/editor` in your browser. A browser on the same Mac needs no login. The command
 also prints a one-time link (valid 5 minutes) for an editor on another computer on the network.
 
-The editor has three workspaces: **map** (draw and adjust surfaces), **animate** (effects and the timeline) and
-**auto map** (camera calibration and agents). The editor is made for a desktop browser, 1100 px wide or more.
+The editor has two spaces on one screen: **map** (draw and adjust the faces on the stage) and **content** (the faces
+unfolded flat, to put pictures, drawings and effects on them); **Tab** switches. The timeline folds under the stage,
+and **set up** in the top bar holds the projector, the reference photo and **auto map** (finding surfaces with the
+phone camera). The rail at the top left walks through reference, faces, content and play. The editor is made for a desktop browser, 1100 px wide or more.
 
 ## 4. Put the output on the projector
 
@@ -112,6 +114,6 @@ let the phone camera find the surfaces for you, see [auto-map.md](auto-map.md).
 ## Next
 
 - [projector-setup.md](projector-setup.md): HDMI, kiosk, a mini PC by the projector, portrait mounts, test patterns
-- [mapping.md](mapping.md): faces, corners, mesh warp, the flat view, effects, timeline and cues
+- [mapping.md](mapping.md): faces, corners, mesh warp, solo, the content space, templates, effects, timeline and cues
 - [agents-mcp.md](agents-mcp.md): connect Claude Code or Codex
 - [troubleshooting.md](troubleshooting.md)

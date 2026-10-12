@@ -53,6 +53,11 @@ export interface RenderInput {
    * expired `testPatternUntil` draws nothing (entities/setup activeTestPattern).
    */
   testPattern?: Setup['testPattern'] | null
+  /**
+   * draws only these surfaces (protocol §12 show.solo); `others` is how bright everything else stays (0 = hidden,
+   * the editor dims to 0.15). The backdrop is skipped while a solo is on.
+   */
+  solo?: { surfaceIds: string[]; fill: 'content' | 'white' | 'grid'; others?: number } | null
 }
 
 export interface RendererOptions {

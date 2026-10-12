@@ -40,9 +40,9 @@ The server refuses to start a calibration when no output or no phone with a came
 
 ## Run it from the editor
 
-The **auto map** workspace shows the phone's status and camera feed beside the output, with the outlines on top.
+**auto map** (under **set up** in the editor's top bar) shows the phone's status and camera feed beside the output, with the outlines on top.
 **run** starts a calibration (or **recalibrate**); the panel shows the progress, the quality and the candidates. Add a
-candidate as a surface with one click, then adjust it in the map workspace ([mapping.md](mapping.md)). The agent
+candidate as a surface with one click, then adjust it in the map space ([mapping.md](mapping.md)). The agent
 panel on the right takes a prompt for Claude or Codex.
 
 Other entries in the editor:
@@ -61,7 +61,7 @@ projmap serve          # in one terminal (or the launchd service)
 projmap sim            # in another
 ```
 
-Then start a calibration from the editor's auto map workspace. Against the sim it takes about 6 seconds and finds the
+Then start a calibration from the editor's auto map (set up → auto map with the iphone). Against the sim it takes about 6 seconds and finds the
 wall and three faces of the cube. Use `--no-output` to keep a real `/out` as the output and only fake the camera.
 
 ## After calibrating

@@ -4,7 +4,7 @@ import { pointer } from '../../../../shared/lib/jsonPatch'
 import { schemaDefaults } from '../../../effect'
 import { useEditor, type Tool } from '../../editor/context'
 import { clockwise, dist, meshPoints, orderQuad, outlineOf, pointInPolygon, resampleMesh, segDist, type Vec } from '../../geometry'
-import { addSurface, addSurfaceEffect, flatMesh, locateSurface, mergePoint, surfacePath } from '../../ops'
+import { addContentLayer, addSurface, addSurfaceEffect, flatMesh, locateSurface, mediaLayer, mergePoint, surfacePath } from '../../ops'
 import type { Point, Scene, Surface, SurfaceKind } from '../../types'
 import s from './styles.module.css'
 
@@ -319,15 +319,36 @@ export function StageOverlay({
     if (ed.tool === 'select' && scene) {
       // double-click a surface: open it flat to see and draw on it
       const hit = hitSurface(scene, pts, toScene(e), k)
-      if (hit && hit.surface.kind !== 'line' && hit.surface.kind !== 'mask') ed.openFlat(hit.surface.id)
+      if (hit && hit.surface.kind !== 'line' && hit.surface.kind !== 'mask') ed.editFace(hit.surface.id)
       return
     }
     if (draw.length >= MIN[ed.tool] && NEED[ed.tool] === 0) finish(draw)
   }
 
   const onDrop = (e: DragEvent) => {
+    if (!scene) return
+    const files = [...e.dataTransfer.files]
     const data = e.dataTransfer.getData('text/plain')
-    if (!data.startsWith('effect:') || !scene) return
+    if (files.length || data.startsWith('media:')) {
+      // a picture or video dropped on a face becomes a media layer of that face (protocol §12)
+      e.preventDefault()
+      const hit = hitSurface(scene, pts, toScene(e), k)
+      if (!hit || hit.surface.kind === 'line' || hit.surface.kind === 'mask') {
+        ed.toast('Drop the picture onto a face.')
+        return
+      }
+      ed.select({ surfaceId: hit.surface.id, objectId: hit.objectId, focus: 'surface' })
+      if (files.length) void ed.addMedia(files, { kind: 'surface', id: hit.surface.id })
+      else {
+        const src = data.slice(6)
+        const name = data.split('|')[1] ?? 'picture'
+        const layer = mediaLayer(newId('cl'), src.split('|')[0], name)
+        void ed.editing.edit((sc) => addContentLayer(sc, { kind: 'surface', id: hit.surface.id }, layer))
+        ed.select({ contentLayerId: layer.id, focus: 'content' })
+      }
+      return
+    }
+    if (!data.startsWith('effect:')) return
     e.preventDefault()
     const p = toScene(e)
     const hit = hitSurface(scene, pts, p, k)
@@ -365,7 +386,7 @@ export function StageOverlay({
       onPointerCancel={onUp}
       onPointerLeave={() => setCursor(null)}
       onDoubleClick={onDouble}
-      onDragOver={(e) => e.dataTransfer.types.includes('text/plain') && e.preventDefault()}
+      onDragOver={(e) => (e.dataTransfer.types.includes('text/plain') || e.dataTransfer.types.includes('Files')) && e.preventDefault()}
       onDrop={onDrop}
       data-testid="stage-overlay"
     >

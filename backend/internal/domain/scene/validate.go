@@ -23,8 +23,17 @@ var (
 	fxKinds      = set("none", "candle", "fire", "lightning", "paparazzi", "tv", "breathe", "strobe", "police")
 	surfaceKinds = set("quad", "tri", "poly", "circle", "line", "mask")
 	roles        = set("face", "edge", "detail")
-	targetKinds  = set("surface", "object", "all")
+	targetKinds  = set("surface", "object", "all", "layer")
+	contentKinds = set(ContentMedia, ContentGradient)
+	mediaKinds   = set("image", "video")
+	fits         = set("fill", "fit", "stretch")
+	atlasTurns   = map[int]bool{0: true, 90: true, 180: true, 270: true}
+	// layerClipEffects are the effects of clips on a layer track; their params are only {from, to}.
+	layerClipEffects = set("reveal", "sweep")
 )
+
+// MaxAtlasSize is the largest atlas width or height in atlas pixels.
+const MaxAtlasSize = 16384
 
 func set(v ...string) map[string]bool {
 	m := map[string]bool{}
@@ -144,6 +153,26 @@ func (s *Scene) Validate(refs Refs) error {
 			surfaces[sf.ID] = sf
 		}
 	}
+	contentLayers := map[string]bool{}
+	for oi := range s.Objects {
+		o := &s.Objects[oi]
+		for i := range o.Layers {
+			uniq("content layer", o.Layers[i].ID)
+			contentLayers[o.Layers[i].ID] = true
+			c.contentLayer("object "+o.ID+" layer "+o.Layers[i].ID, &o.Layers[i], refs)
+		}
+		for si := range o.Surfaces {
+			sf := &o.Surfaces[si]
+			for i := range sf.Layers {
+				uniq("content layer", sf.Layers[i].ID)
+				contentLayers[sf.Layers[i].ID] = true
+				c.contentLayer("surface "+sf.ID+" layer "+sf.Layers[i].ID, &sf.Layers[i], refs)
+			}
+		}
+		if o.Atlas != nil {
+			c.atlas("object "+o.ID+" atlas", o)
+		}
+	}
 	for oi := range s.Objects {
 		for si := range s.Objects[oi].Surfaces {
 			sf := &s.Objects[oi].Surfaces[si]
@@ -214,12 +243,13 @@ func (s *Scene) Validate(refs Refs) error {
 	t := &s.Timeline
 	c.rng("timeline.duration", t.Duration, 0.1, 24*3600)
 	tracks := map[string]bool{}
+	layerTracks := map[string]bool{}
 	for _, tr := range t.Tracks {
 		uniq("track", tr.ID)
 		tracks[tr.ID] = true
 		w := "track " + tr.ID
 		if !targetKinds[tr.Target.Kind] {
-			c.fail("%s: target kind %q is not one of surface, object, all", w, tr.Target.Kind)
+			c.fail("%s: target kind %q is not one of surface, object, all, layer", w, tr.Target.Kind)
 			continue
 		}
 		switch tr.Target.Kind {
@@ -230,6 +260,11 @@ func (s *Scene) Validate(refs Refs) error {
 		case "object":
 			if tr.Target.ID == nil || !objects[*tr.Target.ID] {
 				c.fail("%s: target object does not exist", w)
+			}
+		case "layer":
+			layerTracks[tr.ID] = true
+			if tr.Target.ID == nil || !contentLayers[*tr.Target.ID] {
+				c.fail("%s: target content layer does not exist", w)
 			}
 		}
 	}
@@ -244,6 +279,10 @@ func (s *Scene) Validate(refs Refs) error {
 		}
 		if cl.FadeIn < 0 || cl.FadeOut < 0 || cl.FadeIn+cl.FadeOut > cl.End-cl.Start+1e-9 {
 			c.fail("%s: fades must fit inside the clip", w)
+		}
+		if layerTracks[cl.TrackID] {
+			c.layerClip(w, cl)
+			continue
 		}
 		schema, ok := refs.EffectSchema(cl.Effect)
 		if !ok {
@@ -262,4 +301,118 @@ func (s *Scene) Validate(refs Refs) error {
 		return &ValidationError{Problems: c.errs}
 	}
 	return nil
+}
+
+// contentLayer checks one surface or object content layer (protocol §12).
+func (c *checker) contentLayer(w string, l *ContentLayer, refs Refs) {
+	if !contentKinds[l.Kind] {
+		c.fail("%s: kind %q is not one of media, gradient", w, l.Kind)
+		return
+	}
+	if !blends[l.Blend] {
+		c.fail("%s: blend %q is not one of normal, multiply, screen, add", w, l.Blend)
+	}
+	c.rng(w+" opacity", l.Opacity, 0, 1)
+	c.rng(w+" scale", l.Scale, 0.01, 100)
+	c.rng(w+" x", l.X, -10, 10)
+	c.rng(w+" y", l.Y, -10, 10)
+	c.rng(w+" rotation", l.Rotation, -36000, 36000)
+	c.rng(w+" reveal", l.Reveal, 0, 1)
+	c.rng(w+" revealAngle", l.RevealAngle, -36000, 36000)
+	switch l.Kind {
+	case ContentMedia:
+		switch {
+		case l.Src == "":
+			c.fail("%s: a media layer needs src (a scenery id or asset:<sha>)", w)
+		case strings.HasPrefix(l.Src, "asset:"):
+			if strings.TrimPrefix(l.Src, "asset:") == "" {
+				c.fail("%s: src asset: needs a sha", w)
+			}
+		default:
+			if _, ok := refs.LayerSchema("photo", l.Src); !ok {
+				c.fail("%s: src %q is not a scenery id or asset:<sha>", w, l.Src)
+			}
+		}
+		if !mediaKinds[l.Media] {
+			c.fail("%s: media %q is not one of image, video", w, l.Media)
+		}
+		if !fits[l.Fit] {
+			c.fail("%s: fit %q is not one of fill, fit, stretch", w, l.Fit)
+		}
+		if cr := l.Crop; cr != nil {
+			c.rng(w+" crop.x", cr.X, 0, 1)
+			c.rng(w+" crop.y", cr.Y, 0, 1)
+			c.rng(w+" crop.w", cr.W, 0, 1)
+			c.rng(w+" crop.h", cr.H, 0, 1)
+			if cr.W <= 0 || cr.H <= 0 {
+				c.fail("%s: crop.w and crop.h must be above 0", w)
+			}
+		}
+	case ContentGradient:
+		if len(l.Stops) < 1 || len(l.Stops) > 8 {
+			c.fail("%s: a gradient needs 1..8 stops, has %d", w, len(l.Stops))
+		}
+		for i, st := range l.Stops {
+			if !catalog.IsColor(st.Color) {
+				c.fail("%s: stop %d color must be #rrggbb", w, i)
+			}
+			c.rng(fmt.Sprintf("%s stop %d pos", w, i), st.Pos, 0, 1)
+		}
+		if l.Angle != nil {
+			c.rng(w+" angle", *l.Angle, -36000, 36000)
+		}
+		if l.Offset != nil {
+			c.rng(w+" offset", *l.Offset, -10, 10)
+		}
+	}
+}
+
+// atlas checks an object's atlas: its size, and that each rect is a face of the object with a quarter turn.
+func (c *checker) atlas(w string, o *Object) {
+	a := o.Atlas
+	c.rng(w+" width", a.Width, 1, MaxAtlasSize)
+	c.rng(w+" height", a.Height, 1, MaxAtlasSize)
+	own := map[string]bool{}
+	for _, sf := range o.Surfaces {
+		own[sf.ID] = true
+	}
+	for id, r := range a.Faces {
+		fw := w + " face " + id
+		if !own[id] {
+			c.fail("%s: %s is not a surface of the object", fw, id)
+		}
+		if math.IsNaN(r.X) || math.IsNaN(r.Y) || math.Abs(r.X) > MaxAtlasSize || math.Abs(r.Y) > MaxAtlasSize {
+			c.fail("%s: x, y are invalid", fw)
+		}
+		if math.IsNaN(r.W) || math.IsNaN(r.H) || r.W <= 0 || r.H <= 0 || r.W > MaxAtlasSize || r.H > MaxAtlasSize {
+			c.fail("%s: w and h must be above 0", fw)
+		}
+		if !atlasTurns[r.Rotation] {
+			c.fail("%s: rotation %d is not one of 0, 90, 180, 270", fw, r.Rotation)
+		}
+	}
+}
+
+// layerClip checks a clip on a layer track: effect reveal or sweep, params only numeric from and to (0..1 for reveal,
+// -10..10 for sweep, the ranges of the values they drive).
+func (c *checker) layerClip(w string, cl Clip) {
+	if !layerClipEffects[cl.Effect] {
+		c.fail("%s: a clip on a layer track needs effect reveal or sweep, not %q", w, cl.Effect)
+	}
+	for k, v := range cl.Params {
+		if k != "from" && k != "to" {
+			c.fail("%s: param %q is unknown (a layer clip takes from, to)", w, k)
+			continue
+		}
+		f, ok := v.(float64)
+		if !ok {
+			c.fail("%s: param %s must be a number", w, k)
+			continue
+		}
+		if cl.Effect == "reveal" {
+			c.rng(w+" "+k, f, 0, 1)
+		} else {
+			c.rng(w+" "+k, f, -10, 10)
+		}
+	}
 }

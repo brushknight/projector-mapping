@@ -39,6 +39,10 @@ import {
   surfacePath,
 } from '../../ops'
 import type { BlendMode, GradientStop, Layer, LightFxKind, Scene, Surface, SurfaceRole } from '../../types'
+import { ContentLayerInspector, LayerList } from './content'
+import { locateContentLayer } from '../../ops'
+import { LAYER_CLIP_DEFAULTS } from '../../../../render/timeline'
+import { resolveAtlas } from '../../../../render'
 import s from './styles.module.css'
 
 /** The right panel in map and animate: shows whatever is selected. */
@@ -47,7 +51,8 @@ export function Inspector() {
   const scene = ed.scene
   if (!scene) return <EmptyState>open a scene to edit it.</EmptyState>
   const f = ed.sel.focus
-  if (f === 'surface' && ed.sel.surfaceId) {
+  if (f === 'content' && ed.sel.contentLayerId && locateContentLayer(scene, ed.sel.contentLayerId)) return <ContentLayerInspector scene={scene} layerId={ed.sel.contentLayerId} />
+  if ((f === 'surface' || f === 'content') && ed.sel.surfaceId) {
     const loc = locateSurface(scene, ed.sel.surfaceId)
     if (loc) return <SurfaceInspector scene={scene} surface={scene.objects[loc.o].surfaces[loc.s]} objectName={scene.objects[loc.o].name} />
   }
@@ -121,16 +126,15 @@ function SurfaceInspector({ scene, surface, objectName }: { scene: Scene; surfac
       />
       {surface.kind !== 'line' && surface.kind !== 'mask' && (
         <div className={s.flatRow}>
-          <Pill size="sm" icon="quad" onClick={() => ed.openFlat(surface.id)} title="see this surface flat at its real aspect and draw on it (or double-click it on the stage)" data-testid="inspector-flat">
-            flat · draw
+          <Pill on icon="edit" onClick={() => ed.editFace(surface.id)} title="edit what this face shows: pictures, drawings and effects, flat at its real proportions (F)" data-testid="inspector-edit-face">
+            edit face
           </Pill>
-          {loc && scene.objects[loc.o].surfaces.filter((x) => x.kind !== 'line' && x.kind !== 'mask').length > 1 && (
-            <Pill size="sm" ghost icon="layers" onClick={() => ed.openUnfold(scene.objects[loc.o].id)} title="every face of this object flat, side by side">
-              unfold
-            </Pill>
-          )}
+          <Pill size="sm" ghost icon="solo" onClick={() => ed.soloSelection(false)} title="show only this face on the stage (S); shift+S also on the wall">
+            solo
+          </Pill>
         </div>
       )}
+      {surface.kind !== 'line' && surface.kind !== 'mask' && <LayerList owner={{ kind: 'surface', id: surface.id }} layers={surface.layers ?? []} title="pictures" />}
       <Section tight>
         <Rename value={surface.name} onCommit={(v) => ed.editing.setValue(sp('name'), v, 'final')} />
         <Row>
@@ -340,9 +344,21 @@ function ObjectInspector({ scene, objectId }: { scene: Scene; objectId: string }
           }}
         />
       </Section>
+      <LayerList owner={{ kind: 'object', id: obj.id }} layers={obj.layers ?? []} title="across the faces" />
       <Section>
-        <Cap>{obj.surfaces.length} surfaces</Cap>
-        <span className={s.dim}>draw with the tools in the top bar; new surfaces join this object.</span>
+        <Row>
+          <Cap>unfold</Cap>
+          <span className={s.numText}>
+            {(() => {
+              const a = resolveAtlas(scene, obj)
+              return `${a.width}×${a.height} px${obj.atlas ? '' : ' · auto'}`
+            })()}
+          </span>
+        </Row>
+        <Pill size="sm" icon="layers" onClick={() => ed.setSpace('content')} title="see the faces unfolded flat (tab)">
+          open the unfold
+        </Pill>
+        <span className={s.dim}>{obj.surfaces.length} surfaces. draw with the tools on the stage; new surfaces join this object.</span>
       </Section>
     </div>
   )
@@ -516,6 +532,36 @@ function ClipInspector({ scene, clipId }: { scene: Scene; clipId: string }) {
   const def = ed.effects.find((d) => d.id === clip.effect)
   const cp = (...rest: Array<string | number>) => clipPath(scene, clipId, ...rest)!
   const track = scene.timeline.tracks.find((t) => t.id === clip.trackId)
+  const layerClip = track?.target.kind === 'layer'
+  const lp = clip.params as Record<string, unknown>
+  const dflt = LAYER_CLIP_DEFAULTS[clip.effect] ?? { from: 0, to: 1 }
+  const num = (k: 'from' | 'to') => (Number.isFinite(Number(lp[k])) ? Number(lp[k]) : dflt[k])
+  if (layerClip)
+    return (
+      <div className={s.insp} data-testid="clip-inspector">
+        <Header
+          kind="layer clip"
+          title={`${track?.name ?? ''} / ${clip.effect}`}
+          menu={[{ key: 'del', label: 'delete clip', icon: 'trash', danger: true, onSelect: () => {
+            void ed.editing.edit((sc) => removeClip(sc, clipId))
+            ed.select({ clipId: null, focus: null })
+          } }]}
+        />
+        <Section tight>
+          <Cap>timing</Cap>
+          <div className={s.two}>
+            <NumField prefix="start" ariaLabel="start" value={clip.start} digits={2} step={0.1} min={0} onCommit={(v) => ed.editing.setValue(cp('start'), Math.min(v, clip.end - 0.05), 'final')} suffix="s" />
+            <NumField prefix="end" ariaLabel="end" value={clip.end} digits={2} step={0.1} min={0} onCommit={(v) => ed.editing.setValue(cp('end'), Math.max(v, clip.start + 0.05), 'final')} suffix="s" />
+          </div>
+          <Segmented ariaLabel="animates" value={clip.effect} onChange={(v) => ed.editing.setValues([[cp('effect'), v], [cp('params'), { ...LAYER_CLIP_DEFAULTS[v] }]], 'final')} options={[{ value: 'reveal', label: 'reveal' }, { value: 'sweep', label: 'sweep' }]} />
+          <div className={s.two}>
+            <NumField prefix="from" ariaLabel="from" value={num('from')} digits={2} step={0.05} onCommit={(v) => ed.editing.setValue(cp('params'), { ...lp, from: v }, 'final')} />
+            <NumField prefix="to" ariaLabel="to" value={num('to')} digits={2} step={0.05} onCommit={(v) => ed.editing.setValue(cp('params'), { ...lp, to: v }, 'final')} />
+          </div>
+          <span className={s.dim}>{clip.effect === 'reveal' ? 'wipes the layer from "from" to "to" (0 hidden, 1 whole).' : 'moves a gradient band (or slides a picture) from "from" to "to".'} after the clip it holds "to".</span>
+        </Section>
+      </div>
+    )
   return (
     <div className={s.insp} data-testid="clip-inspector">
       <Header

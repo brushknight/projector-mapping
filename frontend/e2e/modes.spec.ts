@@ -84,12 +84,15 @@ test('a test pattern turns itself off when its time runs out', async ({ page, re
   await setMode(request, 'objects')
   await page.goto('/out?headless=1')
   await waitForOutput(request)
+  await page.waitForTimeout(1500)
+  // the mapped objects alone light part of the frame; the white pattern lights all of it
+  const base = (await litSamples(page, OUT)).lit
   await cmd('setup.testPattern', { setupId: 'set_desk', pattern: 'white', seconds: 2 })
   await expect.poll(async () => (await litSamples(page, OUT)).lit, { timeout: 10_000 }).toBeGreaterThan(5000)
   const setup = await (await request.get(`${API}/api/v1/setups/set_desk`)).json()
   expect(setup.testPattern).toBe('white')
   expect(setup.testPatternUntil).toBeGreaterThan(Date.now() * 1e6)
-  await expect.poll(async () => (await litSamples(page, OUT)).lit, { timeout: 10_000 }).toBeLessThan(2000)
+  await expect.poll(async () => (await litSamples(page, OUT)).lit, { timeout: 10_000 }).toBeLessThan(base + 1500)
   expect((await (await request.get(`${API}/api/v1/setups/set_desk`)).json()).testPattern).toBe('off')
 })
 

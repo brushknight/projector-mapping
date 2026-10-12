@@ -36,7 +36,29 @@ type Show struct {
 	Transport     Transport `json:"transport"`
 	Version       int64     `json:"version"`
 	Preview       *Preview  `json:"preview,omitempty"`
+	// Solo, when set, makes the output draw only these surfaces until Until (protocol §12).
+	Solo *Solo `json:"solo,omitempty"`
 }
+
+// Solo fills.
+const (
+	SoloContent = "content"
+	SoloWhite   = "white"
+	SoloGrid    = "grid"
+)
+
+// Solo limits the output to some surfaces for a while (server Unix ns).
+type Solo struct {
+	SurfaceIDs []string `json:"surfaceIds"`
+	Fill       string   `json:"fill"`
+	Until      int64    `json:"until"`
+}
+
+// Solo durations in seconds.
+const (
+	SoloDefaultSeconds = 60
+	SoloMaxSeconds     = 600
+)
 
 // Cue is what the transport needs from a scene cue.
 type Cue struct {

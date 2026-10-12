@@ -129,3 +129,14 @@ stacks, `scene.mode` command, strokes accept/reject, drawing clip, upgrade of a 
   `render.frame` (upload a PNG with kind `snapshot`, answer `{ sha }`).
 - The phone answers `camera.capture` by uploading to `/api/v1/camera/stills?request=<requestId>` (multipart field
   `file`) and replying `rpc.result { sha }`.
+
+## Content layers, atlases and solo (protocol §12, 2026-10-12)
+
+- `surface.layers`, `object.layers` (content layers) and `object.atlas` decode, validate and round-trip; missing
+  common fields decode to their defaults; empty lists are omitted. Content layer ids are unique across the scene.
+- Track target `layer`; clips on a layer track take effect `reveal` (from/to 0..1) or `sweep` (from/to -10..10) and
+  no other params.
+- `show.solo` (`cmd show.solo`, `POST /show/solo`): fill defaults to content, seconds 1..600 (default 60), `[]` clears,
+  sending again renews; its own timer clears it at `until` and broadcasts the show; a restart drops an expired one.
+  Surface ids are not checked against the scene (a backstage draft may solo surfaces the live scene lacks).
+- `cmd show.preview { draftId, t?, play? }` / `POST /show/preview`: `t` defaults to 0, `play` to false.

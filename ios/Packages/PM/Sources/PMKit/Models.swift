@@ -318,6 +318,8 @@ public struct Surface: Codable, Sendable, Hashable, Identifiable {
     public var effects: [SurfaceEffect]
     public var opacity: Double
     public var softEdge: Double
+    /// Content layers (protocol §12), kept as JSON so a round trip does not drop them; the app does not draw them.
+    public var layers: JSONValue?
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -332,6 +334,7 @@ public struct Surface: Codable, Sendable, Hashable, Identifiable {
         effects = c.v(.effects, [])
         opacity = c.v(.opacity, 1)
         softEdge = c.v(.softEdge, 0)
+        layers = c.opt(.layers)
     }
 }
 
@@ -341,6 +344,9 @@ public struct MapObject: Codable, Sendable, Hashable, Identifiable {
     public var tags: [String]
     public var visible: Bool
     public var surfaces: [Surface]
+    /// The faces' unfolded layout and the object's content layers (protocol §12), kept as JSON; not drawn here.
+    public var atlas: JSONValue?
+    public var layers: JSONValue?
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -349,6 +355,8 @@ public struct MapObject: Codable, Sendable, Hashable, Identifiable {
         tags = c.v(.tags, [])
         visible = c.v(.visible, true)
         surfaces = c.v(.surfaces, [])
+        atlas = c.opt(.atlas)
+        layers = c.opt(.layers)
     }
 
     public var faces: Int { surfaces.filter { $0.role == "face" }.count }
@@ -356,7 +364,7 @@ public struct MapObject: Codable, Sendable, Hashable, Identifiable {
 }
 
 public struct TrackTarget: Codable, Sendable, Hashable {
-    /// `surface` | `object` | `all`
+    /// `surface` | `object` | `all` | `layer` (a content layer id)
     public var kind: String
     public var id: String?
     public init(from decoder: Decoder) throws {
@@ -551,10 +559,13 @@ public struct Show: Codable, Sendable, Hashable {
     public var onAir: Bool
     public var transport: Transport
     public var version: Int
+    /// The output draws only these surfaces until `solo.until` (protocol §12); decoded, not acted on here.
+    public var solo: Solo?
 
-    public init(activeSetupId: String? = nil, activeSceneId: String? = nil, onAir: Bool = true, transport: Transport = .init(), version: Int = 0) {
+    public init(activeSetupId: String? = nil, activeSceneId: String? = nil, onAir: Bool = true, transport: Transport = .init(), version: Int = 0,
+                solo: Solo? = nil) {
         self.activeSetupId = activeSetupId; self.activeSceneId = activeSceneId; self.onAir = onAir
-        self.transport = transport; self.version = version
+        self.transport = transport; self.version = version; self.solo = solo
     }
 
     public init(from decoder: Decoder) throws {
@@ -564,6 +575,28 @@ public struct Show: Codable, Sendable, Hashable {
         onAir = c.v(.onAir, true)
         transport = c.v(.transport, Transport())
         version = c.v(.version, 0)
+        solo = c.opt(.solo)
+    }
+}
+
+/// `show.solo`: some surfaces alone on the wall for a while (server Unix ns).
+public struct Solo: Codable, Sendable, Hashable {
+    public var surfaceIds: [String]
+    /// `content` | `white` | `grid`
+    public var fill: String
+    public var until: Int64
+
+    public init(surfaceIds: [String], fill: String = "content", until: Int64) {
+        self.surfaceIds = surfaceIds; self.fill = fill; self.until = until
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        surfaceIds = c.v(.surfaceIds, [])
+        fill = c.v(.fill, "content")
+        let exact: Int64? = c.opt(.until)
+        let approx: Double? = c.opt(.until)
+        until = exact ?? approx.map { Int64($0) } ?? 0
     }
 }
 

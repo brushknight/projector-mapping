@@ -34,6 +34,8 @@ type Service struct {
 	mu    sync.Mutex
 	state show.Show
 	timer *time.Timer
+	// soloTimer clears show.solo at its until; separate from the transport timer.
+	soloTimer *time.Timer
 }
 
 var _ showsvc.ShowService = (*Service)(nil)
@@ -59,6 +61,13 @@ func New(ctx context.Context, kv showrepo.KV, scenes scenessvc.SceneService, pub
 	if s.state.Transport.State == "" {
 		s.state.Transport.State = show.Stopped
 	}
+	// a solo that ran out while the server was down is gone; a running one keeps its deadline
+	if s.state.Solo != nil && s.state.Solo.Until <= s.now() {
+		s.state.Solo = nil
+	}
+	s.mu.Lock()
+	s.armSolo()
+	s.mu.Unlock()
 	return s, nil
 }
 
@@ -91,14 +100,27 @@ func (s *Service) activeScene(ctx context.Context) (*scene.Scene, error) {
 
 func (s *Service) Do(ctx context.Context, action string, args json.RawMessage, by string) (show.Show, error) {
 	var a struct {
-		T       *float64 `json:"t"`
-		On      *bool    `json:"on"`
-		SceneID string   `json:"sceneId"`
+		T          *float64  `json:"t"`
+		On         *bool     `json:"on"`
+		SceneID    string    `json:"sceneId"`
+		DraftID    string    `json:"draftId"`
+		Play       bool      `json:"play"`
+		SurfaceIDs *[]string `json:"surfaceIds"`
+		Fill       string    `json:"fill"`
+		Seconds    *float64  `json:"seconds"`
 	}
 	if len(args) > 0 && string(args) != "null" {
 		if err := json.Unmarshal(args, &a); err != nil {
 			return show.Show{}, app_errors.BadRequest("The args must be an object: %v", err)
 		}
+	}
+	if action == "preview" {
+		// Preview takes the lock itself
+		from := 0.0
+		if a.T != nil {
+			from = *a.T
+		}
+		return s.Preview(ctx, a.DraftID, from, 0, a.Play)
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -147,6 +169,12 @@ func (s *Service) Do(ctx context.Context, action string, args json.RawMessage, b
 			}
 			st.Transport = show.Seek(st.Transport, *a.T, cues, sc.Timeline.Duration, now)
 		}
+	case "solo":
+		solo, err := soloOf(a.SurfaceIDs, a.Fill, a.Seconds, now)
+		if err != nil {
+			return st, err
+		}
+		st.Solo = solo
 	default:
 		return st, app_errors.NotFound("Show action %q does not exist.", action)
 	}
@@ -188,6 +216,77 @@ func (s *Service) commit(ctx context.Context, st show.Show) {
 	}
 	s.pub.Publish(Channel, realtime.Message{T: "snapshot", Ch: Channel, V: realtime.Ver(st.Version), D: b})
 	s.arm(ctx)
+	s.armSolo()
+}
+
+// soloOf builds show.solo from the solo action's args: an empty surfaceIds turns it off, fill defaults to content,
+// seconds (1..600, default 60) sets until.
+func soloOf(ids *[]string, fill string, seconds *float64, now int64) (*show.Solo, error) {
+	if ids == nil {
+		return nil, app_errors.BadRequest("solo needs {surfaceIds} ([] turns solo off).")
+	}
+	if len(*ids) == 0 {
+		return nil, nil
+	}
+	seen := map[string]bool{}
+	list := make([]string, 0, len(*ids))
+	for _, id := range *ids {
+		if id == "" {
+			return nil, app_errors.BadRequest("solo surfaceIds cannot hold an empty id.")
+		}
+		if !seen[id] {
+			seen[id] = true
+			list = append(list, id)
+		}
+	}
+	switch fill {
+	case "":
+		fill = show.SoloContent
+	case show.SoloContent, show.SoloWhite, show.SoloGrid:
+	default:
+		return nil, app_errors.BadRequest("solo fill %q is not one of content, white, grid.", fill)
+	}
+	secs := float64(show.SoloDefaultSeconds)
+	if seconds != nil {
+		secs = *seconds
+		if secs < 1 || secs > show.SoloMaxSeconds {
+			return nil, app_errors.BadRequest("solo seconds must be 1..%d.", show.SoloMaxSeconds)
+		}
+	}
+	return &show.Solo{SurfaceIDs: list, Fill: fill, Until: now + int64(secs*1e9)}, nil
+}
+
+// armSolo (re)schedules the timer that clears show.solo at its until; callers hold mu.
+func (s *Service) armSolo() {
+	if s.soloTimer != nil {
+		s.soloTimer.Stop()
+		s.soloTimer = nil
+	}
+	if s.state.Solo == nil {
+		return
+	}
+	until := s.state.Solo.Until
+	wait := time.Duration(until - s.now())
+	if wait < 0 {
+		wait = 0
+	}
+	s.soloTimer = time.AfterFunc(wait, func() { s.expireSolo(until) })
+}
+
+// expireSolo clears the solo when it is still the one that ends at until (a renewed solo has a later until).
+func (s *Service) expireSolo(until int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.state.Solo == nil || s.state.Solo.Until != until {
+		return
+	}
+	if s.now() < until {
+		s.armSolo()
+		return
+	}
+	st := s.state
+	st.Solo = nil
+	s.commit(context.Background(), st)
 }
 
 // arm schedules the next automatic change (hold at a cue, follow it, the end of the timeline or of a preview).

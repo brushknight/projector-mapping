@@ -5,7 +5,7 @@ import type { EffectDef } from '../../entities/effect'
 import { effectApi } from '../../entities/effect'
 import { FrameMeter, renderFrameRpc, type RenderFrameArgs } from '../../entities/output'
 import { PairingScreen } from '../../entities/pairing'
-import { ambientClock, playheadNow, useBlackout, useLiveDocs, type Show } from '../../entities/show'
+import { activeSolo, ambientClock, playheadNow, useBlackout, useLiveDocs, type Show } from '../../entities/show'
 import { activeTestPattern } from '../../entities/setup'
 import type { Draft } from '../../entities/draft'
 import { applyPatch } from '../../shared/lib/jsonPatch'
@@ -167,6 +167,8 @@ export function OutPage() {
         testPattern: activeTestPattern(L.setup, hub.serverNow()),
         // an agent previews its mapping: show the objects whatever mode the scene has on air
         mode: L.show?.preview?.draftId ? 'objects' : null,
+        // a solo from the editor (protocol §12): only those faces, over black
+        solo: activeSolo(L.show, hub.serverNow()),
       })
     } else if (r && pattern.current) {
       // calibration still works before a setup arrives

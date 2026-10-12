@@ -17,10 +17,12 @@ export interface TreeNodeProps {
   draggable?: boolean
   onDragStart?: (e: React.DragEvent) => void
   testId?: string
+  /** a control at the end of the row (a button); clicks on it don't select the row */
+  action?: ReactNode
 }
 
 /** One row of the surfaces tree: icon, name, dim meta, eye. */
-export const TreeNode = memo(function TreeNode({ icon, label, meta, depth = 0, selected, dim, visible = true, onToggleVisible, onClick, onDoubleClick, draggable, onDragStart, testId }: TreeNodeProps) {
+export const TreeNode = memo(function TreeNode({ icon, label, meta, depth = 0, selected, dim, visible = true, onToggleVisible, onClick, onDoubleClick, draggable, onDragStart, testId, action }: TreeNodeProps) {
   return (
     <div
       className={cx(s.node, selected && s.sel, (dim || !visible) && s.dimn)}
@@ -39,6 +41,11 @@ export const TreeNode = memo(function TreeNode({ icon, label, meta, depth = 0, s
       </span>
       <span className={s.k}>{label}</span>
       {meta !== undefined && <span className={s.m}>{meta}</span>}
+      {action && (
+        <span className={s.act} onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
+          {action}
+        </span>
+      )}
       {onToggleVisible && (
         <button
           type="button"
