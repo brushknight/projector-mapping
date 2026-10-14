@@ -66,3 +66,9 @@ release-bins: ## the tarballs and SHA256SUMS only, with the web app already in i
 	  echo "  $$(basename $$dir).tar.gz"; \
 	done
 	@cd $(DIST) && shasum -a 256 *.tar.gz > SHA256SUMS && cat SHA256SUMS
+
+install: build ## copy ./projmap to ~/.local/bin (remove first: overwriting a running or cached binary in place makes macOS kill it)
+	@mkdir -p $(HOME)/.local/bin
+	@rm -f $(HOME)/.local/bin/projmap
+	cp $(BIN) $(HOME)/.local/bin/projmap
+	@echo "installed $(HOME)/.local/bin/projmap; restart the server: pkill -f 'projmap serve'; projmap serve"

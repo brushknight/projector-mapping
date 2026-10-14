@@ -38,6 +38,76 @@ type Show struct {
 	Preview       *Preview  `json:"preview,omitempty"`
 	// Solo, when set, makes the output draw only these surfaces until Until (protocol §12).
 	Solo *Solo `json:"solo,omitempty"`
+	// Audio is the sound output (protocol §14); the server always sets it.
+	Audio *Audio `json:"audio,omitempty"`
+}
+
+// Audio outputs: which client plays every sound.
+const (
+	OutputProjector = "projector"
+	OutputEditor    = "editor"
+	OutputPhone     = "phone"
+)
+
+// Audio is where sounds play, the master volume, mute, and the looping pads playing now.
+type Audio struct {
+	Output string   `json:"output"`
+	Volume float64  `json:"volume"`
+	Muted  bool     `json:"muted"`
+	Loops  []string `json:"loops"`
+}
+
+// DefaultAudio plays on the projector at full volume.
+func DefaultAudio() *Audio { return &Audio{Output: OutputProjector, Volume: 1, Loops: []string{}} }
+
+// OutputRole is the client role that plays sound for an output (projector → output, editor → editor, phone → remote).
+func OutputRole(output string) string {
+	switch output {
+	case OutputEditor:
+		return "editor"
+	case OutputPhone:
+		return "remote"
+	}
+	return "output"
+}
+
+// Normalize fills the audio defaults; it returns a copy with its own loops slice.
+func (a *Audio) Normalize() *Audio {
+	if a == nil {
+		return DefaultAudio()
+	}
+	n := *a
+	switch n.Output {
+	case OutputProjector, OutputEditor, OutputPhone:
+	default:
+		n.Output = OutputProjector
+	}
+	if n.Volume < 0 || n.Volume > 1 {
+		n.Volume = 1
+	}
+	n.Loops = append([]string{}, a.Loops...)
+	return &n
+}
+
+// WithoutLoop returns loops without id.
+func WithoutLoop(loops []string, id string) []string {
+	out := make([]string, 0, len(loops))
+	for _, l := range loops {
+		if l != id {
+			out = append(out, l)
+		}
+	}
+	return out
+}
+
+// HasLoop tells whether id is in loops.
+func HasLoop(loops []string, id string) bool {
+	for _, l := range loops {
+		if l == id {
+			return true
+		}
+	}
+	return false
 }
 
 // Solo fills.

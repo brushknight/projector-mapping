@@ -20,6 +20,14 @@ struct ProjmapApp: App {
                 .tint(Palette.ink)
                 .onAppear { model.start() }
                 .onOpenURL { url in
+                    // projmap://youtube?url=<link>: open "add from YouTube" with the link filled in.
+                    if url.scheme == "projmap", url.host == "youtube" {
+                        let link = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "url" }?.value ?? ""
+                        model.youtubeLink = link
+                        model.tab = .scenery
+                        model.showYouTube = true
+                        return
+                    }
                     if let link = ConnectLink(url.absoluteString) {
                         if model.isPaired { model.unpair() }
                         model.pendingLink = link

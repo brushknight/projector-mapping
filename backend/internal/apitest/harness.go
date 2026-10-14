@@ -20,8 +20,10 @@ import (
 
 	"projmap/internal/app"
 	agentport "projmap/internal/application/ports/out/agents"
+	"projmap/internal/application/ports/out/media"
 	"projmap/internal/config"
 	"projmap/internal/domain/agents"
+	"projmap/internal/infrastructure/clients/mediatools"
 )
 
 // H is one app on its own data folder, served on a local port.
@@ -33,13 +35,24 @@ type H struct {
 	Runner *FakeRunner
 	// DataDir is the app's data folder (Restart reopens it).
 	DataDir string
+	// Media runs ffprobe, ffmpeg and yt-dlp; the default looks on PATH only (tests set PATH to choose what exists).
+	Media media.Tools
 }
 
 // New starts an app (seeded with the desk setup, scene and presets).
 func New(t *testing.T) *H {
 	t.Helper()
+	return NewWith(t, nil)
+}
+
+// NewWith starts an app after setup changed the harness (for example Media).
+func NewWith(t *testing.T, setup func(h *H)) *H {
+	t.Helper()
 	runner := &FakeRunner{}
-	h := &H{T: t, Runner: runner}
+	h := &H{T: t, Runner: runner, Media: mediatools.New([]string{})}
+	if setup != nil {
+		setup(h)
+	}
 	srv := httptest.NewUnstartedServer(nil)
 	srv.Start()
 	h.Server, h.URL = srv, srv.URL
@@ -59,7 +72,7 @@ func (h *H) start() {
 	h.T.Helper()
 	cfg := config.Config{DataDir: h.DataDir, Port: 7400, Bind: "127.0.0.1", Seed: true}
 	a, err := app.New(context.Background(), app.Options{Config: cfg, Log: slog.New(slog.NewTextHandler(io.Discard, nil)),
-		Runner: h.Runner, MCPURL: h.URL + "/mcp"})
+		Runner: h.Runner, MCPURL: h.URL + "/mcp", Media: h.Media})
 	if err != nil {
 		h.T.Fatal(err)
 	}

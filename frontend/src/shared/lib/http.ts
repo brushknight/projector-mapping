@@ -57,6 +57,30 @@ export const http = {
   del: <T = void>(url: string) => request<T>('DELETE', url),
   /** multipart/form-data POST (file uploads) */
   form: <T>(url: string, data: FormData) => request<T>('POST', url, data),
+  /** multipart POST that reports upload progress (0…1) while the bytes go up (big sound and video files) */
+  formProgress: <T>(url: string, data: FormData, onProgress?: (p: number) => void) => (onProgress ? upload<T>(url, data, onProgress) : request<T>('POST', url, data)),
+}
+
+function upload<T>(url: string, data: FormData, onProgress: (p: number) => void): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const x = new XMLHttpRequest()
+    x.open('POST', url)
+    if (token) x.setRequestHeader('authorization', `Bearer ${token}`)
+    x.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded / e.total)
+    x.onerror = () => reject(new ApiError(0, 'network', 'The upload failed: no connection to the server.', null))
+    x.onload = () => {
+      let body: unknown = null
+      try {
+        body = x.responseText ? JSON.parse(x.responseText) : null
+      } catch {
+        body = x.responseText
+      }
+      if (x.status >= 200 && x.status < 300) return resolve(body as T)
+      const o = body && typeof body === 'object' ? (body as Record<string, unknown>) : {}
+      reject(new ApiError(x.status, typeof o.code === 'string' ? o.code : `http_${x.status}`, typeof o.message === 'string' ? o.message : `HTTP ${x.status}`, body))
+    }
+    x.send(data)
+  })
 }
 
 export function errMsg(e: unknown, fallback = 'Request failed'): string {

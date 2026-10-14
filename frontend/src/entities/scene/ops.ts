@@ -5,7 +5,7 @@
  */
 import { pointer } from '../../shared/lib/jsonPatch'
 import { locateLayer, stackLayers } from './lib'
-import type { Atlas, AtlasRect, BackdropMode, Clip, ContentLayer, Cue, EffectInstance, Layer, LayerStack, Mesh, PatchOp, Point, Scene, SceneMode, SceneObject, Surface, Track, Underlay } from './types'
+import type { Atlas, AtlasRect, BackdropMode, Clip, ContentLayer, Cue, EffectInstance, Layer, LayerStack, Mesh, PatchOp, Point, Scene, SceneMode, SceneObject, SoundPad, Surface, Track, Underlay } from './types'
 
 type Ops = PatchOp[] | null
 
@@ -416,4 +416,137 @@ export function gradientLayer(id: string, name = 'sweep', color = '#ffffff'): Co
     id, kind: 'gradient', name, visible: true, opacity: 1, blend: 'screen', x: 0, y: 0, scale: 1, rotation: 0, reveal: 1, revealAngle: 0,
     stops: [ { color: '#000000', pos: 0 }, { color, pos: 0.5 }, { color: '#000000', pos: 0.62 } ], angle: 0, offset: 0, repeat: true,
   }
+}
+
+// ── show space (protocol §10, §14): one-layer picks, video layers, soundboard pads ──────────────────────────────
+
+/** The photo controls a scenery pick keeps (photo or video, §14). */
+export const SCENERY_KEEP = ['blur', 'brightness', 'warmth', 'drift'] as const
+
+/** Default params of a video layer (catalog `videoParams`, §14). */
+export const VIDEO_DEFAULTS = { blur: 0.2, brightness: 0.8, warmth: 0, drift: 0, start: 0, end: 0, audio: false, volume: 1 }
+
+/** A new video backdrop layer (`asset:<sha>` or `youtube:<id>`). */
+export function videoLayer(id: string, ref: string, name: string, params: Partial<typeof VIDEO_DEFAULTS> = {}): Layer {
+  return { id, kind: 'video', ref, name, visible: true, opacity: 1, blend: 'normal', light: null, params: { ...VIDEO_DEFAULTS, ...params } }
+}
+
+/**
+ * The phone's single-choice pick (§10): replaces the stack with one layer that keeps the previous first layer's id,
+ * its light (a gobo pick) or its blur, brightness, warmth and drift (a photo or video pick), and puts the mode on air.
+ */
+export function pickOne(scene: Scene, mode: BackdropMode, layer: Layer): PatchOp[] {
+  const stack = stackLayers(scene, mode)
+  const prev = stack.find((l) => l.visible) ?? stack[0]
+  const next: Layer = { ...layer, params: { ...layer.params } }
+  if (prev) {
+    next.id = prev.id
+    if (next.light && prev.light) next.light = prev.light
+    const photoish = (k: string) => k === 'photo' || k === 'video'
+    if (photoish(next.kind) && photoish(prev.kind)) for (const k of SCENERY_KEEP) if (prev.params[k] !== undefined) next.params[k] = prev.params[k]
+  }
+  const ops = replaceStack(mode, [next])
+  if (scene.mode !== mode) ops.push(...setMode(mode))
+  return ops
+}
+
+export const padsOf = (scene: Scene): SoundPad[] => scene.sounds?.pads ?? []
+
+export function padPath(scene: Scene, padId: string, ...rest: Array<string | number>): string | null {
+  const i = padsOf(scene).findIndex((p) => p.id === padId)
+  return i < 0 ? null : pointer('sounds', 'pads', i, ...rest)
+}
+
+/** Adds a pad at the end of the grid (creates `sounds` on an older document). */
+export function addPad(scene: Scene, pad: SoundPad): PatchOp[] {
+  if (!scene.sounds) return [{ op: 'add', path: '/sounds', value: { pads: [pad] } }]
+  if (!Array.isArray(scene.sounds.pads)) return [{ op: 'add', path: '/sounds/pads', value: [pad] }]
+  return [{ op: 'add', path: '/sounds/pads/-', value: pad }]
+}
+
+/** Changes pad fields as leaf patches; `undefined` or null for an optional field (`key`) removes it. */
+export function updatePad(scene: Scene, padId: string, patch: Partial<SoundPad>): Ops {
+  const i = padsOf(scene).findIndex((p) => p.id === padId)
+  if (i < 0) return null
+  const cur = padsOf(scene)[i] as unknown as Record<string, unknown>
+  const ops: PatchOp[] = []
+  for (const [k, v] of Object.entries(patch)) {
+    if (k === 'id') continue
+    const path = pointer('sounds', 'pads', i, k)
+    if (v === undefined || (v === null && k === 'key')) {
+      if (k in cur) ops.push({ op: 'remove', path })
+    } else if (cur[k] !== v) ops.push({ op: k in cur ? 'replace' : 'add', path, value: v })
+  }
+  return ops.length ? ops : null
+}
+
+export function removePad(scene: Scene, padId: string): Ops {
+  const i = padsOf(scene).findIndex((p) => p.id === padId)
+  return i < 0 ? null : [{ op: 'remove', path: pointer('sounds', 'pads', i) }]
+}
+
+/** Moves a pad by `delta` places in the grid. */
+export function movePad(scene: Scene, padId: string, delta: number): Ops {
+  const pads = padsOf(scene)
+  const i = pads.findIndex((p) => p.id === padId)
+  if (i < 0) return null
+  const j = Math.max(0, Math.min(pads.length - 1, i + delta))
+  return i === j ? null : [{ op: 'move', from: pointer('sounds', 'pads', i), path: pointer('sounds', 'pads', j) }]
+}
+
+/** The pad a key plays (a-z, 0-9; case-insensitive), or null. */
+export function padForKey(scene: Scene, key: string): SoundPad | null {
+  const k = key.toLowerCase()
+  if (!/^[a-z0-9]$/.test(k)) return null
+  return padsOf(scene).find((p) => (p.key ?? '').toLowerCase() === k) ?? null
+}
+
+// ── sound on the timeline (protocol §14): sound tracks, sound clips, cue sounds ─────────────────────────────────
+
+/** A new sound track (`target: { kind: "sound", id: null }`). */
+export function soundTrack(id: string, name = 'sound'): Track {
+  return { id, name, target: { kind: 'sound', id: null } }
+}
+
+/** The scene's first sound track, or null. */
+export function firstSoundTrack(scene: Scene): Track | null {
+  return scene.timeline.tracks.find((t) => t.target.kind === 'sound') ?? null
+}
+
+/** A new sound clip (`effect: "sound"`, params `{ sound, offset, volume }`), no fades. */
+export function soundClip(id: string, trackId: string, sound: string, start: number, end: number, params: { offset?: number; volume?: number } = {}): Clip {
+  return { id, trackId, effect: 'sound', start: round3(start), end: round3(end), fadeIn: 0, fadeOut: 0, params: { sound, offset: params.offset ?? 0, volume: params.volume ?? 1 } }
+}
+
+/**
+ * Puts a sound clip on the timeline: on `clip.trackId` when that is a sound track, else on the scene's first sound
+ * track, making one (id `newTrackId`) when there is none.
+ */
+export function addSoundClip(scene: Scene, clip: Clip, newTrackId: string): PatchOp[] {
+  const want = scene.timeline.tracks.find((t) => t.id === clip.trackId && t.target.kind === 'sound') ?? firstSoundTrack(scene)
+  if (want) return addClip({ ...clip, trackId: want.id })
+  return [...addTrack(soundTrack(newTrackId)), ...addClip({ ...clip, trackId: newTrackId })]
+}
+
+/** Changes a clip's params as leaf patches (adds the missing ones). */
+export function setClipParams(scene: Scene, clipId: string, patch: Record<string, unknown>): Ops {
+  const i = scene.timeline.clips.findIndex((c) => c.id === clipId)
+  if (i < 0) return null
+  const cur = (scene.timeline.clips[i].params ?? {}) as Record<string, unknown>
+  const ops: PatchOp[] = []
+  for (const [k, v] of Object.entries(patch)) {
+    if (v === undefined || cur[k] === v) continue
+    ops.push({ op: k in cur ? 'replace' : 'add', path: pointer('timeline', 'clips', i, 'params', k), value: v })
+  }
+  return ops.length ? ops : null
+}
+
+/** Sets a cue's sound on GO (`{ sound, volume }`), or removes it with null. */
+export function setCueSound(scene: Scene, cueId: string, sound: { sound: string; volume: number } | null): Ops {
+  const i = scene.timeline.cues.findIndex((c) => c.id === cueId)
+  if (i < 0) return null
+  const has = scene.timeline.cues[i].sound !== undefined
+  const path = pointer('timeline', 'cues', i, 'sound')
+  if (!sound) return has ? [{ op: 'remove', path }] : null
+  return [{ op: has ? 'replace' : 'add', path, value: { sound: sound.sound, volume: Math.max(0, Math.min(1, sound.volume)) } }]
 }

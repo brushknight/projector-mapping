@@ -143,7 +143,8 @@ func prompt(user string, sess *agents.Session) string {
 	return "You are working in projmap, a projection mapping tool, through its MCP server (tools named scene_get, " +
 		"surface_create, clip_add, output_render and so on). Your edits go into draft " + sess.DraftID + " of scene " + sess.SceneID +
 		", never live. Start with scene_get, look before you write (reference_photo_get, camera_snapshot, output_render), " +
-		"and finish with proposal_submit and a one-line summary.\n\nRequest: " + user
+		"and finish with proposal_submit and a one-line summary. For sound effects, sound_list shows the library and clip_add {sound} " +
+		"puts one on the timeline.\n\nRequest: " + user
 }
 
 func (s *Service) run(ctx context.Context, id string, spec agentport.Spec, deviceID string) {

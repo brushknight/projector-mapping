@@ -6,6 +6,35 @@ version section, and the release workflow uses that section as the GitHub releas
 
 ## [Unreleased]
 
+### Run the show from the editor
+
+- **Show | Map | Content.** The editor opens on a new **show** space that runs the wall like the phone does: a big
+  live picture of exactly what the projector shows, the mode tabs (static, live, color, scenery, objects) that switch
+  what is on air, gobo tiles with light, colour and effects, the live layer stack, gradients, scenery photos and
+  videos, cues with GO, back, stop and per-object reveal, presets per mode, on air and blackout, and the soundboard.
+- **Several scenes.** A scene switcher in the top bar, the show space and every phone tab creates, duplicates,
+  renames, deletes and activates scenes; the one on the wall is marked.
+- **Fixed:** a fresh server restarted before any show change no longer loses its active scene.
+
+### Sound effects
+
+- **Your sounds.** Upload WAV, MP3, M4A, AIFF or OGG files to a sound library with length and waveform; rename and
+  delete them.
+- **Soundboard.** Each scene has pads with a name, a sound, a volume, a colour or icon and an optional key; loop pads
+  toggle. Play them from the editor, the phone or MCP (`sound_play`).
+- **Sound on the timeline.** Sound tracks with clips (offset, volume, fades) play in sync with the picture, and a cue
+  can play a sound on GO. The editor's preview plays them too, with a mute button.
+- **Audio output.** The projector computer plays by default (Web Audio; `projmap open --out` lets Chrome play
+  without a click, otherwise `/out` asks for one). Switch the output to the editor or the phone, set the master
+  volume and mute.
+
+### Video loops
+
+- **Video backdrops.** Scenery loops a video file (MP4, MOV, WebM) with the photo controls: blur, brightness,
+  warmth, drift, plus a loop window.
+- **From YouTube.** Paste a link in the editor or the phone. With yt-dlp installed the server downloads and trims it
+  to a local file; without it the loop plays as an embedded YouTube player behind the picture.
+
 ### Editor: two spaces, one screen
 
 - **Map | Content.** Tab switches between the stage (place the faces) and the content space: the selected object

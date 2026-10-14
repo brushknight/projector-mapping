@@ -697,3 +697,259 @@ Additive. Every new field is optional on decode.
 - **MCP sessions (backend).** A client that connected on its own (Claude Code, Codex) and whose draft gets applied or
   discarded starts a new session and draft on its next write; until then its reads show the live scene. Tool events
   on `agent:{id}` read `tool · target · layer`, for example `face_draw · srf_right · bays · 16 strokes`.
+
+## 14. Show control, sound and video (2026-10-14)
+
+Additive. Every new field is optional on decode (absent decodes to the default given here), so older documents and
+clients keep working. Fixtures: `scene.json` (two pads, a sound track with one clip, a cue with a sound, a scenery
+video layer), `show.json` (`audio`), `sound.json`, `video.json`, `import.json`, `ws-messages.json` (`sound.play`,
+`sound.stop`, `cmd sound.play`, `cmd show.audio`).
+
+### Scenes: create, duplicate, rename, delete, activate
+
+| method | path | body / result |
+| --- | --- | --- |
+| GET | `/scenes` | `[{ id, name, setupId, version }]` in creation order |
+| POST | `/scenes` | `{ name, setupId?, duplicate? }` → Scene (201). Without `duplicate`: an empty scene (`mode: "static"`, empty stacks, no objects, a 20 s timeline) on `setupId`, which defaults to the active setup. With `duplicate: <sceneId>`: a deep copy of that scene's current document with a new id, `version: 1` and the given name (`setupId` is the source's). |
+| PATCH | `/scenes/{id}` | `{ name }` → the summary. The same as a `replace /name` patch on the scene. |
+| DELETE | `/scenes/{id}` | 204. Deleting the active scene answers 409 `{ code: "scene_active" }` ("Activate another scene first."). |
+
+- Channel **`scenes`** (editor, remote): `snapshot` with `d` = the summary list and `v` = a millisecond timestamp,
+  sent on subscribe and whenever a scene is created, deleted or renamed (a committed patch that changes `/name`
+  counts).
+- Activating puts a scene on the wall: `cmd show.activate { sceneId }` or `POST /show/activate { sceneId }`. The
+  transport stops and `preview` clears; `onAir`, `audio` and `solo` stay. Each scene keeps its own `mode`, stacks,
+  pads and timeline.
+- Names are trimmed, 1…80 characters, and need not be unique.
+- **The active scene survives restarts.** On start the server keeps the stored `activeSceneId` when that scene
+  exists; otherwise (nothing stored yet, or the scene is gone) it activates the first scene of the list and stores the
+  show at once. A server that has scenes therefore always has an active one.
+
+### Sound assets
+
+```json
+{ "sha": "5d1e0a", "mime": "audio/mpeg", "width": 0, "height": 0, "bytes": 482113, "kind": "sound",
+  "name": "rain on glass", "duration": 12.48, "peaks": [0.02, 0.31, 0.88, 0.6] }
+```
+
+- Asset `kind` gains `sound` and `video`. Asset gains optional `name` (string), `duration` (seconds) and `peaks`
+  (sound only: 0…1 values, the largest absolute sample per equal slice of the file, normally 128 of them). A sound's
+  id everywhere is its `sha`.
+- Accepted sound files: WAV, MP3, M4A (AAC or ALAC), AIFF and OGG (Vorbis or Opus), up to 64 MB. Anything else
+  answers 400 `{ code: "unsupported" }`.
+- `duration` and `peaks`: the server reads WAV and AIFF itself and uses `ffprobe`/`ffmpeg` (on `PATH` or in
+  `/opt/homebrew/bin`) for the rest. When it cannot, it keeps `duration` and `peaks` that the uploader sent as form
+  fields (`duration` = seconds, `peaks` = a JSON array), else stores `duration: 0, peaks: []`. The web editor always
+  sends them (it decodes the file with Web Audio first).
+
+| method | path | body / result |
+| --- | --- | --- |
+| GET | `/sounds` | `[Asset]` of kind `sound`, newest first |
+| POST | `/sounds` | multipart `file`, optional `name` (default: the file name without its extension), `duration`, `peaks` → Asset (201). `POST /assets` with `kind=sound` does the same |
+| PATCH | `/sounds/{sha}` | `{ name }` → Asset |
+| DELETE | `/sounds/{sha}` | 204. Pads, clips and cues that use it stay and show as "missing sound" |
+
+Channel **`sounds`** (editor, remote): `snapshot` with `d` = the list (as `GET /sounds`), `v` = a millisecond
+timestamp, on subscribe and on every change.
+
+### Soundboard pads (`scene.sounds`)
+
+```json
+"sounds": { "pads": [
+  { "id": "pad_thunder", "name": "thunder", "sound": "a77c31", "volume": 0.9, "color": "blue", "icon": "thunder", "key": "t", "loop": false },
+  { "id": "pad_rain", "name": "rain", "sound": "5d1e0a", "volume": 0.6, "color": "teal", "icon": "rain", "key": "r", "loop": true }
+] }
+```
+
+- Every scene has its own soundboard. `scene.sounds` is optional on decode (absent = `{ pads: [] }`); the server
+  always writes `sounds.pads`, so clients add a pad with `add /sounds/pads/-` and edit it with leaf patches such as
+  `replace /sounds/pads/0/volume`. Order is the grid order (left to right, top to bottom).
+- `id`: client-made `pad_<8 base36>`, unique within the pads. `name` 1…40 chars. `sound`: a sound sha (not checked
+  against the library, so a deleted sound leaves a pad that says "missing sound").
+- `volume` 0…1 (default 1). `color`: `ink` | `red` | `amber` | `green` | `teal` | `blue` | `violet` | `pink`
+  (default `ink`). `icon`: `none` | `bell` | `door` | `thunder` | `rain` | `wind` | `bird` | `music` | `voice` |
+  `knock` | `spark` | `heart` (default `none`; a client without a glyph for it shows the name only). `key`: one of
+  `a-z` or `0-9`, or absent: the web Show space plays the pad on that key. `loop` (default false): the sound repeats
+  until the pad is pressed again (`sound.stop { padId }`).
+
+### Audio output: `show.audio`
+
+```json
+"audio": { "output": "projector", "volume": 0.8, "muted": false, "loops": ["pad_rain"] }
+```
+
+- `loops` (optional, default `[]`): the looping pads playing now (below). Read only for clients.
+- `output`: which client plays every sound: `projector` (the `/out` page, default), `editor` (the laptop editor) or
+  `phone` (the iPhone app). `volume` 0…1 is the master (default 1); `muted` (default false) silences everything
+  without losing the volume. Absent on decode = `{ output: "projector", volume: 1, muted: false }`.
+- Change it with `cmd show.audio { output?, volume?, muted? }` or `POST /show/audio` (any subset); the show
+  version bumps and the show is broadcast. The master volume applies live to sounds that are already playing.
+- A client that can play sound says so with cap **`audio`** in `hello` (`/out`, the editor, the phone app; never
+  `/preview`). The **audio client** is every connection with cap `audio` whose role matches `output`:
+  `projector` → role `output`, `editor` → role `editor`, `phone` → role `remote`.
+
+### Playing sounds: `sound.play` and `sound.stop`
+
+- `cmd sound.play { padId? | soundId?, volume?, sceneId? }` (also `POST /sounds/play`). `padId` is looked up in
+  `sceneId` (default the active scene); `soundId` plays a library sound directly. `volume` (0…1, default 1)
+  multiplies the pad's volume. The server sends every audio client:
+
+  ```json
+  { "t": "sound.play", "d": { "playId": "ply_k2m9x0aa", "sound": "a77c31", "padId": "pad_thunder", "name": "thunder", "volume": 0.9, "loop": false } }
+  ```
+
+  and answers `ack { playId, outputs }` (`outputs` = how many clients got it), or `error { code: "no_audio" }` when no
+  audio client is connected ("Nothing plays sound right now. Open /out on the projector computer and click it once.").
+  Unknown pad → `not_found`; a pad without a sound → `bad_request`.
+- `cmd sound.stop { playId? | padId? }` (also `POST /sounds/stop`) sends `sound.stop { playId?, padId? }` to the audio
+  clients: `playId` stops one sound, `padId` every sound of that pad, neither stops every pad and cue sound (not the
+  timeline). Answers `ack`.
+- `sound.play` and `sound.stop` are direct messages (no `ch`) on the ordered queue. The audio client fetches
+  `/a/{sha}`, decodes once and caches, and plays at `volume × master` (0 while `muted`).
+- **Looping pads toggle on the server.** The server keeps the looping pads it started in `show.audio.loops`
+  (pad ids, in start order). `sound.play` of a looping pad that is already in `loops` stops it instead (it sends
+  `sound.stop { padId }`, removes it and answers `ack { stopped: true }`). `sound.stop` without ids, `show.stop`,
+  activating another scene and a server restart clear `loops`. UIs mark the pads in `loops` as playing.
+
+### Sound on the timeline
+
+```json
+{ "id": "trk_sound", "name": "sound", "target": { "kind": "sound", "id": null } }
+{ "id": "clp_rain", "trackId": "trk_sound", "effect": "sound", "start": 2, "end": 9, "fadeIn": 0.5, "fadeOut": 1.5,
+  "params": { "sound": "5d1e0a", "offset": 0.5, "volume": 0.8 } }
+```
+
+- Track `target.kind` may be `sound` (`id` null). A scene may hold several sound tracks; they mix.
+- Clips on a sound track have `effect: "sound"` and `params { sound, offset, volume }`: `sound` a sound sha,
+  `offset` ≥ 0 the seconds into the file where the clip starts (default 0), `volume` 0…1 (default 1). The clip plays
+  from `start` to `end`; at playhead `t` the file position is `offset + (t − start)`. `fadeIn` / `fadeOut` are linear
+  gain ramps at the clip's ends. Clips past the file's end are silent there. Effect `sound` is only valid on sound
+  tracks and sound tracks take only `sound` clips.
+- The audio client schedules the clips from `show.transport` and the active scene's timeline on the server clock
+  (Web Audio on the web, `AVAudioPlayer.play(atTime:)` on the phone): on every show or scene change it stops what it
+  scheduled and schedules again from the playhead, so clips stay within a frame of the picture. Paused and stopped
+  transports are silent. A clip that starts before the playhead starts at once at the right file position.
+- The editor's own preview clock (§12, Space) plays the timeline's sound clips locally in the editor whatever
+  `output` is, with a mute toggle on the transport bar; it sends nothing.
+
+### Cue sound
+
+```json
+{ "id": "cue_1", "at": 0, "label": "grid build", "autoFollow": false, "sound": { "sound": "a77c31", "volume": 1 } }
+```
+
+- `cue.sound` (optional, null or absent = none): `{ sound, volume }` (volume 0…1, default 1). When a cue starts on
+  the wall (GO, or playback passing an `autoFollow` cue) the server sends `sound.play { playId, sound, cueId, name,
+  volume, loop: false }` to the audio clients. Seek and back do not fire cue sounds.
+
+### Video layer
+
+```json
+{ "id": "lay_waves", "kind": "video", "ref": "youtube:aqz-KE-bpKQ", "name": "big buck bunny", "visible": false,
+  "opacity": 1, "blend": "normal", "light": null,
+  "params": { "blur": 0.2, "brightness": 0.8, "warmth": 0, "drift": 0, "start": 12, "end": 0, "audio": false, "volume": 1 } }
+```
+
+- Backdrop layer `kind` gains `video`. It belongs in `scenery` (picking a video tile replaces the scenery stack and
+  keeps blur, brightness, warmth and drift like a photo pick); `live` and `color` accept it too.
+- `ref`: `asset:<sha>` (an uploaded or downloaded MP4, MOV or WebM) or `youtube:<videoId>` (11 characters
+  `[A-Za-z0-9_-]`, an embedded YouTube player). Anything else is invalid.
+- `params` (catalog `videoParams`; the catalog `version` is 3): `blur` 0…1 (default 0.2), `brightness` 0…1 (0.8), `warmth` −1…1 (0), `drift`
+  0…1 (0), the photo controls; `start` ≥ 0 and `end` ≥ 0 seconds are the loop window (`end` 0 = the end of the
+  file); `audio` (default false) sends the video's own sound to the audio output; `volume` 0…1 (1).
+- `asset:` videos are a WebGL video texture drawn exactly like a photo (cover the frame, blur, brightness, warmth,
+  drift), looping `start`…`end`, muted. With `audio: true` and `output: "projector"`, `/out` unmutes its element at
+  `volume × master`; other outputs ignore the video's sound in this version.
+- `youtube:` videos are an embedded player (`https://www.youtube-nocookie.com/embed/<id>`, muted, looping, no
+  controls, from `start`, to `end` when set) that `/out` and `/preview` place **behind** the WebGL canvas, sized to
+  cover the frame (and rotated and flipped with the output), with CSS `blur()`, `brightness()` and a warm or cool tint
+  for warmth, and `opacity`. The canvas is transparent where nothing is drawn above it, so a YouTube layer always
+  shows at the bottom of its stack whatever its index; drift does not apply. Only one YouTube layer shows at a time
+  (the lowest visible one). The player needs the internet, which `asset:` videos do not.
+
+### Video library and YouTube import
+
+```json
+{ "id": "vid_9k2m1x0a", "name": "big buck bunny", "ref": "asset:7c4e1d", "source": "youtube",
+  "url": "https://www.youtube.com/watch?v=aqz-KE-bpKQ", "youtubeId": "aqz-KE-bpKQ", "sha": "7c4e1d", "thumb": "3a9f00",
+  "duration": 20, "width": 1920, "height": 1080, "createdAt": "2026-10-14T10:00:00Z" }
+```
+
+- A **Video** is one tile of the scenery "videos" category. `source`: `file` (an upload) or `youtube`. `ref` is what
+  a layer uses: `asset:<sha>` for files and downloads, `youtube:<id>` for embeds (then `sha`, `width`, `height` are
+  absent or 0). `thumb` is a JPEG asset sha (the frame at `start`, made with ffmpeg) or null; clients show
+  `https://i.ytimg.com/vi/<id>/hqdefault.jpg` for embeds without one.
+
+| method | path | body / result |
+| --- | --- | --- |
+| GET | `/videos` | `[Video]`, newest first |
+| POST | `/videos` | multipart `file` (MP4, MOV or WebM, up to 512 MB), optional `name` → Video (201); the file is stored as an asset of kind `video` |
+| PATCH | `/videos/{id}` | `{ name }` → Video |
+| DELETE | `/videos/{id}` | 204 (layers that use it go black: no texture) |
+| GET | `/videos/tools` | `{ ytdlp: bool, ffmpeg: bool }`: what the server found on `PATH` (and `/opt/homebrew/bin`) |
+| POST | `/videos/import` | `{ url, maxHeight?, start?, end?, name? }` → ImportJob (202) |
+| GET | `/videos/import/{id}` | ImportJob |
+
+- `url` must be a YouTube watch, short or Shorts link: `https://(www.|m.)youtube.com/watch?v=<id>`,
+  `https://youtu.be/<id>`, `https://(www.)youtube.com/shorts/<id>` (http or https; extra query parameters are
+  ignored). Anything else answers 400 `{ code: "invalid_url" }` ("Paste a YouTube link: youtube.com/watch,
+  youtu.be or a Shorts link.").
+- `maxHeight`: 360 | 480 | 720 | 1080 | 1440 | 2160 (default 1080). `start`, `end`: trim in seconds (≥ 0; `end` 0
+  or absent = to the end; `end` must be after `start`).
+
+```json
+{ "id": "imp_3k9x0aa1", "url": "https://youtu.be/aqz-KE-bpKQ", "youtubeId": "aqz-KE-bpKQ", "mode": "download",
+  "status": "running", "progress": 0.42, "message": "downloading 42%", "maxHeight": 1080, "start": 12, "end": 32,
+  "videoId": null, "ref": null, "createdAt": "2026-10-14T10:00:00Z" }
+```
+
+- **ImportJob**: `mode` `download` (yt-dlp found) or `embed` (it was not). `status` `running` | `done` | `failed`;
+  `progress` 0…1; `message` says what happens now, or why it failed. On `done`, `videoId` names the new Video and
+  `ref` is its layer ref.
+- With yt-dlp the server downloads the best MP4 at or below `maxHeight` (yt-dlp merges with ffmpeg), trims
+  `start`…`end` with ffmpeg (re-encoded, H.264, audio kept), stores it as a `video` asset, makes the thumb and the
+  Video (`source: "youtube"`, `ref: "asset:<sha>"`). Progress: download 0…0.8, trim 0.8…0.95, store to 1.
+- Without yt-dlp the job is `done` at once with `mode: "embed"` and a Video with `ref: "youtube:<id>"`, and its
+  `message` says: "yt-dlp is not installed, so this loop plays as an embedded YouTube player. Install it with brew
+  install yt-dlp for offline, sharper loops you can fully blur." The trim becomes the layer's `start` / `end`.
+- Channel **`import:{id}`** (editor, remote): `snapshot` of the ImportJob (`v` = an update counter) on subscribe and
+  on every change. Channel **`videos`** (editor, remote): `snapshot` with the Video list, like `sounds`.
+
+### Clients
+
+- **Seeding (backend).** A fresh server seeds the desk scene from `scene.json` without the parts that point at files
+  it does not have: the pads, the sound tracks and clips, cue sounds and video layers.
+- `/out` announces caps `["render", "audio"]`. A browser blocks sound until the page gets a click, unless Chrome
+  runs with `--autoplay-policy=no-user-gesture-required` (which `projmap open --out` passes). Until its Web Audio
+  context runs, `/out` shows "click to enable sound" over the picture and takes the click; `?headless=1` hides it.
+- The editor and the phone play only while `output` names them; the editor's preview sound (above) is separate.
+- MCP tools: `sound_list` (the library: sha, name, duration), `sound_play { pad | sound | name, volume? }` (a pad id
+  or name in the active scene, or a sound sha or name), and `clip_add` takes `sound` (sha or name), `offset` and
+  `volume` to put a sound clip on a sound track (it makes the scene's first sound track when `track` is `sound` or
+  absent with `sound` set).
+
+### Server notes (backend)
+
+- **Acks (backend).** `cmd sound.play` → `ack { playId, outputs }`; pressing a looping pad that plays now →
+  `ack { stopped: true, outputs }` (no `playId`); `cmd sound.stop` → `ack { outputs }`; `cmd show.audio` → `ack`
+  without `d` (the show snapshot carries the change). REST `POST /sounds/play` and `/sounds/stop` answer the same
+  objects with 200; `no_audio` is HTTP 409.
+- **Stopping loops (backend).** `show.stop` and activating a scene send `sound.stop { padId }` for every pad in
+  `loops` before clearing it. `sound.stop { playId }` of a looping pad's play also removes that pad from `loops`.
+- **Scenes (backend).** `GET /scenes` and the `scenes` channel list in creation order. `PATCH /scenes/{id}` answers
+  the summary with the new `version`. `DELETE /scenes/{id}` is open to editor and remote. A patch that sets `/name`
+  to a blank or longer than 80 characters answers 422 `invalid`. A pad may have no `sound` yet (it validates; playing
+  it answers `bad_request`).
+- **Sounds (backend).** `DELETE /sounds/{sha}` removes the file too (`/a/{sha}` answers 404). `POST /sounds`
+  sniffs WAV (`audio/wav`), AIFF (`audio/aiff`), OGG (`audio/ogg`), MP3 (`audio/mpeg`, ID3 or a frame sync) and M4A
+  (`audio/mp4`, an `ftyp` box with brand `M4A ` or a `.m4a` name). Uploader peaks are clamped to 0…1. Peaks are
+  rounded to 3 decimals; a file shorter than 128 frames gets fewer peaks.
+- **Videos (backend).** `POST /videos` sniffs MP4 (`video/mp4`), MOV (`video/quicktime`) and WebM (`video/webm`);
+  anything else answers 400 `unsupported`. `GET /videos/import` lists the recent import jobs (in memory, newest
+  first, up to 50 finished ones; a restart forgets them). Shorts links on `m.youtube.com` are accepted too. An embed
+  is named the given `name` or `youtube <id>`; a download the given `name` or the video's title. A download asks
+  yt-dlp for H.264 first and is re-encoded only when trimmed; a trim without ffmpeg ends `failed` ("ffmpeg is not
+  installed, so the server cannot trim the download. …"). A failed job's `message` starts "The import failed: ".
+  The thumb is the stored file's first frame (a trimmed download starts at `start`). Deleting a Video deletes its
+  file when no other Video uses it.
+- **MCP (backend).** `sound_play` needs the editor's "agent may preview" toggle, like `preview_on_projector`.

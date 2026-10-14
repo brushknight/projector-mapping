@@ -29,6 +29,10 @@ public enum SceneIntent: Codable, Sendable, Hashable {
     /// A preset: replaces `backdrop[mode]` with its stack and switches to that mode.
     case applyPreset(mode: String, backdrop: JSONValue)
     case setObjectVisible(objectId: String, visible: Bool)
+    /// Soundboard pads (protocol §14): a new pad at the end of the grid, a field of a pad (by id), removal.
+    case addPad(JSONValue)
+    case setPadField(padId: String, field: [String], value: JSONValue)
+    case removePad(padId: String)
     /// A raw op list for edits that have no intent yet; resent as is.
     case raw([PatchOp])
 
@@ -38,6 +42,11 @@ public enum SceneIntent: Codable, Sendable, Hashable {
             if let i = doc.value(at: ScenePath.layers(mode))?.array?.firstIndex(where: { $0["id"]?.string == id }) { return (mode, i) }
         }
         return nil
+    }
+
+    /// The index of a pad id in `/sounds/pads`.
+    public static func locatePad(_ doc: JSONValue, _ id: String) -> Int? {
+        doc.value(at: "/sounds/pads")?.array?.firstIndex { $0["id"]?.string == id }
     }
 
     /// Ops that create `/backdrop` and `/backdrop/<mode>` when a document lacks them.
@@ -94,6 +103,21 @@ public enum SceneIntent: Codable, Sendable, Hashable {
         case .setObjectVisible(let id, let visible):
             guard let i = doc.value(at: "/objects")?.array?.firstIndex(where: { $0["id"]?.string == id }) else { return nil }
             return [.replace("/objects/\(i)/visible", .bool(visible))]
+        case .addPad(let pad):
+            if doc.value(at: "/sounds")?.object == nil {
+                return [doc["sounds"] == nil ? .add("/sounds", ["pads": [pad]]) : .replace("/sounds", ["pads": [pad]])]
+            }
+            if doc.value(at: "/sounds/pads")?.array == nil {
+                return [doc.value(at: "/sounds/pads") == nil ? .add("/sounds/pads", [pad]) : .replace("/sounds/pads", [pad])]
+            }
+            return [.add("/sounds/pads/-", pad)]
+        case .setPadField(let id, let field, let value):
+            guard let i = Self.locatePad(doc, id), !field.isEmpty else { return nil }
+            let path = "/sounds/pads/\(i)" + field.map { "/" + JSONPointer.escape($0) }.joined()
+            return [doc.value(at: path) == nil ? .add(path, value) : .replace(path, value)]
+        case .removePad(let id):
+            guard let i = Self.locatePad(doc, id) else { return nil }
+            return [.remove("/sounds/pads/\(i)")]
         case .raw(let ops):
             return ops
         }

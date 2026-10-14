@@ -19,3 +19,25 @@
   color: var(--ink);
   font-size: var(--fs);
 }
+/* §14: the browser blocks sound until a click; one click anywhere resumes it */
+.sound {
+  position: absolute;
+  left: 50%;
+  bottom: 28px;
+  transform: translateX(-50%);
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 18px;
+  border-radius: 999px;
+  border: 1px solid var(--control-line);
+  background: var(--hint-bg);
+  backdrop-filter: blur(12px);
+  color: var(--ink);
+  font-family: var(--ui);
+  font-size: var(--fs);
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}

@@ -15,6 +15,12 @@ import {
   ICON_NAMES,
   LibTile,
   Log,
+  ModeTabs,
+  Pad,
+  ProgressBar,
+  Tile,
+  VolumeSlider,
+  Waveform,
   LogRow,
   Menu,
   NumField,
@@ -74,6 +80,10 @@ export function ComponentsPage() {
   const [dialog, setDialog] = useState(false)
   const [params, setParams] = useState<Record<string, unknown>>({})
   const [sel, setSel] = useState('top')
+  const [modeTab, setModeTab] = useState('static')
+  const [vol, setVol] = useState(0.8)
+  const [muted, setMuted] = useState(false)
+  const [looping, setLooping] = useState(true)
 
   return (
     <main className={s.page}>
@@ -306,6 +316,53 @@ export function ComponentsPage() {
               </Row>
             </Dialog>
           )}
+        </Demo>
+
+        <Demo name="ModeTabs" note="the Show space's mode tabs: the open one raised, the one on air with the red dot">
+          <ModeTabs
+            ariaLabel="mode"
+            value={modeTab}
+            onAir={modeTab}
+            onChange={setModeTab}
+            tabs={[
+              { value: 'static', label: 'static', icon: 'modeStatic' },
+              { value: 'live', label: 'live', icon: 'modeLive' },
+              { value: 'color', label: 'color', icon: 'modeColor' },
+              { value: 'scenery', label: 'scenery', icon: 'image' },
+              { value: 'objects', label: 'objects', icon: 'cube' },
+            ]}
+          />
+        </Demo>
+
+        <Demo name="Tile" note="picture tiles: gobos, gradients, photos, videos; the picked one gets the ink ring">
+          <div className={s.tiles}>
+            <Tile label="ember" on background="linear-gradient(135deg, var(--pad-amber), var(--pad-pink), var(--pad-violet))" onClick={() => toast('picked ember')} />
+            <Tile label="flowers" background={'center / cover no-repeat url("/catalog/assets/scenery/flowers.jpg")'} onClick={() => toast('picked flowers')} />
+            <Tile label="waves" aspect={16 / 10} icon="video" badge="0:20" meta="mp4" onClick={() => toast('picked waves')} />
+            <Tile label="gobo" icon="gobo" onClick={() => toast('picked gobo')} />
+          </div>
+        </Demo>
+
+        <Demo name="Pad" note="soundboard pads: tone from the --pad-* tokens, icon or name, key badge; playing glows">
+          <div className={s.pads}>
+            <Pad label="thunder" icon="thunder" tone="var(--pad-blue)" keyLabel="t" meta="0:03" onPress={() => toast('thunder')} onEdit={() => toast('edit thunder')} />
+            <Pad label="rain" icon="rain" tone="var(--pad-teal)" keyLabel="r" loop playing={looping} meta="0:12" onPress={() => setLooping((v) => !v)} />
+            <Pad label="door" tone="var(--pad-amber)" keyLabel="d" onPress={() => toast('door')} />
+            <Pad label="gone" icon="bell" tone="var(--pad-pink)" missing onPress={() => toast('missing sound')} />
+          </div>
+        </Demo>
+
+        <Demo name="Waveform" note="128 peaks, resampled; progress fills in ink">
+          <Waveform peaks={Array.from({ length: 128 }, (_, i) => Math.abs(Math.sin(i / 7)) * (0.3 + 0.7 * Math.abs(Math.sin(i / 31))))} progress={0.4} height={32} />
+        </Demo>
+
+        <Demo name="VolumeSlider" note="fill slider with mute; muting keeps the level">
+          <VolumeSlider label="master" value={vol} muted={muted} onChange={(v) => setVol(v)} onMute={setMuted} />
+        </Demo>
+
+        <Demo name="ProgressBar" note="one bar, or cue segments">
+          <ProgressBar value={0.42} label="upload" />
+          <ProgressBar segments={6} filled={2} label="cues" />
         </Demo>
 
         <Demo name="EmptyState">

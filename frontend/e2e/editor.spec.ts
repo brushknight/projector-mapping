@@ -4,7 +4,7 @@ import { API, mockLog, mockState, resetMock } from './lib'
 test.beforeEach(async ({ request }) => resetMock(request))
 
 test('the editor loads the fixture scene from the server', async ({ page }) => {
-  await page.goto('/editor')
+  await page.goto('/editor/map')
   await expect(page.getByTestId('scene-picker')).toContainText('desk')
   await expect(page.getByTestId('tree-object-obj_cube')).toContainText('zimacube')
   await expect(page.getByTestId('tree-surface-srf_top')).toBeVisible()
@@ -17,7 +17,7 @@ test('the editor loads the fixture scene from the server', async ({ page }) => {
 })
 
 test('dragging a point sends params and the server commits a patch', async ({ page, request }) => {
-  await page.goto('/editor')
+  await page.goto('/editor/map')
   const handle = page.locator('[data-point="p_r"] rect').first()
   await expect(handle).toBeVisible()
   const before = (await mockState(request)).scenes.find((s) => s.id === 'scn_desk')!.version
@@ -38,7 +38,7 @@ test('dragging a point sends params and the server commits a patch', async ({ pa
 })
 
 test('drawing a triangle sends a structural patch with a new surface', async ({ page, request }) => {
-  await page.goto('/editor')
+  await page.goto('/editor/map')
   await expect(page.getByTestId('stage-overlay')).toBeVisible()
   await page.keyboard.press('t')
   const box = (await page.getByTestId('stage-overlay').boundingBox())!
@@ -53,7 +53,7 @@ test('drawing a triangle sends a structural patch with a new surface', async ({ 
 })
 
 test('backstage edits go to a draft, not the live scene', async ({ page, request }) => {
-  await page.goto('/editor')
+  await page.goto('/editor/map')
   await page.getByRole('button', { name: 'backstage' }).click()
   await expect(page.getByText(/draft · 0 changes/)).toBeVisible()
   const before = (await mockState(request)).scenes.find((s) => s.id === 'scn_desk')!.version
@@ -68,7 +68,7 @@ test('backstage edits go to a draft, not the live scene', async ({ page, request
 })
 
 test('the agent panel starts a session and shows its proposal', async ({ page }) => {
-  await page.goto('/editor')
+  await page.goto('/editor/map')
   await page.getByRole('button', { name: 'agent', exact: true }).click()
   await page.getByPlaceholder('ask codex…').fill('nudge the right face')
   await page.getByPlaceholder('ask codex…').press('Enter')
@@ -83,7 +83,7 @@ test('the style guide renders every shared component', async ({ page }) => {
 })
 
 test('a session an MCP client starts outside the editor shows up with its proposal', async ({ page, request }) => {
-  await page.goto('/editor')
+  await page.goto('/editor/map')
   await page.getByRole('button', { name: 'agent', exact: true }).click()
   await expect(page.getByTestId('agent-panel')).toBeVisible()
   await request.post(`${API}/__mock/attach`, { data: { agent: 'claude' } })
@@ -93,7 +93,7 @@ test('a session an MCP client starts outside the editor shows up with its propos
 })
 
 test('the editor answers render.face for agents', async ({ page, request }) => {
-  await page.goto('/editor')
+  await page.goto('/editor/map')
   let r: { ok: boolean; d: Record<string, unknown> } = { ok: false, d: {} }
   for (let i = 0; i < 50 && !r.ok; i++) {
     r = await (await request.post(`${API}/__mock/rpc`, { data: { method: 'render.face', args: { sceneId: 'scn_desk', surfaceId: 'srf_right', t: 0, width: 200, height: 194 }, role: 'editor', timeoutMs: 8000 } })).json()

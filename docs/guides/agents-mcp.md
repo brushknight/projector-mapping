@@ -61,6 +61,7 @@ projmap mcp --url http://studio-mac.local:7400/mcp --token <token>
 | look at faces | `face_template_get`, `face_render`, `object_unfold_render` |
 | write (draft) | `surface_create`, `surface_update`, `surface_nudge`, `surface_create_from_camera`, `effect_create`, `effect_update`, `clip_add`, `cue_add`, `draft_diff` |
 | draw (draft) | `face_draw`, `face_drawing_clear`, `object_draw`, `layer_add`, `layer_update`, `layer_remove`, `asset_upload` |
+| sound | `sound_list`, `sound_play` (needs "agent may preview"); `clip_add` also puts sound clips on a sound track |
 | act | `calibration_run`, `detect_surfaces`, `alignment_error`, `projector_show`, `preview_on_projector`, `transport` |
 | hand-off | `proposal_submit`, `draft_apply` (needs "agent may apply") |
 

@@ -218,6 +218,27 @@ describe('Hub', () => {
     expect(s().last('telemetry')).toMatchObject({ d: { fps: 60 } })
   })
 
+  it('passes direct messages (sound.play) to onMessage listeners and says cap audio in hello', () => {
+    const socks: FakeSocket[] = []
+    const hub = new Hub({ role: 'output', name: 'out', url: 'ws://x/ws', caps: ['render', 'audio'], socketFactory: () => {
+      const s = new FakeSocket()
+      socks.push(s)
+      return s
+    } })
+    hub.connect()
+    socks[0].open()
+    expect(socks[0].last('hello')).toMatchObject({ d: { caps: ['render', 'audio'] } })
+    const got: unknown[] = []
+    const off = hub.onMessage<{ playId: string }>('sound.play', (d) => got.push(d.playId))
+    socks[0].recv({ t: 'sound.play', d: { playId: 'ply_1', sound: 'a', volume: 1, loop: false } })
+    socks[0].recv({ t: 'sound.stop', d: { playId: 'ply_1' } })
+    socks[0].recv({ t: 'sound.play', ch: 'other', d: { playId: 'ply_x' } })
+    off()
+    socks[0].recv({ t: 'sound.play', d: { playId: 'ply_2' } })
+    expect(got).toEqual(['ply_1'])
+    hub.close()
+  })
+
   it('computes medians', () => {
     expect(median([3, 1, 2])).toBe(2)
     expect(median([4, 1, 2, 3])).toBe(2.5)

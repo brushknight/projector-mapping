@@ -11,13 +11,15 @@ enum AppTab: String, CaseIterable, Hashable {
 /// Screens a launch argument can open (`-pm-screen <name>`), named after the boards in `design/boards/phone-*.png`.
 enum DebugScreen: String {
     case `static`, staticfx, live, addlayer, color, scenery, objects, automap1, automap2, automap3, automap4, setup, connect
+    /// Protocol §14 screens (no board): the scene picker, the sounds sheet, YouTube import, the scenery videos.
+    case scenes, sounds, youtube, videos
 
     var tab: AppTab {
         switch self {
         case .live, .addlayer: .live
         case .color: .color
-        case .scenery: .scenery
-        case .objects, .automap1, .automap2, .automap3, .automap4: .objects
+        case .scenery, .youtube, .videos: .scenery
+        case .objects, .automap1, .automap2, .automap3, .automap4, .sounds: .objects
         default: .static
         }
     }
@@ -41,6 +43,13 @@ final class AppModel {
     var showSetup = false
     var showAutoMap = false
     var showAddLayer = false
+    var showScenes = false
+    var showSounds = false
+    /// The "add from YouTube" sheet, with a link handed over by `projmap://youtube?url=…` or the clipboard.
+    var showYouTube = false
+    var youtubeLink = ""
+    /// The scenery tab opens on this category (the "videos" category after an import).
+    var sceneryCategory = "nature"
     var autoMapStep = 0
     var toast: String?
 
@@ -50,11 +59,14 @@ final class AppModel {
     private(set) var scenes: [SceneSummary] = []
     private(set) var presets: [Preset] = []
     private(set) var devices: [Device] = []
+    private(set) var sounds: [Asset] = []
+    private(set) var videos: [Video] = []
 
     var haptics: Bool { didSet { UserDefaults.standard.set(haptics, forKey: "haptics") } }
     var keepAwake: Bool { didSet { UserDefaults.standard.set(keepAwake, forKey: "keepAwake"); applyKeepAwake() } }
 
     @ObservationIgnored let camera = CameraController()
+    @ObservationIgnored let audio = AudioOutput()
     @ObservationIgnored private var observers: [Task<Void, Never>] = []
 
     init() {
@@ -76,6 +88,7 @@ final class AppModel {
         hub = LiveHub(db: database, identity: .init(name: UIDevice.current.name, build: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.1.0"))
         credentials = demoArg ? nil : TokenStore().load()
         if let s = debugScreen { tab = s.tab }
+        if debugScreen == .videos { sceneryCategory = "videos" }
         // -pm-connect 'projmap://connect?server=…&code=…' pairs at launch (UI tests, scripts).
         if let link = UserDefaults.standard.string(forKey: "pm-connect").flatMap(ConnectLink.init) {
             if credentials?.server != link.server || link.token != nil { credentials = nil; pendingLink = link }
@@ -85,11 +98,14 @@ final class AppModel {
     /// Starts the observations, the connection (or the demo) and the camera bridge.
     func start() {
         guard observers.isEmpty else { return }
-        observe(db.observeActive()) { self.active = $0; self.syncTab() }
+        observe(db.observeActive()) { self.active = $0; self.syncTab(); self.updateAudio() }
         observe(db.observeCatalog()) { self.catalog = $0 }
         observe(db.observeScenes()) { self.scenes = $0 }
         observe(db.observeAllPresets()) { self.presets = $0 }
         observe(db.observeDevices()) { self.devices = $0 }
+        observe(db.observeSounds()) { self.sounds = $0; self.updateAudio() }
+        observe(db.observeVideos()) { self.videos = $0 }
+        startAudio()
         if demo {
             DemoData.seed(db, screen: debugScreen)
             hub.startDemo()
@@ -142,6 +158,65 @@ final class AppModel {
             try? await Task.sleep(for: .seconds(2.4))
             if toast == message { toast = nil }
         }
+    }
+
+    // MARK: Audio output (the phone plays only while show.audio.output is "phone")
+
+    private func startAudio() {
+        audio.serverNowMs = { [hub] in hub.serverNowMs }
+        audio.source = { [weak self] sha in
+            guard let self else { return nil }
+            if self.demo { return DemoData.soundFile(sha) }
+            return await SoundCache.file(sha, api: self.api)
+        }
+        hub.onSound = { [audio] event in audio.handle(event) }
+    }
+
+    private func updateAudio() {
+        var durations: [String: Double] = [:]
+        for s in sounds { if let d = s.duration, d > 0 { durations[s.sha] = d } }
+        audio.update(show: active.show, scene: active.scene, durations: durations)
+    }
+
+    var audioState: ShowAudio { active.show?.audio ?? ShowAudio() }
+
+    /// The library entry of a sound sha.
+    func sound(_ sha: String) -> Asset? { sounds.first { $0.sha == sha } }
+
+    /// Plays a pad on the wall's audio output (cmd `sound.play`); a looping pad that plays stops instead.
+    func playPad(_ pad: Pad) {
+        guard hub.isLive else { flash("Not connected to the projector."); return }
+        Task {
+            do { try await hub.playPad(pad.id) } catch { flash(error.localizedDescription) }
+        }
+    }
+
+    func stopPad(_ pad: Pad) {
+        guard hub.isLive else { return }
+        Task { try? await hub.stopSound(padId: pad.id) }
+    }
+
+    /// Previews a library sound on the wall's audio output.
+    func preview(_ sound: Asset) {
+        guard hub.isLive else { flash("Not connected to the projector."); return }
+        Task {
+            do { try await hub.playSound(sound.sha) } catch { flash(error.localizedDescription) }
+        }
+    }
+
+    func setAudio(output: String? = nil, volume: Double? = nil, muted: Bool? = nil) {
+        guard hub.isLive else { flash("Not connected to the projector."); return }
+        Task {
+            do { try await hub.setAudio(output: output, volume: volume, muted: muted) } catch { flash(error.localizedDescription) }
+        }
+    }
+
+    // MARK: Scenes
+
+    /// Puts a scene on the wall (cmd `show.activate`).
+    func activate(_ sceneId: String) {
+        guard sceneId != self.sceneId else { return }
+        command("show.activate", ["sceneId": .string(sceneId)])
     }
 
     // MARK: Scene shortcuts

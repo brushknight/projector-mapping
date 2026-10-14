@@ -130,6 +130,8 @@ type Catalog struct {
 	Effects      []Effect `json:"effects"`
 	GradientPrms Schema   `json:"gradientParams"`
 	PhotoParams  Schema   `json:"photoParams"`
+	// VideoParams are the params of a video backdrop layer (catalog version 3).
+	VideoParams Schema `json:"videoParams"`
 
 	Raw json.RawMessage `json:"-"`
 }
@@ -177,6 +179,9 @@ func (c *Catalog) LayerSchema(kind, ref string) (Schema, bool) {
 		return c.PhotoParams, find(c.Scenery, ref) != nil
 	case "solid":
 		return nil, true
+	case "video":
+		// the ref's form (asset:<sha> or youtube:<id>) is checked by the scene
+		return c.VideoParams, true
 	}
 	return nil, false
 }

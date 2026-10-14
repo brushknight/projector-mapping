@@ -6,14 +6,17 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"sort"
 	"sync"
 	"time"
 
 	"projmap/internal/application/app_errors"
 	"projmap/internal/application/ports/out/realtime"
 	showrepo "projmap/internal/application/ports/repository/show"
+	assetssvc "projmap/internal/application/services/assets"
 	scenessvc "projmap/internal/application/services/scenes"
 	showsvc "projmap/internal/application/services/show"
+	"projmap/internal/domain/assets"
 	"projmap/internal/domain/scene"
 	"projmap/internal/domain/show"
 )
@@ -36,13 +39,26 @@ type Service struct {
 	timer *time.Timer
 	// soloTimer clears show.solo at its until; separate from the transport timer.
 	soloTimer *time.Timer
+
+	// audio clients and the sound library (UseAudio); nil sends no sound
+	direct realtime.Direct
+	sounds SoundLookup
+	// loopPlays maps the play id of each looping pad that plays now to its pad id
+	loopPlays map[string]string
 }
+
+// SoundLookup finds library sounds (the asset service).
+type SoundLookup interface {
+	Get(ctx context.Context, sha string) (*assets.Asset, error)
+}
+
+var _ SoundLookup = (assetssvc.AssetService)(nil)
 
 var _ showsvc.ShowService = (*Service)(nil)
 
 // New loads the saved show (or starts from def).
 func New(ctx context.Context, kv showrepo.KV, scenes scenessvc.SceneService, pub realtime.Publisher, log *slog.Logger, def show.Show) (*Service, error) {
-	s := &Service{kv: kv, scenes: scenes, pub: pub, log: log, now: func() int64 { return time.Now().UnixNano() }}
+	s := &Service{kv: kv, scenes: scenes, pub: pub, log: log, now: func() int64 { return time.Now().UnixNano() }, loopPlays: map[string]string{}}
 	b, err := kv.Get(ctx, kvKey)
 	if err != nil {
 		return nil, err
@@ -53,6 +69,16 @@ func New(ctx context.Context, kv showrepo.KV, scenes scenessvc.SceneService, pub
 			s.state = def
 		}
 	}
+	// the active scene survives restarts: keep the stored one when it exists, else put the first scene on the wall
+	store := b == nil
+	if ok, err := s.ensureActive(ctx); err != nil {
+		return nil, err
+	} else if ok {
+		store = true
+	}
+	// a restart clears the looping pads (nothing plays them any more)
+	s.state.Audio = s.state.Audio.Normalize()
+	s.state.Audio.Loops = []string{}
 	// a restart never resumes playback on its own
 	if s.state.Transport.State == show.Playing {
 		s.state.Transport = show.Pause(s.state.Transport, s.now())
@@ -65,10 +91,53 @@ func New(ctx context.Context, kv showrepo.KV, scenes scenessvc.SceneService, pub
 	if s.state.Solo != nil && s.state.Solo.Until <= s.now() {
 		s.state.Solo = nil
 	}
+	if store {
+		if b, err := json.Marshal(s.state); err == nil {
+			if err := kv.Put(ctx, kvKey, b); err != nil {
+				return nil, err
+			}
+		}
+	}
 	s.mu.Lock()
 	s.armSolo()
 	s.mu.Unlock()
 	return s, nil
+}
+
+// ensureActive makes sure a server with scenes has an active one: the stored scene when it exists, else the first of
+// the list (creation order). It reports whether it changed the state.
+func (s *Service) ensureActive(ctx context.Context) (bool, error) {
+	list, err := s.scenes.List(ctx)
+	if err != nil {
+		return false, err
+	}
+	for _, sc := range list {
+		if sc.ID == s.state.ActiveSceneID {
+			if s.state.ActiveSetupID == "" {
+				s.state.ActiveSetupID = sc.SetupID
+				return true, nil
+			}
+			return false, nil
+		}
+	}
+	if len(list) == 0 {
+		if s.state.ActiveSceneID == "" {
+			return false, nil
+		}
+		s.state.ActiveSceneID = ""
+		return true, nil
+	}
+	if s.state.ActiveSceneID != "" {
+		s.log.Info("the stored active scene is gone; activating the first scene", "was", s.state.ActiveSceneID, "now", list[0].ID)
+	}
+	s.state.ActiveSceneID, s.state.ActiveSetupID = list[0].ID, list[0].SetupID
+	s.state.Transport, s.state.Preview = show.Stop(), nil
+	return true, nil
+}
+
+// UseAudio connects the audio clients and the sound library.
+func (s *Service) UseAudio(direct realtime.Direct, sounds SoundLookup) {
+	s.direct, s.sounds = direct, sounds
 }
 
 // SetClock replaces the clock (tests).
@@ -90,6 +159,13 @@ func cuesOf(sc *scene.Scene) []show.Cue {
 	return out
 }
 
+// sortedCues are the scene's cues in transport order (show.SortCues: stable by time), so transport.cue indexes them.
+func sortedCues(sc *scene.Scene) []scene.Cue {
+	out := append([]scene.Cue(nil), sc.Timeline.Cues...)
+	sort.SliceStable(out, func(i, j int) bool { return out[i].At < out[j].At })
+	return out
+}
+
 // sceneFor returns the scene the transport runs on: the preview draft's scene or the active one.
 func (s *Service) activeScene(ctx context.Context) (*scene.Scene, error) {
 	if s.state.ActiveSceneID == "" {
@@ -108,6 +184,9 @@ func (s *Service) Do(ctx context.Context, action string, args json.RawMessage, b
 		SurfaceIDs *[]string `json:"surfaceIds"`
 		Fill       string    `json:"fill"`
 		Seconds    *float64  `json:"seconds"`
+		Output     *string   `json:"output"`
+		Volume     *float64  `json:"volume"`
+		Muted      *bool     `json:"muted"`
 	}
 	if len(args) > 0 && string(args) != "null" {
 		if err := json.Unmarshal(args, &a); err != nil {
@@ -142,6 +221,7 @@ func (s *Service) Do(ctx context.Context, action string, args json.RawMessage, b
 		}
 		st.ActiveSceneID, st.ActiveSetupID = sc.ID, sc.SetupID
 		st.Transport, st.Preview = show.Stop(), nil
+		st.Audio = s.clearLoops(st.Audio)
 	case "play", "pause", "stop", "go", "back", "seek":
 		sc, err := s.activeScene(ctx)
 		if err != nil {
@@ -155,12 +235,16 @@ func (s *Service) Do(ctx context.Context, action string, args json.RawMessage, b
 			st.Transport = show.Pause(st.Transport, now)
 		case "stop":
 			st.Transport, st.Preview = show.Stop(), nil
+			st.Audio = s.clearLoops(st.Audio)
 		case "go":
 			t, err := show.Go(st.Transport, cues, now)
 			if err != nil {
 				return st, app_errors.NoCue("%s", err.Error())
 			}
 			st.Transport = t
+			if len(cues) > 0 && st.Preview == nil {
+				defer s.cueSound(ctx, sc, t.Cue)
+			}
 		case "back":
 			st.Transport = show.Back(st.Transport, cues, now)
 		case "seek":
@@ -175,6 +259,26 @@ func (s *Service) Do(ctx context.Context, action string, args json.RawMessage, b
 			return st, err
 		}
 		st.Solo = solo
+	case "audio":
+		au := st.Audio.Normalize()
+		if a.Output != nil {
+			switch *a.Output {
+			case show.OutputProjector, show.OutputEditor, show.OutputPhone:
+				au.Output = *a.Output
+			default:
+				return st, app_errors.BadRequest("audio output %q is not one of projector, editor, phone.", *a.Output)
+			}
+		}
+		if a.Volume != nil {
+			if *a.Volume < 0 || *a.Volume > 1 {
+				return st, app_errors.BadRequest("audio volume must be 0..1.")
+			}
+			au.Volume = *a.Volume
+		}
+		if a.Muted != nil {
+			au.Muted = *a.Muted
+		}
+		st.Audio = au
 	default:
 		return st, app_errors.NotFound("Show action %q does not exist.", action)
 	}
@@ -209,6 +313,7 @@ func (s *Service) Preview(ctx context.Context, draftID string, from, to float64,
 // commit stores and publishes the new state and re-arms the cue timer; callers hold mu.
 func (s *Service) commit(ctx context.Context, st show.Show) {
 	st.Version = s.state.Version + 1
+	st.Audio = st.Audio.Normalize()
 	s.state = st
 	b, _ := json.Marshal(st)
 	if err := s.kv.Put(ctx, kvKey, b); err != nil {
@@ -335,10 +440,17 @@ func (s *Service) tick(ver int64) {
 		s.commit(ctx, st)
 		return
 	}
+	from := st.Transport.Cue
 	t, changed := show.Advance(st.Transport, cuesOf(sc), sc.Timeline.Duration, now)
 	if changed {
 		st.Transport = t
 		s.commit(ctx, st)
+		// playback passed auto-follow cues: each one starts on the wall
+		if st.Preview == nil {
+			for i := from + 1; i <= t.Cue; i++ {
+				s.cueSound(ctx, sc, i)
+			}
+		}
 		return
 	}
 	s.arm(ctx)

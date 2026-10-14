@@ -19,7 +19,21 @@ export interface Show {
   preview?: { draftId: string; until?: number | string | null } | null
   /** (§12) the wall draws only these surfaces until `until` (server Unix ns) */
   solo?: ShowSolo | null
+  /** (§14) who plays sound and how loud; absent = DEFAULT_AUDIO */
+  audio?: ShowAudio | null
 }
+
+/** (§14) which client plays every sound */
+export type AudioOutput = 'projector' | 'editor' | 'phone'
+export interface ShowAudio {
+  output: AudioOutput
+  volume: number
+  muted: boolean
+  /** the looping pads playing now (read only) */
+  loops?: string[]
+}
+export const DEFAULT_AUDIO: ShowAudio = { output: 'projector', volume: 1, muted: false, loops: [] }
+export const showAudio = (show: { audio?: ShowAudio | null } | null | undefined): ShowAudio => ({ ...DEFAULT_AUDIO, ...(show?.audio ?? {}) })
 
 export type SoloFill = 'content' | 'white' | 'grid'
 export interface ShowSolo {
@@ -28,7 +42,7 @@ export interface ShowSolo {
   until: number
 }
 
-export type ShowAction = 'go' | 'back' | 'play' | 'pause' | 'stop' | 'seek' | 'blackout' | 'activate' | 'solo' | 'preview'
+export type ShowAction = 'go' | 'back' | 'play' | 'pause' | 'stop' | 'seek' | 'blackout' | 'activate' | 'solo' | 'preview' | 'audio'
 
 /**
  * The playhead in seconds. `serverNowMs` is the server clock in milliseconds (local clock + measured offset).

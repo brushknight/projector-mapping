@@ -12,7 +12,9 @@ set -euo pipefail
 sim=$1 screen=$2 scroll=${3:-0}
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 src="$root/design/boards/phone-$screen.png"
-[ -f "$src" ] || { echo "no board $src" >&2; exit 2; }
+# Screens without a board (scenes, sounds, youtube, videos) have no pixel reference: screenshot them with
+#   scripts/shot.sh <sim> <out.png> <screen> [seconds] [scroll-pt]
+[ -f "$src" ] || { echo "no board $src; screenshot it with: scripts/shot.sh $sim <out.png> $screen" >&2; exit 2; }
 out="$root/ios/.build/compare"; mkdir -p "$out"
 name=$screen; [ "$scroll" != 0 ] && name="$screen@$scroll"
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT

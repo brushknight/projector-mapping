@@ -35,7 +35,8 @@ func (h *Handler) RegisterRoutes(api *echo.Group) {
 	api.POST("/scenes", h.create, middleware.Control)
 	api.POST("/scenes/from-photo", h.fromPhoto, middleware.Control)
 	api.GET("/scenes/:id", h.get)
-	api.DELETE("/scenes/:id", h.delete, middleware.Editor)
+	api.PATCH("/scenes/:id", h.rename, middleware.Control)
+	api.DELETE("/scenes/:id", h.delete, middleware.Control)
 	api.POST("/scenes/:id/patch", h.patch, middleware.Control)
 	api.POST("/scenes/:id/undo", h.undo, middleware.Control)
 	api.POST("/scenes/:id/redo", h.redo, middleware.Control)
@@ -64,11 +65,19 @@ func (h *Handler) list(c echo.Context) error {
 
 func (h *Handler) create(c echo.Context) error {
 	var in struct {
-		Name    string `json:"name"`
-		SetupID string `json:"setupId"`
+		Name      string `json:"name"`
+		SetupID   string `json:"setupId"`
+		Duplicate string `json:"duplicate"`
 	}
 	if err := httpx.Bind(c, &in); err != nil {
 		return err
+	}
+	if in.Duplicate != "" {
+		s, err := h.Scenes.Duplicate(c.Request().Context(), in.Duplicate, in.Name)
+		if err != nil {
+			return err
+		}
+		return c.JSON(http.StatusCreated, s)
 	}
 	if in.SetupID == "" {
 		in.SetupID = h.Show.Get(c.Request().Context()).ActiveSetupID
@@ -130,9 +139,26 @@ func (h *Handler) get(c echo.Context) error {
 	return c.JSONBlob(http.StatusOK, doc)
 }
 
+func (h *Handler) rename(c echo.Context) error {
+	var in struct {
+		Name *string `json:"name"`
+	}
+	if err := httpx.Bind(c, &in); err != nil {
+		return err
+	}
+	if in.Name == nil {
+		return app_errors.BadRequest("PATCH /scenes/{id} takes {name}.")
+	}
+	sum, err := h.Scenes.Rename(c.Request().Context(), c.Param("id"), *in.Name, middleware.Of(c).By())
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, sum)
+}
+
 func (h *Handler) delete(c echo.Context) error {
 	if h.Show.Get(c.Request().Context()).ActiveSceneID == c.Param("id") {
-		return app_errors.Conflict("Scene %s is on the projector; activate another scene first.", c.Param("id"))
+		return app_errors.SceneActive("Activate another scene first.")
 	}
 	if err := h.Scenes.Delete(c.Request().Context(), c.Param("id")); err != nil {
 		return err

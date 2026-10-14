@@ -142,6 +142,26 @@
   "scenery": {
    "layers": [
     {
+     "id": "lay_waves",
+     "kind": "video",
+     "ref": "youtube:aqz-KE-bpKQ",
+     "name": "big buck bunny",
+     "visible": false,
+     "opacity": 1,
+     "blend": "normal",
+     "light": null,
+     "params": {
+      "blur": 0.2,
+      "brightness": 0.8,
+      "warmth": 0,
+      "drift": 0,
+      "start": 12,
+      "end": 0,
+      "audio": false,
+      "volume": 1
+     }
+    },
+    {
      "id": "lay_flowers",
      "kind": "photo",
      "ref": "flowers",
@@ -502,14 +522,36 @@
          },
          {
           "tool": "polygon",
-          "points": [[0.7, 0.2], [0.85, 0.2], [0.78, 0.34]],
+          "points": [
+           [
+            0.7,
+            0.2
+           ],
+           [
+            0.85,
+            0.2
+           ],
+           [
+            0.78,
+            0.34
+           ]
+          ],
           "color": "#ff3b30",
           "width": 2,
           "fill": true
          },
          {
           "tool": "circle",
-          "points": [[0.88, 0.85], [0.9, 0.85]],
+          "points": [
+           [
+            0.88,
+            0.85
+           ],
+           [
+            0.9,
+            0.85
+           ]
+          ],
           "color": "#34c759",
           "width": 0,
           "fill": true
@@ -814,6 +856,30 @@
    ]
   }
  ],
+ "sounds": {
+  "pads": [
+   {
+    "id": "pad_thunder",
+    "name": "thunder",
+    "sound": "a77c31",
+    "volume": 0.9,
+    "color": "blue",
+    "icon": "thunder",
+    "key": "t",
+    "loop": false
+   },
+   {
+    "id": "pad_rain",
+    "name": "rain",
+    "sound": "5d1e0a",
+    "volume": 0.6,
+    "color": "teal",
+    "icon": "rain",
+    "key": "r",
+    "loop": true
+   }
+  ]
+ },
  "timeline": {
   "duration": 20.0,
   "tracks": [
@@ -887,6 +953,14 @@
     "target": {
      "kind": "layer",
      "id": "cl_sweep"
+    }
+   },
+   {
+    "id": "trk_sound",
+    "name": "sound",
+    "target": {
+     "kind": "sound",
+     "id": null
     }
    }
   ],
@@ -1009,6 +1083,20 @@
      "from": -1,
      "to": 1
     }
+   },
+   {
+    "id": "clp_rain",
+    "trackId": "trk_sound",
+    "effect": "sound",
+    "start": 2,
+    "end": 9,
+    "fadeIn": 0.5,
+    "fadeOut": 1.5,
+    "params": {
+     "sound": "5d1e0a",
+     "offset": 0.5,
+     "volume": 0.8
+    }
    }
   ],
   "cues": [
@@ -1016,7 +1104,11 @@
     "id": "cue_1",
     "at": 0,
     "label": "grid build",
-    "autoFollow": false
+    "autoFollow": false,
+    "sound": {
+     "sound": "a77c31",
+     "volume": 1
+    }
    },
    {
     "id": "cue_2",

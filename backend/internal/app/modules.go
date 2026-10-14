@@ -8,6 +8,7 @@ import (
 	"gorm.io/gorm"
 
 	agentport "projmap/internal/application/ports/out/agents"
+	"projmap/internal/application/ports/out/media"
 	"projmap/internal/application/ports/out/realtime"
 	showrepo "projmap/internal/application/ports/repository/show"
 	"projmap/internal/application/services/agents/agentsvc"
@@ -22,6 +23,9 @@ import (
 	"projmap/internal/application/services/setups/setupsvc"
 	showservices "projmap/internal/application/services/show"
 	"projmap/internal/application/services/show/showsvc"
+	soundsservices "projmap/internal/application/services/sounds"
+	"projmap/internal/application/services/sounds/soundsvc"
+	"projmap/internal/application/services/videos/videosvc"
 	builtin "projmap/internal/catalog"
 	"projmap/internal/domain/show"
 	"projmap/internal/infrastructure/clients/agentrunner"
@@ -32,6 +36,7 @@ import (
 	devicesql "projmap/internal/infrastructure/database/sql/devices"
 	scenesql "projmap/internal/infrastructure/database/sql/scenes"
 	setupsql "projmap/internal/infrastructure/database/sql/setups"
+	videosql "projmap/internal/infrastructure/database/sql/videos"
 	"projmap/internal/infrastructure/filesystem/blobs"
 	agentshttp "projmap/internal/infrastructure/http_server/handlers/agents"
 	assetshttp "projmap/internal/infrastructure/http_server/handlers/assets"
@@ -41,6 +46,8 @@ import (
 	sceneshttp "projmap/internal/infrastructure/http_server/handlers/scenes"
 	setupshttp "projmap/internal/infrastructure/http_server/handlers/setups"
 	showhttp "projmap/internal/infrastructure/http_server/handlers/show"
+	soundshttp "projmap/internal/infrastructure/http_server/handlers/sounds"
+	videoshttp "projmap/internal/infrastructure/http_server/handlers/videos"
 	"projmap/internal/infrastructure/realtime/hub"
 	"projmap/internal/infrastructure/vision/adapter"
 )
@@ -121,12 +128,36 @@ func (m *ShowModule) Register(api *echo.Group) { showhttp.New(m.Service).Registe
 // AssetsModule is the assets section.
 type AssetsModule struct{ Service *assetsvc.Service }
 
-func NewAssetsModule(db *gorm.DB, root string) *AssetsModule {
-	return &AssetsModule{Service: assetsvc.New(assetsql.New(db), blobs.New(root))}
+func NewAssetsModule(db *gorm.DB, root string, tools media.Tools) *AssetsModule {
+	svc := assetsvc.New(assetsql.New(db), blobs.New(root))
+	svc.UseMedia(tools)
+	return &AssetsModule{Service: svc}
 }
 
-func (m *AssetsModule) Register(root *echo.Echo, api *echo.Group) {
-	assetshttp.New(m.Service, builtin.Assets()).RegisterRoutes(root, api)
+func (m *AssetsModule) Register(root *echo.Echo, api *echo.Group, sounds soundsservices.SoundService) {
+	assetshttp.New(m.Service, builtin.Assets()).WithSounds(sounds).RegisterRoutes(root, api)
+}
+
+// SoundsModule is the sound library (protocol §14); playing goes through the show.
+type SoundsModule struct{ Service *soundsvc.Service }
+
+func NewSoundsModule(as assetsservices.AssetService, pub realtime.Publisher) *SoundsModule {
+	return &SoundsModule{Service: soundsvc.New(as, pub)}
+}
+
+func (m *SoundsModule) Register(api *echo.Group, sh showservices.ShowService) {
+	(&soundshttp.Handler{Sounds: m.Service, Show: sh}).RegisterRoutes(api)
+}
+
+// VideosModule is the video library and YouTube imports (protocol §14).
+type VideosModule struct{ Service *videosvc.Service }
+
+func NewVideosModule(db *gorm.DB, as assetsservices.AssetService, tools media.Tools, pub realtime.Publisher, log *slog.Logger, tmp string) *VideosModule {
+	return &VideosModule{Service: videosvc.New(videosql.New(db), as, tools, pub, log, tmp)}
+}
+
+func (m *VideosModule) Register(api *echo.Group) {
+	(&videoshttp.Handler{Videos: m.Service, TempDir: m.Service.TempDir}).RegisterRoutes(api)
 }
 
 // DevicesModule is the devices section: pairing and presence.

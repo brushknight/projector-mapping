@@ -13,6 +13,7 @@ import (
 	"golang.org/x/image/draw"
 
 	"projmap/internal/application/app_errors"
+	"projmap/internal/application/ports/out/media"
 	assetrepo "projmap/internal/application/ports/repository/assets"
 	assetssvc "projmap/internal/application/services/assets"
 	"projmap/internal/domain/assets"
@@ -25,6 +26,7 @@ const ThumbSize = 512
 type Service struct {
 	repo  assetrepo.AssetRepository
 	blobs assetrepo.Blobs
+	media media.Tools
 }
 
 var _ assetssvc.AssetService = (*Service)(nil)
@@ -33,6 +35,9 @@ var _ assetssvc.AssetService = (*Service)(nil)
 func New(repo assetrepo.AssetRepository, blobs assetrepo.Blobs) *Service {
 	return &Service{repo: repo, blobs: blobs}
 }
+
+// UseMedia sets the media tools (ffprobe and ffmpeg for sounds and videos the server cannot read itself).
+func (s *Service) UseMedia(m media.Tools) { s.media = m }
 
 // Sniff returns the mime type, recognizing HEIC/HEIF too.
 func Sniff(b []byte) string {
@@ -63,7 +68,10 @@ func (s *Service) Upload(ctx context.Context, data []byte, kind string) (*assets
 		kind = "photo"
 	}
 	if !assets.Kinds[kind] {
-		return nil, app_errors.BadRequest("kind must be photo, reference, snapshot, calibration or thumb.")
+		return nil, app_errors.BadRequest("kind must be photo, reference, snapshot, calibration, thumb, sound or video.")
+	}
+	if kind == assets.KindSound {
+		return s.UploadSound(ctx, data, assetssvc.SoundIn{})
 	}
 	sha, err := s.blobs.Put(data)
 	if err != nil {
@@ -84,6 +92,9 @@ func (s *Service) Upload(ctx context.Context, data []byte, kind string) (*assets
 				a.Thumb = &t
 			}
 		}
+	}
+	if kind == assets.KindVideo {
+		s.probeVideo(ctx, a)
 	}
 	if err := s.repo.Save(ctx, a); err != nil {
 		return nil, err

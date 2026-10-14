@@ -43,6 +43,7 @@ export function trackSurfaces(scene: Scene, track: Track): Surface[] {
   const t = track.target
   if (t.kind === 'all') return allSurfaces(scene).map((r) => r.surface)
   if (t.kind === 'object') return scene.objects.find((o) => o.id === t.id)?.surfaces ?? []
+  if (t.kind === 'sound' || !t.id) return []
   const r = findSurface(scene, t.id)
   return r ? [r.surface] : []
 }

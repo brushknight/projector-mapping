@@ -4,7 +4,8 @@ import { useCatalog } from '../../entities/catalog'
 import { effectApi, type EffectDef } from '../../entities/effect'
 import { activeTestPattern, sceneSize } from '../../entities/setup'
 import { ambientClock, playheadNow, useBlackout, useLiveDocs, activeSolo } from '../../entities/show'
-import { Renderer } from '../../render'
+import { YouTubeBackdrop } from '../../entities/video/youtube'
+import { activeYouTube, Renderer } from '../../render'
 import { setAuthToken } from '../../shared/lib/http'
 import { useOwnHub } from '../../shared/lib/useHub'
 import { useRaf } from '../../shared/lib/useRaf'
@@ -14,7 +15,8 @@ import s from './styles.module.css'
 /**
  * The chrome-less preview for the iPhone's WKWebView (protocol §6): the active scene (hero) or one backdrop layer
  * (mode=layer&layer=<id>), read only, at most 30 fps, rendered at `w` px wide (default 640). The hero draws the scene's
- * on-air mode and the active test pattern exactly like /out.
+ * on-air mode and the active test pattern exactly like /out, and a YouTube video layer in a player behind the canvas
+ * (§14). It never plays sound (no cap `audio`).
  */
 export function PreviewPage() {
   const { token, w, mode, layer } = useSearch({ from: '/preview' })
@@ -34,7 +36,7 @@ export function PreviewPage() {
 
   useEffect(() => {
     try {
-      renderer.current = new Renderer(canvasRef.current!, { space: 'scene', maxSceneSize: Math.max(width, 960), preserveDrawingBuffer: true })
+      renderer.current = new Renderer(canvasRef.current!, { space: 'scene', maxSceneSize: Math.max(width, 960), preserveDrawingBuffer: true, transparent: true })
     } catch {
       renderer.current = null
     }
@@ -81,9 +83,13 @@ export function PreviewPage() {
   }, 30)
 
   const aspect = setup ? sceneSize(setup.output) : { width: 16, height: 9 }
+  const youtube = activeYouTube(scene, { layerOnly: layerMode ? layer ?? null : null, solo: layerMode ? null : activeSolo(show, hub.serverNow()) })
   return (
     <div className={s.preview}>
-      <canvas ref={canvasRef} className={s.canvas} style={{ aspectRatio: `${aspect.width} / ${aspect.height}` }} data-testid="preview-canvas" />
+      <div className={s.frame} style={{ aspectRatio: `${aspect.width} / ${aspect.height}` }}>
+        <YouTubeBackdrop active={youtube} scene={aspect} />
+        <canvas ref={canvasRef} className={s.canvas} style={{ aspectRatio: `${aspect.width} / ${aspect.height}` }} data-testid="preview-canvas" />
+      </div>
     </div>
   )
 }

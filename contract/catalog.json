@@ -1,5 +1,5 @@
 {
- "version": 2,
+ "version": 3,
  "paramSchemaNote": "each param: {type: number|integer|boolean|color|enum|string|strokes, min?, max?, step?, default, label?, unit?, options?}; strokes is an array of drawing strokes (protocol §1, effect drawing)",
  "light": {
   "params": {
@@ -726,6 +726,64 @@
    "max": 1,
    "default": 0.1,
    "label": "slow drift"
+  }
+ },
+ "videoParams": {
+  "blur": {
+   "type": "number",
+   "min": 0,
+   "max": 1,
+   "default": 0.2,
+   "label": "background blur"
+  },
+  "brightness": {
+   "type": "number",
+   "min": 0,
+   "max": 1,
+   "default": 0.8,
+   "label": "brightness"
+  },
+  "warmth": {
+   "type": "number",
+   "min": -1,
+   "max": 1,
+   "default": 0,
+   "label": "warmth"
+  },
+  "drift": {
+   "type": "number",
+   "min": 0,
+   "max": 1,
+   "default": 0,
+   "label": "slow drift"
+  },
+  "start": {
+   "type": "number",
+   "min": 0,
+   "max": 36000,
+   "default": 0,
+   "label": "loop from",
+   "unit": "s"
+  },
+  "end": {
+   "type": "number",
+   "min": 0,
+   "max": 36000,
+   "default": 0,
+   "label": "loop to",
+   "unit": "s"
+  },
+  "audio": {
+   "type": "boolean",
+   "default": false,
+   "label": "play its sound"
+  },
+  "volume": {
+   "type": "number",
+   "min": 0,
+   "max": 1,
+   "default": 1,
+   "label": "volume"
   }
  },
  "effects": [

@@ -18,9 +18,11 @@ import (
 	"gorm.io/gorm"
 
 	agentport "projmap/internal/application/ports/out/agents"
+	"projmap/internal/application/ports/out/media"
 	"projmap/internal/application/services"
 	"projmap/internal/catalog"
 	"projmap/internal/config"
+	"projmap/internal/infrastructure/clients/mediatools"
 	showsql "projmap/internal/infrastructure/database/sql/show"
 	"projmap/internal/infrastructure/database/sqlite"
 	"projmap/internal/infrastructure/discovery"
@@ -40,6 +42,8 @@ type Options struct {
 	Runner agentport.Runner
 	// MCPURL is where agents reach /mcp (default http://127.0.0.1:<port>/mcp).
 	MCPURL string
+	// Media runs ffprobe, ffmpeg and yt-dlp (default: found on PATH, /opt/homebrew/bin and /usr/local/bin).
+	Media media.Tools
 }
 
 // App is the running server.
@@ -59,6 +63,8 @@ type App struct {
 	Devices  *DevicesModule
 	Camera   *CameraModule
 	Agents   *AgentsModule
+	Sounds   *SoundsModule
+	Videos   *VideosModule
 	ServerID string
 
 	stopBonjour func()
@@ -104,7 +110,14 @@ func New(ctx context.Context, o Options) (*App, error) {
 	if a.Show, err = NewShowModule(ctx, kv, a.Scenes.Service, pub, log, seeded); err != nil {
 		return nil, err
 	}
-	a.Assets = NewAssetsModule(db, filepath.Join(cfg.DataDir, "assets"))
+	mt := o.Media
+	if mt == nil {
+		mt = mediatools.New(nil)
+	}
+	a.Assets = NewAssetsModule(db, filepath.Join(cfg.DataDir, "assets"), mt)
+	a.Show.Service.UseAudio(a.Hub, a.Assets.Service)
+	a.Sounds = NewSoundsModule(a.Assets.Service, pub)
+	a.Videos = NewVideosModule(db, a.Assets.Service, mt, pub, log, filepath.Join(cfg.DataDir, "tmp"))
 	a.Devices = NewDevicesModule(db, pub, a.Hub, cfg.Port)
 	a.Camera = NewCameraModule(db, a.Hub, a.Assets.Service, a.Setups.Service, a.Show.Service, log)
 	mcpURL := o.MCPURL
@@ -118,7 +131,8 @@ func New(ctx context.Context, o Options) (*App, error) {
 		AgentConfig{MCPURL: mcpURL, Self: self, WorkDir: workDir})
 	a.Hub.SetServices(hub.Services{Devices: a.Devices.Service, Scenes: a.Scenes.Service, Drafts: a.Scenes.Drafts,
 		Presets: a.Scenes.Presets, Setups: a.Setups.Service, Show: a.Show.Service, Agents: a.Agents.Service,
-		Calibrations: a.Camera.Calibrations, Camera: a.Camera.Camera, CatalogVersion: a.Catalog.Service.Catalog().Version})
+		Calibrations: a.Camera.Calibrations, Camera: a.Camera.Camera, Sounds: a.Sounds.Service, Videos: a.Videos.Service,
+		CatalogVersion: a.Catalog.Service.Catalog().Version})
 
 	a.e = httpserver.New(log)
 	public := a.e.Group("/api/v1")
@@ -128,12 +142,14 @@ func New(ctx context.Context, o Options) (*App, error) {
 	a.Setups.Register(api)
 	a.Scenes.Register(api, a.Setups.Service, a.Show.Service, a.Assets.Service)
 	a.Show.Register(api)
-	a.Assets.Register(a.e, api)
+	a.Assets.Register(a.e, api, a.Sounds.Service)
+	a.Sounds.Register(api, a.Show.Service)
+	a.Videos.Register(api)
 	a.Camera.Register(api, a.Show.Service)
 	a.Agents.Register(api)
 	a.e.Any("/ws", echo.WrapHandler(a.Hub))
 	mh := mcp.Handler(&tools.Deps{Scenes: a.Scenes.Service, Drafts: a.Scenes.Drafts, Presets: a.Scenes.Presets, Setups: a.Setups.Service,
-		Show: a.Show.Service, Catalog: a.Catalog.Service, Assets: a.Assets.Service, Agents: a.Agents.Service, Camera: a.Camera.Camera,
+		Show: a.Show.Service, Catalog: a.Catalog.Service, Assets: a.Assets.Service, Sounds: a.Sounds.Service, Agents: a.Agents.Service, Camera: a.Camera.Camera,
 		Calibrations: a.Camera.Calibrations, Caller: a.Hub, EffectAPI: catalog.EffectAPI, Port: cfg.Port}, a.Devices.Service)
 	a.e.Any("/mcp", echo.WrapHandler(mh))
 	a.e.Any("/mcp/*", echo.WrapHandler(mh))

@@ -8,7 +8,7 @@ import { SetupPanel } from '../../../setup'
 import { playheadNow, soloSecondsLeft } from '../../../show/live'
 import { useEditor, type Space, type Tool } from '../../editor/context'
 import { SCENE_MODES, type SceneMode } from '../../types'
-import { sceneApi } from '../../api'
+import { SceneSwitcher } from '../../../show/ui/sceneSwitcher'
 import { formatTime } from '../timeline/time'
 import s from './styles.module.css'
 
@@ -39,43 +39,23 @@ export const MODE_META: Record<SceneMode, string> = {
 export function EditorBar() {
   const ed = useEditor()
   const scene = ed.scene
-  const setup = ed.setup
 
-  const newScene = async () => {
-    const setupId = setup?.id ?? ed.show?.activeSetupId
-    if (!setupId) return ed.toast('Create a setup first.', { bad: true })
-    try {
-      const sc = await sceneApi.create(`scene ${ed.scenes.length + 1}`, setupId)
-      ed.reloadScenes()
-      ed.openScene(sc.id)
-    } catch (e) {
-      ed.toast(e instanceof Error ? e.message : String(e), { bad: true })
-    }
-  }
+  const inShow = ed.workspace === 'show'
 
   return (
     <header className={s.bar}>
       <span className={s.wm}>projector map</span>
-      <Menu
-        width={300}
-        trigger={({ toggle }) => (
-          <Pill onClick={toggle} aria-label="choose scene" data-testid="scene-picker">
-            {scene ? scene.name.toLowerCase() : 'no scene'}
-            <Icon name="chevronDown" size={14} />
-          </Pill>
-        )}
-        items={[
-          { key: 'cap', caption: true, label: 'scenes' },
-          ...ed.scenes.map((sc) => ({
-            key: sc.id,
-            label: sc.name,
-            on: sc.id === ed.sceneId,
-            meta: sc.id === ed.show?.activeSceneId ? 'on the wall' : `v${sc.version}`,
-            onSelect: () => ed.openScene(sc.id),
-          })),
-          { key: 'new', label: 'new empty scene', icon: 'plus', onSelect: newScene },
-          { key: 'photo', label: 'new scene from photo', icon: 'image', onSelect: ed.openFromPhoto },
-        ]}
+      <SceneSwitcher
+        hub={ed.hub}
+        show={ed.show}
+        scenes={ed.scenes}
+        reload={ed.reloadScenes}
+        toast={ed.toast}
+        current={ed.sceneId ?? scene?.id ?? null}
+        openLabel={inShow ? 'put on the wall:' : 'edit'}
+        onOpen={(id) => (inShow ? id !== ed.show?.activeSceneId && void ed.command('show.activate', { sceneId: id }) : ed.openScene(id))}
+        onCreated={inShow ? undefined : (id) => ed.openScene(id)}
+        onFromPhoto={ed.openFromPhoto}
       />
       {ed.workspace === 'automap' ? (
         <Pill icon="close" onClick={() => ed.setSpace('map')} data-testid="close-automap">
@@ -84,20 +64,21 @@ export function EditorBar() {
       ) : (
         <Segmented<Space>
           ariaLabel="space"
-          width={190}
+          width={250}
           className={s.ws}
           value={ed.space}
           onChange={ed.setSpace}
           options={[
+            { value: 'show', label: 'show', title: 'run the wall: modes, scenes, cues and the soundboard' },
             { value: 'map', label: 'map', title: 'place the faces on the object (tab)' },
             { value: 'content', label: 'content', title: 'the faces unfolded flat, to put content on them (tab)' },
           ]}
         />
       )}
-      <PreviewMini />
+      {!inShow && <PreviewMini />}
       <span className={s.sp} />
       <SetUpMenu />
-      <Segmented
+      {!inShow && <Segmented
         ariaLabel="output"
         size="sm"
         width={150}
@@ -107,7 +88,7 @@ export function EditorBar() {
           { value: 'backstage', label: 'backstage', title: 'edits go to a draft; the wall keeps the live scene' },
           { value: 'live', label: 'live', title: 'edits change the scene on the wall at once' },
         ]}
-      />
+      />}
       <WallGroup />
     </header>
   )
@@ -260,7 +241,7 @@ function WallGroup() {
           solo · {ed.show.solo.fill} · {soloLeft} s
         </Pill>
       )}
-      <Menu
+      {ed.workspace !== 'show' && <Menu
         align="right"
         width={280}
         trigger={({ toggle }) => (
@@ -273,7 +254,7 @@ function WallGroup() {
           { key: 'cap', caption: true, label: 'on the wall' },
           ...SCENE_MODES.map((m) => ({ key: `mode-${m}`, label: m, meta: MODE_META[m], on: m === ed.sceneMode, onSelect: () => ed.setSceneMode(m) })),
         ]}
-      />
+      />}
       <span className={s.wallTc} title={playing ? 'the wall is playing' : 'the wall playhead'}>
         {playing && <i className={s.playDot} aria-hidden="true" />}
         <span ref={tc} data-testid="wall-time">00:00.00</span>

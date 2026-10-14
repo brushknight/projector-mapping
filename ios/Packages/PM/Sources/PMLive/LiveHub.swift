@@ -26,7 +26,7 @@ public final class LiveHub {
         public var name: String
         public var build: String
         public var caps: [String]
-        public init(name: String, build: String, caps: [String] = ["haptics", "camera"]) { self.name = name; self.build = build; self.caps = caps }
+        public init(name: String, build: String, caps: [String] = ["haptics", "camera", "audio"]) { self.name = name; self.build = build; self.caps = caps }
     }
 
     public private(set) var status: Status = .offline
@@ -37,6 +37,10 @@ public final class LiveHub {
     public private(set) var agentStatus: [String: String] = [:]
     public private(set) var calibration: [String: CalibrationProgress] = [:]
     public private(set) var subscribed: Set<String> = []
+    /// YouTube imports this phone started, from `import:{id}` snapshots or polling (protocol §14).
+    public internal(set) var imports: [String: ImportJob] = [:]
+    /// `sound.play` / `sound.stop` for the phone's audio output (it plays only while `show.audio.output` is `phone`).
+    public var onSound: (@MainActor (SoundEvent) -> Void)?
 
     /// Drags and show control work only when this is true; offline controls say "not connected".
     public var isLive: Bool { status == .online || status == .demo }
@@ -214,6 +218,10 @@ public final class LiveHub {
             let err = (try? env.d?.decode(WireError.self)) ?? WireError(code: "error", message: "")
             if let re = env.re, let c = pendingCmds.removeValue(forKey: re) { c.resume(throwing: err) } else { lastError = err.errorDescription }
         case MessageType.rpc: rpc(env)
+        case MessageType.soundPlay:
+            if let p = try? env.d?.decode(SoundPlay.self) { onSound?(.play(p)) }
+        case MessageType.soundStop:
+            onSound?(.stop((try? env.d?.decode(SoundStop.self)) ?? SoundStop()))
         default: push(env)
         }
     }
@@ -230,6 +238,9 @@ public final class LiveHub {
         subscribe(Channel.show)
         subscribe(Channel.presets)
         subscribe(Channel.devices)
+        subscribe(Channel.scenes)
+        subscribe(Channel.sounds)
+        subscribe(Channel.videos)
         if let show = w.show {
             try? db.saveShow(show)
             follow(show)
@@ -251,6 +262,8 @@ public final class LiveHub {
         }
         if let list = try? await api.scenes() { try? db.saveSceneList(list) }
         if listDocs[Channel.presets] == nil, let presets = try? await api.presets() { try? db.savePresets(presets) }
+        if listDocs[Channel.sounds] == nil, let sounds = try? await api.sounds() { try? db.saveSounds(sounds) }
+        if listDocs[Channel.videos] == nil, let videos = try? await api.videos() { try? db.saveVideos(videos) }
     }
 
     private func snapshot(_ env: Envelope) {
@@ -268,8 +281,10 @@ public final class LiveHub {
             pumpOutbox()
         case "setup":
             try? db.saveSetup(d, version: env.v ?? 0)
-        case "presets", "devices":
+        case "presets", "devices", "scenes", "sounds", "videos":
             list(ch, d)
+        case "import":
+            if let id, let job = try? d.decode(ImportJob.self) { imports[id] = job }
         case "agent":
             if let id { agentPush(id, d) }
         case "calib":
@@ -287,7 +302,8 @@ public final class LiveHub {
         case "agent": if let id { agentPush(id, d) }
         case "calib": if let id { calibPush(id, d) }
         case "show": snapshot(Envelope(t: MessageType.snapshot, ch: ch, v: env.v, d: d))
-        case "presets", "devices": list(ch, d)
+        case "presets", "devices", "scenes", "sounds", "videos": list(ch, d)
+        case "import": snapshot(Envelope(t: MessageType.snapshot, ch: ch, v: env.v, d: d))
         default: break
         }
     }
@@ -297,6 +313,11 @@ public final class LiveHub {
         listDocs[ch] = d
         if ch == Channel.presets, let presets = try? d.decode([Preset].self) { try? db.savePresets(presets) }
         if ch == Channel.devices, let devices = try? d.decode([Device].self) { try? db.saveDevices(devices) }
+        if ch == Channel.scenes, let scenes = try? d.decode([SceneSummary].self) {
+            try? db.saveSceneList(scenes, prune: true, keep: activeScene)
+        }
+        if ch == Channel.sounds, let sounds = try? d.decode([Asset].self) { try? db.saveSounds(sounds) }
+        if ch == Channel.videos, let videos = try? d.decode([Video].self) { try? db.saveVideos(videos) }
     }
 
     /// Agent channel (protocol §8): `snapshot` with the event array or `{ session, events }`, live `event { AgentEvent }`
@@ -340,7 +361,7 @@ public final class LiveHub {
         case "setup":
             guard let id else { return }
             try? db.applySetupPatch(id, ops: msg.ops, version: env.v)
-        case "show", "presets", "devices":
+        case "show", "presets", "devices", "scenes", "sounds", "videos":
             guard let doc = listDocs[ch], let next = try? doc.applying(msg.ops) else { resync(ch); return }
             if kind == "show" { snapshot(Envelope(t: MessageType.snapshot, ch: ch, v: env.v, d: next)) } else { list(ch, next) }
         default:

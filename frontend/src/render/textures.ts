@@ -163,16 +163,62 @@ export function makeTextCanvas(text: string, sizePx: number, color: string, widt
   return cv
 }
 
-/** Looping, muted videos (media layers); each get() uploads the current frame. Not deterministic: videos play on their own clock. */
+/** How a video plays: its loop window in seconds (end 0 = the end of the file) and its sound (0 = muted). */
+export interface VideoPlay {
+  start?: number
+  end?: number
+  /** 0..1; above 0 unmutes the element (§14 video layer sound on the audio output) */
+  volume?: number
+}
+
+type VideoEntry = { el: HTMLVideoElement; tex: WebGLTexture; ready: boolean; promise: Promise<void>; start: number; end: number; heard: boolean }
+
+/**
+ * Looping, muted videos (media layers, video backdrop layers); each get() uploads the current frame. Not
+ * deterministic: videos play on their own clock. A loop window keeps the element between `start` and `end`; a volume
+ * unmutes it for that frame (a video that is not drawn in a frame goes quiet again at endFrame()).
+ */
 export class VideoCache {
-  private map = new Map<string, { el: HTMLVideoElement; tex: WebGLTexture; ready: boolean; promise: Promise<void> }>()
+  private map = new Map<string, VideoEntry>()
+  private frame = new Set<VideoEntry>()
   onLoad: (() => void) | null = null
   constructor(private gl: WebGL2RenderingContext) {}
 
-  get(url: string): ImageTex | null {
+  /** Starts a frame: the videos get() touches with a volume stay audible. */
+  beginFrame() {
+    this.frame.clear()
+  }
+
+  /** Ends a frame: mutes the videos that made sound before and were not heard in this frame. */
+  endFrame() {
+    for (const e of this.map.values()) if (e.heard && !this.frame.has(e)) {
+      e.el.muted = true
+      e.heard = false
+    }
+  }
+
+  get(url: string, play: VideoPlay = {}): ImageTex | null {
     if (typeof document === 'undefined') return null
-    let e = this.map.get(url)
-    if (!e) e = this.load(url)
+    const start = Math.max(0, play.start ?? 0)
+    const end = Math.max(0, play.end ?? 0)
+    const key = start || end ? `${url}#${start}-${end}` : url
+    let e = this.map.get(key)
+    if (!e) e = this.load(url, key, start, end)
+    const vol = Math.max(0, Math.min(1, play.volume ?? 0))
+    if (vol > 0) {
+      this.frame.add(e)
+      if (e.el.muted) e.el.muted = false
+      if (Math.abs(e.el.volume - vol) > 0.005) e.el.volume = vol
+      e.heard = true
+      if (e.ready && e.el.paused) e.el.play().catch(() => {})
+    } else if (e.heard) {
+      e.el.muted = true
+      e.heard = false
+    }
+    if (e.ready && (start > 0 || end > start)) {
+      const t = e.el.currentTime
+      if ((end > start && t >= end) || t < start - 0.25) e.el.currentTime = start
+    }
     if (!e.ready || e.el.readyState < 2) return null
     const gl = this.gl
     gl.bindTexture(gl.TEXTURE_2D, e.tex)
@@ -187,10 +233,10 @@ export class VideoCache {
 
   wait(url: string): Promise<void> {
     if (typeof document === 'undefined') return Promise.resolve()
-    return (this.map.get(url) ?? this.load(url)).promise
+    return (this.map.get(url) ?? this.load(url, url, 0, 0)).promise
   }
 
-  private load(url: string) {
+  private load(url: string, key: string, start: number, end: number) {
     const gl = this.gl
     const el = document.createElement('video')
     el.muted = true
@@ -204,10 +250,11 @@ export class VideoCache {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
-    const entry = { el, tex, ready: false, promise: Promise.resolve() }
+    const entry: VideoEntry = { el, tex, ready: false, promise: Promise.resolve(), start, end, heard: false }
     entry.promise = new Promise<void>((done) => {
       const ok = () => {
         entry.ready = true
+        if (start > 0) el.currentTime = start
         el.play().catch(() => {})
         this.onLoad?.()
         done()
@@ -216,7 +263,7 @@ export class VideoCache {
       el.addEventListener('error', () => done(), { once: true })
     })
     el.src = url
-    this.map.set(url, entry)
+    this.map.set(key, entry)
     return entry
   }
 

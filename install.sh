@@ -67,6 +67,7 @@ got="$(cd "$tmp" && sha256 "$tarball" | cut -d' ' -f1)"
 
 tar -xzf "$tmp/$tarball" -C "$tmp" projmap
 mkdir -p "$bindir"
+rm -f "$bindir/projmap"  # a fresh file: overwriting a binary in place makes macOS kill it
 install -m 0755 "$tmp/projmap" "$bindir/projmap"
 echo "  projmap -> $bindir/projmap"
 

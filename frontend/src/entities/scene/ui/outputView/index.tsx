@@ -1,5 +1,6 @@
 import { useEffect, useRef, type ReactNode } from 'react'
-import { Renderer } from '../../../../render'
+import { activeYouTube, Renderer } from '../../../../render'
+import { YouTubeBackdrop } from '../../../video/youtube'
 import { Glass } from '../../../../shared/components'
 import { useRaf } from '../../../../shared/lib/useRaf'
 import { ambientClock, playheadNow } from '../../../show/live'
@@ -16,7 +17,7 @@ export function OutputView({ label, badge, maxWidth = 1280 }: { label?: ReactNod
   const size = ed.setup ? sceneSize(ed.setup.output) : { width: 1920, height: 1080 }
   useEffect(() => {
     try {
-      r.current = new Renderer(canvasRef.current!, { space: 'scene', maxSceneSize: maxWidth })
+      r.current = new Renderer(canvasRef.current!, { space: 'scene', maxSceneSize: maxWidth, transparent: true })
     } catch {
       r.current = null
     }
@@ -36,6 +37,7 @@ export function OutputView({ label, badge, maxWidth = 1280 }: { label?: ReactNod
   const pts = new Map((ed.scene?.points ?? []).map((p) => [p.id, p]))
   return (
     <div className={s.view} style={{ aspectRatio: `${size.width} / ${size.height}` }}>
+      <YouTubeBackdrop active={activeYouTube(ed.scene)} scene={size} />
       <canvas ref={canvasRef} className={s.canvas} />
       <svg className={s.svg} viewBox={`0 0 ${size.width} ${size.height}`} preserveAspectRatio="none">
         {ed.scene?.objects.flatMap((o) =>

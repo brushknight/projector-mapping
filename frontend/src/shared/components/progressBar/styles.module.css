@@ -1,0 +1,26 @@
+.bar {
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--control-3);
+  overflow: hidden;
+}
+.bar i {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--ink);
+  transition: width 200ms ease;
+}
+.segs {
+  display: flex;
+  gap: 4px;
+}
+.segs i {
+  flex: 1;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--control-3);
+}
+.segs i.lit {
+  background: var(--ink);
+}

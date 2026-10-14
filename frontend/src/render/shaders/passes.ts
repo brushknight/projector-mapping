@@ -131,6 +131,7 @@ uniform int u_pattern;       // 0 none 1 gray 2 white 3 black
 uniform int u_axis;          // 0 x 1 y
 uniform uint u_bit;
 uniform int u_inverse;
+uniform int u_seeThrough;   // (§14) keep the scene's alpha: a YouTube player shows behind the canvas
 
 ${NOISE}
 
@@ -193,16 +194,24 @@ void main() {
   vec2 pv = vec2(v_uv.x, 1.0 - v_uv.y);
   if (u_space == 1) sp = physicalToScene(pv); else sp = pv;
   vec2 tuv = vec2(sp.x, 1.0 - sp.y);
-  vec3 col = texture(u_scene, tuv).rgb;
+  vec4 sc = texture(u_scene, tuv);
+  vec3 col = sc.rgb;
   col *= u_master;
   col *= 1.0 - clamp(u_blackout, 0.0, 1.0);
+  // see-through: master and blackout dim the player behind as black over it (premultiplied, so col stays as is)
+  float alpha = u_seeThrough == 1 ? sc.a + (1.0 - sc.a) * (1.0 - clamp(u_master, 0.0, 1.0) * (1.0 - clamp(u_blackout, 0.0, 1.0))) : 1.0;
   // framebuffer px per scene px (along the scene's x axis after rotation)
   float pxPerScene = (u_space == 1 && u_orient != 0) ? u_canvas.y / u_sceneSize.x : u_canvas.x / u_sceneSize.x;
-  if (u_test > 0) col = mix(col, vec3(1.0), testPattern(sp, pxPerScene));
+  if (u_test > 0) {
+    float tp = testPattern(sp, pxPerScene);
+    col = mix(col, vec3(1.0), tp);
+    alpha = alpha * (1.0 - tp) + tp;
+  }
   if (u_hasOverlay == 1) {
     vec4 o = texture(u_overlay, tuv);
     col = col * (1.0 - o.a) + o.rgb;
+    alpha = o.a + alpha * (1.0 - o.a);
   }
-  o_color = vec4(col, 1.0);
+  o_color = vec4(col, alpha);
 }
 `

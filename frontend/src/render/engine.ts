@@ -31,6 +31,7 @@ import { GOBO_IDS, KIND_CODE, LAYER_FS, PROCEDURAL_IDS } from './shaders/layer'
 import { DynamicTextures, ImageCache, makeGridCanvas, makeTextCanvas, VideoCache, type ImageTex } from './textures'
 import { evaluateLayerClips, evaluateTimeline, type ActiveClip, type LayerAnim } from './timeline'
 import type { EffectError, RenderInput, RendererOptions } from './types'
+import { activeYouTube, youtubeIdOfRef, type YouTubeActive } from './youtube'
 
 const BLEND_CODE = { normal: 0, multiply: 1, screen: 2, add: 3 } as const
 const TEST_CODE = { off: 0, grid: 1, white: 2, crosshair: 3, corners: 4 } as const
@@ -113,6 +114,13 @@ export class Renderer {
   private stopColors = new Float32Array(24)
   private stopPos = new Float32Array(8)
   private blackTex: WebGLTexture
+  private opaqueBlack: WebGLTexture
+  /** this frame clears to transparent (a YouTube layer shows behind the canvas) */
+  private seeThrough = false
+  /** backdrop blends accumulate alpha (only while seeThrough) */
+  private alphaAcc = false
+  /** the YouTube layer the last render left room for (§14), or null */
+  youtube: YouTubeActive | null = null
 
   constructor(canvas: HTMLCanvasElement | OffscreenCanvas, opts: RendererOptions) {
     this.canvas = canvas
@@ -120,7 +128,7 @@ export class Renderer {
     const gl = canvas.getContext('webgl2', {
       preserveDrawingBuffer: !!opts.preserveDrawingBuffer,
       antialias: false,
-      alpha: false,
+      alpha: !!opts.transparent,
       premultipliedAlpha: true,
       stencil: false,
       depth: false,
@@ -147,6 +155,9 @@ export class Renderer {
     this.blackTex = gl.createTexture()!
     gl.bindTexture(gl.TEXTURE_2D, this.blackTex)
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 0]))
+    this.opaqueBlack = gl.createTexture()!
+    gl.bindTexture(gl.TEXTURE_2D, this.opaqueBlack)
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 255]))
   }
 
   /** Sets the drawing buffer size in device pixels. */
@@ -176,12 +187,16 @@ export class Renderer {
     gl.disable(gl.DEPTH_TEST)
     gl.disable(gl.STENCIL_TEST)
     gl.disable(gl.SCISSOR_TEST)
+    const solo = input.solo && input.solo.surfaceIds.length ? input.solo : null
+    // (§14) a YouTube layer is an iframe behind a transparent canvas; everything else stays opaque
+    this.youtube = this.opts.transparent ? activeYouTube(input.scene, { mode: input.mode, layerOnly: input.layerOnly, solo, hideBackdrop: input.hideBackdrop }) : null
+    this.seeThrough = !!this.youtube
     bindTarget(gl, scene)
-    gl.clearColor(0, 0, 0, 1)
+    gl.clearColor(0, 0, 0, this.seeThrough ? 0 : 1)
     gl.clearStencil(0)
     gl.clear(gl.COLOR_BUFFER_BIT | gl.STENCIL_BUFFER_BIT)
+    this.videos.beginFrame()
 
-    const solo = input.solo && input.solo.surfaceIds.length ? input.solo : null
     const plan = input.scene ? (solo ? { layers: [], level: 0, objects: true } : this.plan(input, input.scene)) : null
     if (input.scene && plan && !input.hideBackdrop) this.renderBackdrop(input, plan.layers, plan.level, scene)
     this.objFrame.clear()
@@ -198,6 +213,7 @@ export class Renderer {
     let overlay: Target | null = null
     if (input.scene && input.outline && input.outline.surfaceIds.length) overlay = this.renderOutline(input, input.scene, S)
 
+    this.videos.endFrame()
     this.finalPass(input, scene, overlay, S)
   }
 
@@ -306,9 +322,10 @@ export class Renderer {
     if (!scene) return
     const waits: Promise<void>[] = []
     for (const l of this.plan(input, scene).layers) {
-      if (l.kind !== 'photo') continue
+      if (l.kind !== 'photo' && !(l.kind === 'video' && l.ref.startsWith('asset:'))) continue
       if (!l.visible && input.layerOnly !== l.id) continue
-      waits.push(this.images.wait(photoUrl(l.ref, this.opts.resolveUrl)))
+      const url = photoUrl(l.ref, this.opts.resolveUrl)
+      waits.push(l.kind === 'video' ? this.videos.wait(url) : this.images.wait(url))
     }
     for (const o of scene.objects) {
       const all = [...(o.layers ?? []), ...o.surfaces.flatMap((s) => s.layers ?? [])]
@@ -357,6 +374,7 @@ export class Renderer {
     for (const p of this.effectProgs.values()) if ('prog' in p) gl.deleteProgram(p.prog.prog)
     for (const p of [this.layerProg, this.downProg, this.upProg, this.blitProg, this.warpProg, this.finalProg, this.contentProg]) gl.deleteProgram(p.prog)
     gl.deleteTexture(this.blackTex)
+    gl.deleteTexture(this.opaqueBlack)
     if (loseContext) gl.getExtension('WEBGL_lose_context')?.loseContext()
   }
 
@@ -379,10 +397,10 @@ export class Renderer {
     gl.blendEquation(gl.FUNC_ADD)
     switch (mode) {
       case 'add':
-        gl.blendFuncSeparate(gl.ONE, gl.ONE, gl.ZERO, gl.ONE)
+        gl.blendFuncSeparate(gl.ONE, gl.ONE, this.alphaAcc ? gl.ONE : gl.ZERO, this.alphaAcc ? gl.ONE_MINUS_SRC_ALPHA : gl.ONE)
         break
       case 'screen':
-        gl.blendFuncSeparate(gl.ONE, gl.ONE_MINUS_SRC_COLOR, gl.ZERO, gl.ONE)
+        gl.blendFuncSeparate(gl.ONE, gl.ONE_MINUS_SRC_COLOR, this.alphaAcc ? gl.ONE : gl.ZERO, this.alphaAcc ? gl.ONE_MINUS_SRC_ALPHA : gl.ONE)
         break
       case 'multiply':
         gl.blendFuncSeparate(gl.DST_COLOR, gl.ONE_MINUS_SRC_ALPHA, gl.ZERO, gl.ONE)
@@ -391,7 +409,8 @@ export class Renderer {
         gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
         break
       default:
-        gl.blendFuncSeparate(gl.ONE, gl.ONE_MINUS_SRC_ALPHA, gl.ZERO, gl.ONE)
+        // a see-through frame keeps the coverage in alpha, so the player behind shows only where nothing is drawn
+        gl.blendFuncSeparate(gl.ONE, gl.ONE_MINUS_SRC_ALPHA, this.alphaAcc ? gl.ONE : gl.ZERO, this.alphaAcc ? gl.ONE_MINUS_SRC_ALPHA : gl.ONE)
     }
   }
 
@@ -450,6 +469,7 @@ export class Renderer {
     const gl = this.gl
     const k = Math.min(target.width, target.height) / 1080
     let drew = false
+    this.alphaAcc = this.seeThrough
     for (const layer of layers) {
       if (input.layerOnly ? layer.id !== input.layerOnly : !layer.visible) continue
       if (layer.opacity <= 0) continue
@@ -466,7 +486,12 @@ export class Renderer {
       this.blit(out.tex)
       drew = true
     }
-    if (drew && level < 1) {
+    if (this.seeThrough && level < 1) {
+      // the same dimming as black over everything at 1 − level, which also dims the YouTube player behind
+      bindTarget(gl, target)
+      this.setBlend('over')
+      this.blit(this.opaqueBlack, 1 - Math.max(0, level))
+    } else if (drew && level < 1) {
       // the underlay under objects: scale the backdrop's brightness by `level`
       bindTarget(gl, target)
       gl.enable(gl.BLEND)
@@ -476,6 +501,7 @@ export class Renderer {
       gl.blendFuncSeparate(gl.ZERO, gl.CONSTANT_COLOR, gl.ZERO, gl.ONE)
       this.blit(this.blackTex)
     }
+    this.alphaAcc = false
     this.setBlend('none')
   }
 
@@ -546,6 +572,18 @@ export class Renderer {
       p.f1('u_pWarm', num('warmth', 0))
       p.f1('u_pDrift', num('drift', 0.1))
       radius = num('blur', 0) * 60 * k
+    } else if (layer.kind === 'video') {
+      // (§14) youtube: the page's player shows behind the canvas; asset: a looping muted video drawn like a photo
+      if (youtubeIdOfRef(layer.ref) || !layer.ref.startsWith('asset:')) return null
+      const gain = input.videoVolume && params.audio === true ? Math.max(0, Math.min(1, num('volume', 1) * input.videoVolume)) : 0
+      const img = this.videos.get(photoUrl(layer.ref, this.opts.resolveUrl), { start: num('start', 0), end: num('end', 0), volume: gain })
+      if (!img) return null
+      p.tex('u_tex', 0, img.tex)
+      p.f2('u_texSize', img.width, img.height)
+      p.f1('u_pBright', num('brightness', 0.8))
+      p.f1('u_pWarm', num('warmth', 0))
+      p.f1('u_pDrift', num('drift', 0))
+      radius = num('blur', 0.2) * 60 * k
     } else {
       const c = hexToRgb(typeof params.color === 'string' ? params.color : '#000000', [0, 0, 0])
       p.f3('u_solid', c[0], c[1], c[2])
@@ -1042,6 +1080,7 @@ export class Renderer {
       } else code = pat.kind === 'white' ? 2 : pat.kind === 'black' ? 3 : 0
     }
     p.i1('u_pattern', code)
+    p.i1('u_seeThrough', this.seeThrough ? 1 : 0)
     this.drawFullscreen()
   }
 }

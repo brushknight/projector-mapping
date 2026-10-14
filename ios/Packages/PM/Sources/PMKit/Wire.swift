@@ -47,11 +47,16 @@ public enum MessageType {
     public static let rpc = "rpc", rpcResult = "rpc.result", rpcError = "rpc.error"
     public static let telemetry = "telemetry"
     public static let cameraFrame = "camera.frame", cameraStatus = "camera.status"
+    /// Direct messages to audio clients (no `ch`, protocol §14).
+    public static let soundPlay = "sound.play", soundStop = "sound.stop"
 }
 
 /// Channel names (protocol §3).
 public enum Channel {
     public static let show = "show", presets = "presets", devices = "devices", camera = "camera"
+    /// Lists with a millisecond `v` (protocol §14).
+    public static let scenes = "scenes", sounds = "sounds", videos = "videos"
+    public static func importJob(_ id: String) -> String { "import:\(id)" }
     public static func scene(_ id: String) -> String { "scene:\(id)" }
     public static func setup(_ id: String) -> String { "setup:\(id)" }
     public static func draft(_ id: String) -> String { "draft:\(id)" }
@@ -72,7 +77,7 @@ public struct Hello: Codable, Sendable, Hashable {
     public var name: String
     public var caps: [String]
     public var build: String
-    public init(token: String?, role: String = "remote", name: String, caps: [String] = ["haptics", "camera"], build: String) {
+    public init(token: String?, role: String = "remote", name: String, caps: [String] = ["haptics", "camera", "audio"], build: String) {
         self.token = token; self.role = role; self.name = name; self.caps = caps; self.build = build
     }
 }

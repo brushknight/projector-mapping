@@ -16,6 +16,7 @@ import (
 	"projmap/internal/domain/docpatch"
 	"projmap/internal/domain/scene"
 	"projmap/internal/infrastructure/mcp/tools"
+	soundtools "projmap/internal/infrastructure/mcp/tools/sounds"
 )
 
 func registerWrite(s *mcp.Server, env *tools.Env) {
@@ -26,7 +27,8 @@ func registerWrite(s *mcp.Server, env *tools.Env) {
 	tools.Add(s, env, &mcp.Tool{Name: "surface_nudge", Title: "Nudge points",
 		Description: "Moves a surface's points by dx, dy scene pixels (all of them, or only point_id). Shared points move every face that uses them. Use after alignment_error or camera_compare to fix small misalignments."}, surfaceNudge)
 	tools.Add(s, env, &mcp.Tool{Name: "clip_add", Title: "Add a clip",
-		Description: "Places an effect on the timeline for a target (surface, object or all) from start to end seconds. Reuses the track of that target or makes one. Params follow the effect's schema (effects_list)."}, clipAdd)
+		Description: "Places an effect on the timeline for a target (surface, object or all) from start to end seconds. Reuses the track of that target or makes one. Params follow the effect's schema (effects_list). " +
+			"For a sound effect pass sound (a library sha or name from sound_list), optional offset (seconds into the file) and volume (0..1): the clip goes on the scene's first sound track (made when there is none) and plays from start to end."}, clipAdd)
 	tools.Add(s, env, &mcp.Tool{Name: "clip_update", Title: "Change a clip",
 		Description: "Changes a clip's effect, timing, fades or params (params merge into the existing ones)."}, clipUpdate)
 	tools.Add(s, env, &mcp.Tool{Name: "clip_remove", Title: "Remove a clip", Description: "Removes a clip from the timeline."}, clipRemove)
@@ -274,19 +276,22 @@ func surfaceNudge(ctx context.Context, e *tools.Env, in nudgeIn) (*mcp.CallToolR
 
 // TargetIn is a track target.
 type TargetIn struct {
-	Kind string `json:"kind" jsonschema:"surface, object or all"`
+	Kind string `json:"kind" jsonschema:"surface, object, all or sound"`
 	ID   string `json:"id,omitempty" jsonschema:"surface or object id (or name); empty for all"`
 }
 
 type clipAddIn struct {
-	Target  TargetIn       `json:"target"`
+	Target  TargetIn       `json:"target,omitempty" jsonschema:"the track's target (not needed with track, or for a sound clip)"`
 	Track   string         `json:"track,omitempty" jsonschema:"an existing track id instead of a target"`
-	Effect  string         `json:"effect" jsonschema:"effect id from effects_list"`
+	Effect  string         `json:"effect,omitempty" jsonschema:"effect id from effects_list (sound for a sound clip, implied by sound)"`
 	Start   float64        `json:"start" jsonschema:"seconds"`
-	End     float64        `json:"end" jsonschema:"seconds"`
+	End     float64        `json:"end,omitempty" jsonschema:"seconds (a sound clip without end lasts as long as its sound)"`
 	FadeIn  *float64       `json:"fade_in,omitempty" jsonschema:"seconds, default 0.2"`
 	FadeOut *float64       `json:"fade_out,omitempty" jsonschema:"seconds, default 0.2"`
 	Params  map[string]any `json:"params,omitempty"`
+	Sound   string         `json:"sound,omitempty" jsonschema:"for a sound clip: a library sound sha or name (sound_list)"`
+	Offset  *float64       `json:"offset,omitempty" jsonschema:"for a sound clip: seconds into the file where the clip starts, default 0"`
+	Volume  *float64       `json:"volume,omitempty" jsonschema:"for a sound clip: 0..1, default 1"`
 }
 
 func resolveTarget(sc *scene.Scene, t TargetIn) (scene.Target, string, error) {
@@ -307,8 +312,10 @@ func resolveTarget(sc *scene.Scene, t TargetIn) (scene.Target, string, error) {
 		}
 		id := sf.ID
 		return scene.Target{Kind: "surface", ID: &id}, o.Name + " · " + sf.Name, nil
+	case scene.TargetSound:
+		return scene.Target{Kind: scene.TargetSound}, "sound", nil
 	}
-	return scene.Target{}, "", app_errors.BadRequest("target.kind must be surface, object or all.")
+	return scene.Target{}, "", app_errors.BadRequest("target.kind must be surface, object, all or sound.")
 }
 
 func clipAdd(ctx context.Context, e *tools.Env, in clipAddIn) (*mcp.CallToolResult, error) {
@@ -318,6 +325,10 @@ func clipAdd(ctx context.Context, e *tools.Env, in clipAddIn) (*mcp.CallToolResu
 	}
 	var ops []docpatch.Op
 	track := in.Track
+	isSound := in.Sound != "" || in.Effect == scene.EffectSound || in.Target.Kind == scene.TargetSound
+	if isSound {
+		return soundClipAdd(ctx, e, sc, in)
+	}
 	if track == "" {
 		tg, name, err := resolveTarget(sc, in.Target)
 		if err != nil {
@@ -357,6 +368,76 @@ func clipAdd(ctx context.Context, e *tools.Env, in clipAddIn) (*mcp.CallToolResu
 		return nil, err
 	}
 	return tools.Text("Added clip %s (%s, %.2f to %.2f s) on track %s.", cl.ID, cl.Effect, cl.Start, cl.End, track), nil
+}
+
+// soundClipAdd puts a sound clip on a sound track: the given track, else the scene's first sound track (made when
+// there is none).
+func soundClipAdd(ctx context.Context, e *tools.Env, sc *scene.Scene, in clipAddIn) (*mcp.CallToolResult, error) {
+	ref := in.Sound
+	if ref == "" {
+		if v, ok := in.Params["sound"].(string); ok {
+			ref = v
+		}
+	}
+	if ref == "" {
+		return nil, app_errors.BadRequest("A sound clip needs sound: a library sha or name (sound_list).")
+	}
+	a, err := soundtools.FindSound(ctx, e, ref)
+	if err != nil {
+		return nil, err
+	}
+	var ops []docpatch.Op
+	track := in.Track
+	if track != "" {
+		ok := false
+		for _, tr := range sc.Timeline.Tracks {
+			if tr.ID == track {
+				ok = tr.Target.Kind == scene.TargetSound
+			}
+		}
+		if !ok {
+			return nil, app_errors.BadRequest("Track %s is not a sound track; leave track out to use the scene's sound track.", track)
+		}
+	} else {
+		for _, tr := range sc.Timeline.Tracks {
+			if tr.Target.Kind == scene.TargetSound {
+				track = tr.ID
+				break
+			}
+		}
+		if track == "" {
+			nt := scene.Track{ID: NewID("trk"), Name: "sound", Target: scene.Target{Kind: scene.TargetSound}}
+			ops = append(ops, docpatch.Add("/timeline/tracks/-", nt))
+			track = nt.ID
+		}
+	}
+	end := in.End
+	if end <= in.Start && a.Duration != nil && *a.Duration > 0 {
+		end = in.Start + *a.Duration
+	}
+	params := map[string]any{"sound": a.SHA, "offset": 0.0, "volume": 1.0}
+	if in.Offset != nil {
+		params["offset"] = *in.Offset
+	}
+	if in.Volume != nil {
+		params["volume"] = *in.Volume
+	}
+	fi, fo := 0.0, 0.0
+	if in.FadeIn != nil {
+		fi = *in.FadeIn
+	}
+	if in.FadeOut != nil {
+		fo = *in.FadeOut
+	}
+	cl := scene.Clip{ID: NewID("clp"), TrackID: track, Effect: scene.EffectSound, Start: in.Start, End: end, FadeIn: fi, FadeOut: fo, Params: params}
+	ops = append(ops, docpatch.Add("/timeline/clips/-", cl))
+	if end > sc.Timeline.Duration {
+		ops = append(ops, docpatch.Replace("/timeline/duration", math.Ceil(end)))
+	}
+	if err := e.Write(ctx, ops); err != nil {
+		return nil, err
+	}
+	return tools.Text("Added sound clip %s (%s, %.2f to %.2f s) on sound track %s.", cl.ID, a.Name, cl.Start, cl.End, track), nil
 }
 
 type clipUpdateIn struct {

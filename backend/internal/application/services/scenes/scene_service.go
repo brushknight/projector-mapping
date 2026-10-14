@@ -37,6 +37,10 @@ type SceneService interface {
 	Get(ctx context.Context, id string) ([]byte, int64, error)
 	Scene(ctx context.Context, id string) (*scene.Scene, error)
 	Create(ctx context.Context, name, setupID string) (*scene.Scene, error)
+	// Duplicate deep-copies a scene's current document under a new id, version 1 and the given name.
+	Duplicate(ctx context.Context, srcID, name string) (*scene.Scene, error)
+	// Rename is a replace /name patch; it returns the summary.
+	Rename(ctx context.Context, id, name, by string) (scene.Summary, error)
 	// Import stores a whole scene document (seed, from-photo).
 	Import(ctx context.Context, s *scene.Scene) error
 	Delete(ctx context.Context, id string) error

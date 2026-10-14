@@ -1,12 +1,15 @@
 import { useLayoutEffect, useRef, useState, type DragEvent, type PointerEvent } from 'react'
-import { Icon, Menu, Pill } from '../../../../shared/components'
+import { Icon, Menu, Pill, Waveform } from '../../../../shared/components'
 import { cx } from '../../../../shared/lib/cx'
 import { newId } from '../../../../shared/lib/ids'
 import { useRaf } from '../../../../shared/lib/useRaf'
 import { LAYER_CLIP_DEFAULTS } from '../../../../render/timeline'
 import { useEditor } from '../../editor/context'
-import { addClip, addCue, addTrack, cuePath, removeCue, removeTrack, round3, setClipTimes, sortedCues } from '../../ops'
+import { addClip, addCue, addSoundClip, addTrack, cuePath, removeCue, removeTrack, round3, setClipTimes, soundClip, sortedCues } from '../../ops'
 import type { Clip, ContentLayer, Scene, Track } from '../../types'
+import { soundClipParams } from '../../../sound/audioSchedule'
+import { usePreviewAudio, useSoundList } from '../../../sound/audioHooks'
+import type { Sound } from '../../../sound/types'
 import { formatTime } from './time'
 import s from './styles.module.css'
 
@@ -21,6 +24,36 @@ function contentLayers(scene: Scene): Array<{ layer: ContentLayer; owner: string
     ...(o.layers ?? []).map((layer) => ({ layer, owner: o.name })),
     ...o.surfaces.flatMap((x) => (x.layers ?? []).map((layer) => ({ layer, owner: `${o.name} · ${x.name}` }))),
   ])
+}
+
+/** Remembers the preview sound mute on this browser (storage may be blocked: then it is not remembered). */
+const MUTE_KEY = 'projmap.previewSoundMuted'
+function readMuted(): boolean {
+  try {
+    return localStorage.getItem(MUTE_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+function writeMuted(v: boolean) {
+  try {
+    localStorage.setItem(MUTE_KEY, v ? '1' : '0')
+  } catch {
+    /* not remembered */
+  }
+}
+
+/** The drag payload a sound from the library carries (text/plain), so it can be dropped on a sound track. */
+export const SOUND_DRAG_PREFIX = 'sound:'
+
+/** The part of a sound's peaks a clip plays: from `offset` for the clip's length. */
+function clipPeaks(snd: Sound | undefined, clip: Clip): number[] {
+  if (!snd?.peaks?.length || !(snd.duration > 0)) return []
+  const p = soundClipParams(clip)
+  const n = snd.peaks.length
+  const a = Math.max(0, Math.floor((p.offset / snd.duration) * n))
+  const b = Math.min(n, Math.ceil(((p.offset + clip.end - clip.start) / snd.duration) * n))
+  return b > a ? snd.peaks.slice(a, b) : []
 }
 
 type ClipDrag = { id: string; mode: 'move' | 'start' | 'end'; x0: number; y0: number; start: number; end: number; trackId: string; moved: boolean }
@@ -43,6 +76,10 @@ export function Timeline() {
   const [drag, setDrag] = useState<ClipDrag | null>(null)
   const [override, setOverride] = useState<{ id: string; start: number; end: number; trackId: string } | null>(null)
   const [scrub, setScrub] = useState<number | null>(null)
+  const [soundMuted, setSoundMuted] = useState(readMuted)
+  const sounds = useSoundList(ed.hub)
+  // §14: the preview (Space) plays the timeline's sound clips here, whatever the wall's audio output is
+  usePreviewAudio(scene, ed.preview, { muted: soundMuted, mutedTracks: ed.mutedTracks })
   const duration = Math.max(1, scene?.timeline.duration ?? 20)
   const pps = laneW / duration
   const playing = ed.preview.playing
@@ -124,7 +161,10 @@ export function Timeline() {
     if (drag.mode === 'move') {
       start = snapTime(Math.max(0, Math.min(duration - len, drag.start + dt)), drag.id, e.shiftKey)
       end = round3(start + len)
-      trackId = trackAtY(e.clientY)?.id ?? drag.trackId
+      // a clip moves to tracks of its own sort only: sound clips stay on sound tracks (§14)
+      const over = trackAtY(e.clientY)
+      const isSound = (id: string) => tracks.find((t) => t.id === id)?.target.kind === 'sound'
+      trackId = over && (over.target.kind === 'sound') === isSound(drag.trackId) ? over.id : drag.trackId
     } else if (drag.mode === 'start') start = Math.min(drag.end - 0.1, snapTime(Math.max(0, drag.start + dt), drag.id, e.shiftKey))
     else end = Math.max(drag.start + 0.1, snapTime(Math.min(duration, drag.end + dt), drag.id, e.shiftKey))
     setOverride({ id: drag.id, start, end, trackId })
@@ -157,8 +197,22 @@ export function Timeline() {
 
   const onLaneDrop = (e: DragEvent, track: Track) => {
     const data = e.dataTransfer.getData('text/plain')
+    if (data.startsWith(SOUND_DRAG_PREFIX)) {
+      e.preventDefault()
+      const sha = data.slice(SOUND_DRAG_PREFIX.length)
+      if (track.target.kind !== 'sound') {
+        ed.toast('Drop sounds on a sound track: add one with + track.')
+        return
+      }
+      addSoundAt(sha, timeAt(e.clientX), track.id)
+      return
+    }
     if (!data.startsWith('effect:')) return
     e.preventDefault()
+    if (track.target.kind === 'sound') {
+      ed.toast('A sound track plays sounds: drop one from the sounds library.')
+      return
+    }
     if (track.target.kind === 'layer') {
       ed.toast('A layer track takes reveal and sweep clips: use its ⋯ menu.')
       return
@@ -170,8 +224,19 @@ export function Timeline() {
     ed.select({ clipId: clip.id, focus: 'clip' })
   }
 
+  function addSoundAt(sha: string, at: number, trackId: string) {
+    const snd = sounds.find((x) => x.sha === sha)
+    const start = round3(Math.max(0, Math.min(duration - 0.5, Math.round(at * 10) / 10)))
+    const len = snd?.duration && snd.duration > 0 ? snd.duration : 3
+    const clip = soundClip(newId('clp'), trackId, sha, start, Math.min(duration, start + len))
+    void ed.editing.edit((sc) => addSoundClip(sc, clip, newId('trk')))
+    ed.select({ clipId: clip.id, focus: 'clip' })
+  }
+
   const onRulerDown = (e: PointerEvent) => {
     if (e.button !== 0) return
+    // a cue's menu lives in the ruler: let its items get their click
+    if ((e.target as HTMLElement).closest(`.${s.cueWrap}`)) return
     ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
     setScrub(timeAt(e.clientX))
   }
@@ -200,6 +265,7 @@ export function Timeline() {
 
   const layers = contentLayers(scene)
   const trackOptions = [
+    { key: 'sound', label: 'sound (plays sound clips)', target: { kind: 'sound' as const, id: null }, name: 'sound' },
     { key: 'all', label: 'every surface', target: { kind: 'all' as const, id: null }, name: 'all' },
     ...scene.objects.map((o) => ({ key: o.id, label: o.name, target: { kind: 'object' as const, id: o.id }, name: o.name })),
     ...scene.objects.flatMap((o) => o.surfaces.map((x) => ({ key: x.id, label: `${o.name} · ${x.name}`, target: { kind: 'surface' as const, id: x.id }, name: `${o.name} · ${x.name}` }))),
@@ -212,6 +278,19 @@ export function Timeline() {
         <Pill size="sm" icon="toStart" aria-label="to start (home)" title="to start (home)" onClick={() => seek(0)} />
         <Pill icon={playing ? 'pause' : 'play'} iconSize={14} on aria-label={playing ? 'pause the preview' : 'play the preview'} title="play or pause the editor preview (space); the wall keeps going" onClick={ed.preview.toggle} data-testid="play" />
         <Pill size="sm" icon="loop" aria-label="loop (L)" title="loop the preview (L)" on={ed.preview.loop} aria-pressed={ed.preview.loop} onClick={() => ed.preview.setLoop(!ed.preview.loop)} data-testid="loop" />
+        <Pill
+          size="sm"
+          ghost={soundMuted}
+          icon={soundMuted ? 'speakerOff' : 'speaker'}
+          aria-label={soundMuted ? 'unmute the preview sound' : 'mute the preview sound'}
+          aria-pressed={!soundMuted}
+          title={soundMuted ? 'the preview plays the sound clips silently: click to hear them' : 'the preview plays the sound clips on this computer: click to mute them'}
+          onClick={() => {
+            setSoundMuted(!soundMuted)
+            writeMuted(!soundMuted)
+          }}
+          data-testid="preview-sound"
+        />
         <span className={s.tc}>
           <span ref={tcRef} data-testid="timecode">00:00.00</span> <span className={s.dim}>/ {formatTime(duration)}</span>
         </span>
@@ -269,8 +348,9 @@ export function Timeline() {
             trigger={({ toggle }) => (
               <button
                 type="button"
-                className={s.cue}
-                title={`${c.label} · ${formatTime(c.at)}`}
+                className={cx(s.cue, ed.sel.focus === 'cue' && ed.sel.cueId === c.id && s.cueSel)}
+                title={`${c.label} · ${formatTime(c.at)}${c.sound?.sound ? ' · plays a sound on GO' : ''}`}
+                data-testid={`cue-${c.id}`}
                 onPointerDown={(e) => e.stopPropagation()}
                 onClick={toggle}
               >
@@ -278,8 +358,9 @@ export function Timeline() {
               </button>
             )}
             items={[
-              { key: 'l', caption: true, label: c.label },
+              { key: 'l', caption: true, label: c.sound?.sound ? `${c.label} · plays a sound` : c.label },
               { key: 'go', label: 'jump here', icon: 'play', onSelect: () => seek(c.at) },
+              { key: 'ed', label: c.sound?.sound ? 'edit cue and its sound' : 'edit cue (play a sound on GO)', icon: 'speaker', onSelect: () => ed.select({ cueId: c.id, clipId: null, focus: 'cue' }) },
               { key: 'af', label: c.autoFollow ? 'hold at the next cue' : 'follow on to the next cue', icon: 'next', onSelect: () => { const p = cuePath(scene, c.id, 'autoFollow'); if (p) ed.editing.setValue(p, !c.autoFollow, 'final') } },
               { key: 'mv', label: 'move to the playhead', icon: 'flag', onSelect: () => { const p = cuePath(scene, c.id, 'at'); if (p) ed.editing.setValue(p, round3(ed.preview.t()), 'final') } },
               { key: 'rm', label: 'delete cue', icon: 'trash', danger: true, onSelect: () => void ed.editing.edit((sc) => removeCue(sc, c.id)) },
@@ -290,7 +371,7 @@ export function Timeline() {
       <div className={s.body}>
       <div className={s.tn}>
         {tracks.map((t) => (
-          <TrackName key={t.id} scene={scene} track={t} />
+          <TrackName key={t.id} scene={scene} track={t} sounds={sounds} onAddSound={(sha) => addSoundAt(sha, ed.preview.t(), t.id)} />
         ))}
       </div>
       <div className={s.lanes} ref={lanesRef}>
@@ -310,6 +391,9 @@ export function Timeline() {
                 const start = o?.start ?? c.start
                 const end = o?.end ?? c.end
                 const def = ed.effects.find((d) => d.id === c.effect)
+                const isSound = t.target.kind === 'sound'
+                const snd = isSound ? sounds.find((x) => x.sha === soundClipParams(c).sound) : undefined
+                const soundName = isSound ? (snd?.name ?? (sounds.length ? 'missing sound' : 'sound')) : ''
                 return (
                   <button
                     key={c.id}
@@ -321,12 +405,14 @@ export function Timeline() {
                     onPointerMove={onClipMove}
                     onPointerUp={onClipUp}
                     onPointerCancel={onClipUp}
-                    title={`${def?.name ?? c.effect} · ${formatTime(start)} to ${formatTime(end)}`}
+                    title={`${isSound ? soundName : def?.name ?? c.effect} · ${formatTime(start)} to ${formatTime(end)}`}
                     data-testid={`clip-${c.id}`}
+                    data-sound={isSound ? 'true' : undefined}
                   >
+                    {isSound && <Waveform className={s.clipWave} peaks={clipPeaks(snd, { ...c, start, end })} bars={48} height={20} />}
                     {c.fadeIn > 0 && <i className={s.fadeIn} style={{ width: `${Math.min(100, (c.fadeIn / Math.max(0.01, end - start)) * 100)}%` }} />}
                     {c.fadeOut > 0 && <i className={s.fadeOut} style={{ width: `${Math.min(100, (c.fadeOut / Math.max(0.01, end - start)) * 100)}%` }} />}
-                    <span className={s.clipLabel}>{(c.params as Record<string, unknown>).label ? String((c.params as Record<string, unknown>).label) : def?.name ?? c.effect}</span>
+                    <span className={s.clipLabel}>{isSound ? soundName : (c.params as Record<string, unknown>).label ? String((c.params as Record<string, unknown>).label) : def?.name ?? c.effect}</span>
                   </button>
                 )
               })}
@@ -344,7 +430,7 @@ export function Timeline() {
   )
 }
 
-function TrackName({ scene, track }: { scene: Scene; track: Track }) {
+function TrackName({ scene, track, sounds, onAddSound }: { scene: Scene; track: Track; sounds: Sound[]; onAddSound: (sha: string) => void }) {
   const ed = useEditor()
   const muted = ed.mutedTracks.has(track.id)
   const selClip = ed.sel.clipId ? scene.timeline.clips.find((c) => c.id === ed.sel.clipId) : null
@@ -374,6 +460,14 @@ function TrackName({ scene, track }: { scene: Scene; track: Track }) {
                   ed.select({ clipId: clip.id, focus: 'clip' })
                 },
               }))
+            : []),
+          ...(track.target.kind === 'sound'
+            ? sounds.length
+              ? [
+                  { key: 'cap', caption: true, label: 'add at the playhead' },
+                  ...sounds.slice(0, 16).map((snd) => ({ key: `snd-${snd.sha}`, icon: 'speaker', label: snd.name, onSelect: () => onAddSound(snd.sha) })),
+                ]
+              : [{ key: 'none', caption: true, label: 'upload sounds in the sounds library first' }]
             : []),
           { key: 'rm', label: 'delete track and its clips', icon: 'trash', danger: true, onSelect: () => void ed.editing.edit((sc) => removeTrack(sc, track.id)) },
         ]}

@@ -12,5 +12,7 @@ export const catalogShape = obj({
   gradientParams: schema,
   scenery: arr(obj({ ...item, asset: str, credit: str })),
   photoParams: schema,
+  /** (§14, catalog version 3) */
+  videoParams: nullable(schema),
   effects: arr(effectShape),
 })

@@ -22,8 +22,46 @@ extension AppDatabase {
         try reader.read { db in try KV.get(db, KV.catalogVersion).flatMap(Int.init) }
     }
 
-    /// The scene list from `GET /scenes`; keeps documents already cached.
-    public func saveSceneList(_ list: [SceneSummary]) throws {
+    /// The sound library (`sounds` channel or `GET /sounds`), newest first.
+    public func saveSounds(_ list: [Asset]) throws {
+        try writer.write { db in try KV.set(db, KV.sounds, try JSONValue(encoding: list).jsonText) }
+    }
+
+    /// The video library (`videos` channel or `GET /videos`), newest first.
+    public func saveVideos(_ list: [Video]) throws {
+        try writer.write { db in try KV.set(db, KV.videos, try JSONValue(encoding: list).jsonText) }
+    }
+
+    /// Renames a cached scene at once (its summary and both documents), before the server confirms.
+    public func renameScene(_ id: String, name: String) throws {
+        try writer.write { db in
+            try db.execute(sql: "UPDATE scene SET name = ? WHERE id = ?", arguments: [name, id])
+            for col in ["confirmed", "doc"] {
+                guard let doc = JSONValue.parse(try String.fetchOne(db, sql: "SELECT \(col) FROM scene WHERE id = ?", arguments: [id])),
+                      let next = try? doc.applying(.replace("/name", .string(name))) else { continue }
+                try db.execute(sql: "UPDATE scene SET \(col) = ? WHERE id = ?", arguments: [next.jsonText, id])
+            }
+        }
+    }
+
+    /// Forgets a scene (deleted on the server).
+    public func removeScene(_ id: String) throws {
+        try writer.write { db in try db.execute(sql: "DELETE FROM scene WHERE id = ?", arguments: [id]) }
+    }
+
+    /// The scene list from `GET /scenes` or the `scenes` channel; keeps documents already cached. With `prune`, scenes
+    /// missing from the list go even when a document is cached (the channel is the whole truth), except `keep`.
+    public func saveSceneList(_ list: [SceneSummary], prune: Bool = false, keep: String? = nil) throws {
+        try saveSceneListRows(list)
+        guard prune, !list.isEmpty else { return }
+        try writer.write { db in
+            let ids = list.map(\.id) + [keep].compactMap { $0 }
+            let marks = ids.map { _ in "?" }.joined(separator: ",")
+            try db.execute(sql: "DELETE FROM scene WHERE id NOT IN (\(marks))", arguments: StatementArguments(ids))
+        }
+    }
+
+    private func saveSceneListRows(_ list: [SceneSummary]) throws {
         try writer.write { db in
             let ids = list.map(\.id)
             for (n, s) in list.enumerated() {

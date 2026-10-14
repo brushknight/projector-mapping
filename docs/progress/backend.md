@@ -140,3 +140,64 @@ stacks, `scene.mode` command, strokes accept/reject, drawing clip, upgrade of a 
   sending again renews; its own timer clears it at `until` and broadcasts the show; a restart drops an expired one.
   Surface ids are not checked against the scene (a backstage draft may solo surfaces the live scene lacks).
 - `cmd show.preview { draftId, t?, play? }` / `POST /show/preview`: `t` defaults to 0, `play` to false.
+
+## Show control, sound and video (protocol §14, 2026-10-14)
+
+Built:
+
+- **Scenes:** `POST /scenes {name, setupId?, duplicate?}` (empty scene on the active setup, or a deep copy with a new
+  id and version 1), `PATCH /scenes/{id} {name}` (a `replace /name` patch; answers the summary), `DELETE` refuses the
+  active scene with 409 `scene_active`. Names trimmed, 1..80 (also on `/name` patches). Channel `scenes` (summary
+  list, `v` = ms) on create, duplicate, import, delete and every committed name change. The list is in creation
+  order (rowid). `show.activate` stops the transport, clears `preview` and `audio.loops`, keeps `onAir`, `audio` and
+  `solo`.
+- **Active scene fix:** `showsvc.New` keeps the stored `activeSceneId` when that scene exists, otherwise activates
+  the first scene of the list, and stores the show at once (also on a first start), so a seeded server restarted
+  before any show change keeps `scn_desk`.
+- **Seed:** `scene.StripMedia` removes pads, sound tracks and their clips, cue sounds and video layers from the
+  fixture scene before seeding.
+- **Scene domain:** `sounds.pads` (always written; defaults volume 1, color ink, icon none), pad validation, track
+  target `sound` (id null), `sound` clips only on sound tracks and only sound clips there (`sound`, `offset >= 0`,
+  `volume 0..1`), `cue.sound {sound, volume}` (volume defaults to 1), layer kind `video` with `asset:<sha>` or
+  `youtube:<11>` refs and catalog `videoParams` (catalog v3).
+- **Sounds:** asset kinds `sound` and `video`; Asset `name`, `duration`, `peaks` (new columns, migration
+  `00002_media.sql`). `GET/POST /sounds`, `PATCH/DELETE /sounds/{sha}`, `POST /assets kind=sound`. WAV and AIFF are
+  read in Go (PCM 8/16/24/32, float 32/64, AIFF-C NONE/sowt/fl32/fl64); others through ffmpeg (mono f32 at 8 kHz)
+  and ffprobe (duration); else the uploader's `duration`/`peaks`; else `0`/`[]`. Channel `sounds`.
+- **Audio:** `show.audio {output, volume, muted, loops}` (pointer, always set by the server; `POST /show/audio`,
+  `cmd show.audio`). `cmd sound.play` / `POST /sounds/play`, `cmd sound.stop` / `POST /sounds/stop`: direct messages
+  through a new `realtime.Direct` port (`hub.SendDirect`) to every connection with cap `audio` and the output's role;
+  `no_audio` when none. Looping pads toggle through `show.audio.loops`; `show.stop`, activate, `sound.stop` without
+  ids and a restart clear them. Cue sounds play on GO and when playback passes an auto-follow cue (tick), never on
+  seek or back, and not while a draft preview plays.
+- **Videos:** `GET/POST /videos` (streamed multipart up to 512 MB to `<data>/tmp`, moved into the blob store),
+  `PATCH/DELETE /videos/{id}`, `GET /videos/tools`, `POST /videos/import`, `GET /videos/import/{id}`,
+  `GET /videos/import` (recent jobs). Table `videos`. Channels `videos` and `import:{id}`. ffprobe for size and
+  duration, ffmpeg JPEG thumb (512 px). Imports: yt-dlp in the background (`--newline` progress → 0..0.8, H.264
+  first at or below maxHeight, `--ffmpeg-location`, `--write-info-json` for the title), ffmpeg trim (H.264 + AAC,
+  0.8..0.95), store, thumb, Video; failures end `failed` with the tool's last error line. Without yt-dlp the job is
+  done at once as an embed with the §14 message.
+- **Media tools:** port `application/ports/out/media`, implementation `infrastructure/clients/mediatools`: looks on
+  PATH, then `/opt/homebrew/bin` and `/usr/local/bin`, on every call. `app.Options.Media` injects it; the test
+  harness uses PATH only (`apitest.ToolsPath` writes fake tools and sets PATH).
+- **MCP:** `sound_list`, `sound_play {pad | sound | name, volume?}` (needs "agent may preview"), `clip_add` with
+  `sound` (sha, sha prefix or name), `offset`, `volume` (makes the first sound track; no `end` = the sound's length).
+  Server instructions, the agent prompt and `timeline_get` mention sounds.
+- **CLI:** `projmap open --out` already passes `--autoplay-policy=no-user-gesture-required` (the only place the CLI
+  opens Chrome).
+
+Tests: `apitest/scenes/crud_test.go` (CRUD, duplicate independence, rename via PATCH and patch, `scenes` channel,
+`scene_active`, activate keeps onAir/audio, restart keeps the active scene, active scene deleted underneath),
+`apitest/sounds` (WAV upload with 128 peaks, uploader fallback, unsupported, rename/delete and the channel, pads and
+sound-track validation, video layer refs, routing to `/out` with cap audio and not to `/preview` or a remote without
+it, output editor/phone, `no_audio`, loops toggling, cue sounds on GO and auto-follow, none on seek),
+`apitest/videos` (embed fallback, invalid URLs, fake yt-dlp download with progress, trim without ffmpeg fails, a
+failing yt-dlp, file uploads, persistence over a restart), `apitest/mcp/sounds_test.go`, unit tests for YouTube URL
+parsing (`domain/videos`), WAV/AIFF/peaks/sniffing (`assetsvc/audio_test.go`), pad/sound-track/video validation
+(`domain/scene/sounds_test.go`), loops toggling and the start fix (`showsvc/sound_test.go`), and the contract test
+decodes sound.json, video.json, import.json, the new ws-messages and round-trips scene.json through Decode/Encode.
+Tried by hand on port 7461 with real ffmpeg: an MP3 gets duration 3.03 s and 128 peaks, an MP4 upload gets 640x360,
+4 s and a thumb, and a fake yt-dlp import with start 1, end 3 is trimmed by ffmpeg to 2 s.
+
+Left out: imports are not resumed after a restart (jobs live in memory); progress of yt-dlp's separate video and
+audio downloads shows as one bar that never runs backwards; no ffmpeg re-encode of untrimmed downloads.

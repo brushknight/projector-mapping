@@ -198,6 +198,116 @@ extension APIClient {
     public func applyDraft(_ id: String) async throws { try await call("POST", "\(Self.v1)/drafts/\(id)/apply") }
     public func discardDraft(_ id: String) async throws { try await call("POST", "\(Self.v1)/drafts/\(id)/discard") }
 
+    // MARK: Scenes (protocol §14)
+
+    /// `POST /scenes { name, setupId?, duplicate? }` → the new scene's document.
+    public func createScene(name: String, setupId: String? = nil, duplicate: String? = nil) async throws -> JSONValue {
+        var body: JSONObject = ["name": .string(name)]
+        if let setupId { body["setupId"] = .string(setupId) }
+        if let duplicate { body["duplicate"] = .string(duplicate) }
+        return try await send("POST", "\(Self.v1)/scenes", body: .object(body))
+    }
+
+    /// `PATCH /scenes/{id} { name }` → the summary.
+    public func renameScene(_ id: String, name: String) async throws -> SceneSummary {
+        try await send("PATCH", "\(Self.v1)/scenes/\(id)", body: ["name": .string(name)])
+    }
+
+    /// `DELETE /scenes/{id}`; the active scene answers 409 `scene_active`.
+    public func deleteScene(_ id: String) async throws { try await call("DELETE", "\(Self.v1)/scenes/\(id)") }
+
+    // MARK: Sounds
+
+    public func sounds() async throws -> [Asset] { try await get("\(Self.v1)/sounds") }
+
+    public func renameSound(_ sha: String, name: String) async throws -> Asset {
+        try await send("PATCH", "\(Self.v1)/sounds/\(sha)", body: ["name": .string(name)])
+    }
+
+    public func deleteSound(_ sha: String) async throws { try await call("DELETE", "\(Self.v1)/sounds/\(sha)") }
+
+    /// `POST /sounds` (multipart `file`, optional `name`).
+    public func uploadSound(_ bytes: Data, filename: String, mime: String, name: String? = nil) async throws -> Asset {
+        var fields: [String: String] = [:]
+        if let name { fields["name"] = name }
+        let (body, type) = Multipart.body(file: bytes, filename: filename, mime: mime, fields: fields)
+        return try decode(await data(request("POST", "\(Self.v1)/sounds", body: body, contentType: type, timeout: 120)))
+    }
+
+    /// `POST /sounds/play { padId? | soundId?, volume?, sceneId? }` → `{ playId, outputs }` (the REST twin of
+    /// `cmd sound.play`).
+    public func playSound(padId: String? = nil, soundId: String? = nil, volume: Double? = nil, sceneId: String? = nil) async throws -> JSONValue {
+        try await send("POST", "\(Self.v1)/sounds/play", body: .object(SoundArgs.play(padId: padId, soundId: soundId, volume: volume, sceneId: sceneId)))
+    }
+
+    public func stopSound(playId: String? = nil, padId: String? = nil) async throws {
+        try await call("POST", "\(Self.v1)/sounds/stop", body: .object(SoundArgs.stop(playId: playId, padId: padId)))
+    }
+
+    /// `POST /show/audio { output?, volume?, muted? }`.
+    public func showAudio(output: String? = nil, volume: Double? = nil, muted: Bool? = nil) async throws {
+        try await call("POST", "\(Self.v1)/show/audio", body: .object(SoundArgs.audio(output: output, volume: volume, muted: muted)))
+    }
+
+    // MARK: Videos
+
+    public func videos() async throws -> [Video] { try await get("\(Self.v1)/videos") }
+    public func videoTools() async throws -> VideoTools { try await get("\(Self.v1)/videos/tools") }
+
+    public func renameVideo(_ id: String, name: String) async throws -> Video {
+        try await send("PATCH", "\(Self.v1)/videos/\(id)", body: ["name": .string(name)])
+    }
+
+    public func deleteVideo(_ id: String) async throws { try await call("DELETE", "\(Self.v1)/videos/\(id)") }
+
+    /// `POST /videos/import { url, maxHeight?, start?, end?, name? }` → ImportJob (202).
+    public func importVideo(url: String, maxHeight: Int? = nil, start: Double? = nil, end: Double? = nil, name: String? = nil) async throws -> ImportJob {
+        var body: JSONObject = ["url": .string(url)]
+        if let maxHeight { body["maxHeight"] = .number(Double(maxHeight)) }
+        if let start, start > 0 { body["start"] = .number(start) }
+        if let end, end > 0 { body["end"] = .number(end) }
+        if let name, !name.isEmpty { body["name"] = .string(name) }
+        return try await send("POST", "\(Self.v1)/videos/import", body: .object(body))
+    }
+
+    public func importJob(_ id: String) async throws -> ImportJob { try await get("\(Self.v1)/videos/import/\(id)") }
+
+    /// `POST /videos` (multipart `file`, optional `name`) with upload progress (0…1).
+    public func uploadVideo(_ bytes: Data, filename: String, mime: String, name: String? = nil,
+                            progress: @escaping @Sendable (Double) -> Void = { _ in }) async throws -> Video {
+        var fields: [String: String] = [:]
+        if let name { fields["name"] = name }
+        let (body, type) = Multipart.body(file: bytes, filename: filename, mime: mime, fields: fields)
+        let req = request("POST", "\(Self.v1)/videos", body: nil, contentType: type, timeout: 600)
+        return try decode(await upload(req, body: body, contentType: type, progress: progress))
+    }
+
+    /// Uploads `body` reporting progress when the transport is `URLSession`; other transports send it in one go.
+    public func upload(_ request: URLRequest, body: Data, contentType: String, progress: @escaping @Sendable (Double) -> Void) async throws -> Data {
+        var req = request
+        req.setValue(contentType, forHTTPHeaderField: "Content-Type")
+        guard let session = transport as? URLSession else {
+            req.httpBody = body
+            let d = try await data(req)
+            progress(1)
+            return d
+        }
+        let delegate = UploadProgress(progress)
+        let d: Data, resp: URLResponse
+        do {
+            (d, resp) = try await session.upload(for: req, from: body, delegate: delegate)
+        } catch {
+            throw APIError.unreachable(error.localizedDescription)
+        }
+        guard let http = resp as? HTTPURLResponse else { throw APIError.unreachable("no response") }
+        guard (200..<300).contains(http.statusCode) else {
+            let e = try? JSONDecoder().decode(WireError.self, from: d)
+            throw APIError.http(status: http.statusCode, code: e?.code ?? "", message: e?.message ?? String(decoding: d.prefix(200), as: UTF8.self))
+        }
+        progress(1)
+        return d
+    }
+
     // MARK: URLs for images and the preview page
 
     public func assetURL(sha: String) -> URL { url("/a/\(sha)") }
@@ -213,6 +323,42 @@ extension APIClient {
         q.append(.init(name: "mode", value: mode))
         if let layer { q.append(.init(name: "layer", value: layer)) }
         return url("/preview", query: q)
+    }
+}
+
+/// Args of the sound commands (§14), shared by `cmd` and REST.
+public enum SoundArgs {
+    public static func play(padId: String? = nil, soundId: String? = nil, volume: Double? = nil, sceneId: String? = nil) -> JSONObject {
+        var a: JSONObject = [:]
+        if let padId { a["padId"] = .string(padId) }
+        if let soundId { a["soundId"] = .string(soundId) }
+        if let volume { a["volume"] = .number(volume) }
+        if let sceneId { a["sceneId"] = .string(sceneId) }
+        return a
+    }
+
+    public static func stop(playId: String? = nil, padId: String? = nil) -> JSONObject {
+        var a: JSONObject = [:]
+        if let playId { a["playId"] = .string(playId) }
+        if let padId { a["padId"] = .string(padId) }
+        return a
+    }
+
+    public static func audio(output: String? = nil, volume: Double? = nil, muted: Bool? = nil) -> JSONObject {
+        var a: JSONObject = [:]
+        if let output { a["output"] = .string(output) }
+        if let volume { a["volume"] = .number(volume) }
+        if let muted { a["muted"] = .bool(muted) }
+        return a
+    }
+}
+
+final class UploadProgress: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    let report: @Sendable (Double) -> Void
+    init(_ report: @escaping @Sendable (Double) -> Void) { self.report = report }
+    func urlSession(_ session: URLSession, task: URLSessionTask, didSendBodyData bytesSent: Int64, totalBytesSent: Int64, totalBytesExpectedToSend: Int64) {
+        guard totalBytesExpectedToSend > 0 else { return }
+        report(min(1, Double(totalBytesSent) / Double(totalBytesExpectedToSend)))
     }
 }
 

@@ -261,5 +261,126 @@
    "height": 1080,
    "refresh": 60
   }
+ },
+ {
+  "t": "cmd",
+  "id": "c-90",
+  "d": {
+   "name": "sound.play",
+   "args": {
+    "padId": "pad_thunder",
+    "volume": 1
+   }
+  }
+ },
+ {
+  "t": "ack",
+  "re": "c-90",
+  "d": {
+   "playId": "ply_k2m9x0aa",
+   "outputs": 1
+  }
+ },
+ {
+  "t": "sound.play",
+  "d": {
+   "playId": "ply_k2m9x0aa",
+   "sound": "a77c31",
+   "padId": "pad_thunder",
+   "name": "thunder",
+   "volume": 0.9,
+   "loop": false
+  }
+ },
+ {
+  "t": "sound.stop",
+  "d": {
+   "padId": "pad_rain"
+  }
+ },
+ {
+  "t": "cmd",
+  "id": "c-91",
+  "d": {
+   "name": "show.audio",
+   "args": {
+    "volume": 0.8,
+    "muted": false
+   }
+  }
+ },
+ {
+  "t": "snapshot",
+  "ch": "sounds",
+  "v": 1791700000123,
+  "d": [
+   {
+    "sha": "5d1e0a",
+    "mime": "audio/mpeg",
+    "width": 0,
+    "height": 0,
+    "bytes": 482113,
+    "kind": "sound",
+    "name": "rain on glass",
+    "duration": 12.48,
+    "peaks": [
+     0.02,
+     0.08,
+     0.31,
+     0.55,
+     0.88,
+     0.72,
+     0.6,
+     0.64,
+     0.58,
+     0.49,
+     0.41,
+     0.37,
+     0.3,
+     0.22,
+     0.12,
+     0.04
+    ]
+   }
+  ]
+ },
+ {
+  "t": "snapshot",
+  "ch": "scenes",
+  "v": 1791700000124,
+  "d": [
+   {
+    "id": "scn_desk",
+    "name": "Desk",
+    "setupId": "set_desk",
+    "version": 1
+   },
+   {
+    "id": "scn_party",
+    "name": "party",
+    "setupId": "set_desk",
+    "version": 3
+   }
+  ]
+ },
+ {
+  "t": "snapshot",
+  "ch": "import:imp_3k9x0aa1",
+  "v": 4,
+  "d": {
+   "id": "imp_3k9x0aa1",
+   "url": "https://youtu.be/aqz-KE-bpKQ",
+   "youtubeId": "aqz-KE-bpKQ",
+   "mode": "download",
+   "status": "running",
+   "progress": 0.42,
+   "message": "downloading 42%",
+   "maxHeight": 1080,
+   "start": 12,
+   "end": 32,
+   "videoId": null,
+   "ref": null,
+   "createdAt": "2026-10-14T10:00:00Z"
+  }
  }
 ]

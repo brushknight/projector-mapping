@@ -33,16 +33,29 @@ enum DemoData {
             "scenery": ["layers": [photo]],
         ]
         let mode = screen?.tab.rawValue ?? "live"
-        scene = (try? scene.applying([.replace("/backdrop", backdrop), .replace("/mode", .string(mode))])) ?? scene
+        scene = (try? scene.applying([.replace("/backdrop", backdrop), .replace("/mode", .string(mode)), .replace("/sounds", ["pads": .array(pads)])])) ?? scene
+        if screen == .videos {
+            scene = (try? scene.applying(.replace("/backdrop/scenery/layers", [video]))) ?? scene
+        }
         try? db.saveSceneSnapshot(scene, version: 418)
+        // Two more scenes with their own looks and soundboards (protocol §14: each scene keeps its own).
+        let tour = (try? scene.applying([.replace("/id", "scn_tour"), .replace("/name", "desk tour"), .replace("/mode", "live"),
+                                          .replace("/sounds/pads", .array(Array(pads.prefix(3))))])) ?? scene
+        let outro = (try? scene.applying([.replace("/id", "scn_outro"), .replace("/name", "outro"), .replace("/mode", "color"),
+                                           .replace("/sounds/pads", [])])) ?? scene
+        try? db.saveSceneSnapshot(tour, version: 12)
+        try? db.saveSceneSnapshot(outro, version: 4)
         try? db.saveSceneList([
             SceneSummary(id: "scn_desk", name: "zimacube reveal", setupId: "set_desk", version: 418),
-            SceneSummary(id: "scn_tour", name: "desk tour", setupId: "set_desk", version: 1),
-            SceneSummary(id: "scn_outro", name: "outro", setupId: "set_desk", version: 1),
+            SceneSummary(id: "scn_tour", name: "desk tour", setupId: "set_desk", version: 12),
+            SceneSummary(id: "scn_outro", name: "outro", setupId: "set_desk", version: 4),
         ])
-        // The objects board holds at cue 2 (trace), 6.4 s.
+        // The objects board holds at cue 2 (trace), 6.4 s. The phone is the audio output so the demo pads sound.
         show.transport = Transport(state: "paused", startedAt: 0, offset: 6.4, cue: 1)
+        show.audio = ShowAudio(output: "phone", volume: 0.8, muted: false, loops: ["pad_rain"])
         try? db.saveShow(show)
+        try? db.saveSounds(sounds)
+        try? db.saveVideos(videos)
 
         var presets: [Preset] = []
         func p(_ id: String, _ name: String, _ mode: String, _ layers: [JSONValue]) {
@@ -72,6 +85,9 @@ enum DemoData {
     static func prepare(_ model: AppModel, screen: DebugScreen?) {
         switch screen {
         case .addlayer: model.showAddLayer = true
+        case .scenes: model.showScenes = true
+        case .sounds: model.showSounds = true
+        case .youtube: model.showYouTube = true
         case .setup: model.showSetup = true
         case .automap1: model.autoMapStep = 0; model.showAutoMap = true
         case .automap2:
@@ -85,6 +101,102 @@ enum DemoData {
             model.autoMapStep = 3; model.showAutoMap = true
         default: break
         }
+    }
+
+    // MARK: Sounds and videos (protocol §14)
+
+    static func sound(_ sha: String, _ name: String, _ duration: Double, _ peaks: [Double]) -> Asset {
+        Asset(sha: sha, mime: "audio/mpeg", bytes: Int(duration * 24000), kind: "sound", name: name, duration: duration, peaks: peaks)
+    }
+
+    static func peaks(_ seed: Int, _ shape: (Double) -> Double) -> [Double] {
+        (0..<48).map { i in
+            let x = Double(i) / 47
+            let jitter = 0.75 + 0.25 * sin(Double(i * (seed + 3)) * 1.7)
+            return min(1, max(0.03, shape(x) * jitter))
+        }
+    }
+
+    static let sounds: [Asset] = [
+        fixture("sound").flatMap { try? $0.decode(Asset.self) } ?? sound("5d1e0a", "rain on glass", 12.48, peaks(1) { _ in 0.5 }),
+        sound("a77c31", "thunder", 6.2, peaks(2) { x in x < 0.08 ? x * 12 : exp(-(x - 0.08) * 3.2) }),
+        sound("b0d001", "door creak", 2.4, peaks(3) { x in 0.3 + 0.5 * sin(x * .pi) }),
+        sound("c0be11", "shop bell", 3.1, peaks(4) { x in exp(-x * 4) }),
+        sound("d0a1d0", "wind", 20, peaks(5) { x in 0.35 + 0.25 * sin(x * 9) }),
+        sound("e0b1d5", "birds", 15, peaks(6) { x in 0.25 + 0.4 * abs(sin(x * 23)) }),
+        sound("f0c0c0", "knock knock", 1.2, peaks(7) { x in x.truncatingRemainder(dividingBy: 0.25) < 0.06 ? 0.9 : 0.05 }),
+        sound("9a0b0c", "music box", 30, peaks(8) { x in 0.3 + 0.3 * abs(sin(x * 40)) }),
+    ]
+
+    static let pads: [JSONValue] = {
+        func pad(_ id: String, _ name: String, _ sound: String, _ color: String, _ icon: String, _ key: String, loop: Bool = false, volume: Double = 1) -> JSONValue {
+            ["id": .string(id), "name": .string(name), "sound": .string(sound), "volume": .number(volume), "color": .string(color),
+             "icon": .string(icon), "key": .string(key), "loop": .bool(loop)]
+        }
+        return [
+            pad("pad_thunder", "thunder", "a77c31", "blue", "thunder", "t", volume: 0.9),
+            pad("pad_rain", "rain", "5d1e0a", "teal", "rain", "r", loop: true, volume: 0.6),
+            pad("pad_door", "door", "b0d001", "amber", "door", "d"),
+            pad("pad_bell", "bell", "c0be11", "ink", "bell", "b"),
+            pad("pad_wind", "wind", "d0a1d0", "violet", "wind", "w", loop: true, volume: 0.7),
+            pad("pad_birds", "birds", "e0b1d5", "green", "bird", "g", loop: true),
+            pad("pad_knock", "knock", "f0c0c0", "pink", "knock", "k"),
+            pad("pad_music", "music box", "9a0b0c", "red", "music", "m", loop: true, volume: 0.5),
+        ]
+    }()
+
+    /// Demo video tiles; `thumb` names a bundled photo so they draw offline (real thumbs are asset shas).
+    static let videos: [Video] = [
+        Video(id: "vid_ocean", name: "ocean loop", ref: "asset:demo_ocean", source: "file", sha: "demo_ocean", thumb: "ocean", duration: 24, width: 1920, height: 1080),
+        Video(id: "vid_bunny", name: "big buck bunny", ref: "youtube:aqz-KE-bpKQ", source: "youtube", url: "https://www.youtube.com/watch?v=aqz-KE-bpKQ",
+              youtubeId: "aqz-KE-bpKQ", thumb: "tropical", duration: 20),
+        Video(id: "vid_falls", name: "waterfall", ref: "asset:demo_falls", source: "youtube", url: "https://youtu.be/aqz-KE-bpKQ", youtubeId: "aqz-KE-bpKQ",
+              sha: "demo_falls", thumb: "waterfall", duration: 18, width: 3840, height: 2160),
+        Video(id: "vid_forest", name: "forest rain", ref: "asset:demo_forest", source: "file", sha: "demo_forest", thumb: "forest", duration: 32, width: 1920, height: 1080),
+    ]
+
+    static let video: JSONValue = [
+        "id": "lay_photo", "kind": "video", "ref": "asset:demo_ocean", "name": "ocean loop", "visible": true, "opacity": 1, "blend": "normal", "light": nil,
+        "params": ["blur": 0.62, "brightness": 0.7, "warmth": 0.1, "drift": 0.1, "start": 4, "end": 0, "audio": false, "volume": 1],
+    ]
+
+    /// A short generated WAV standing in for a demo sound (noise for weather and doors, a decaying tone for the rest).
+    static func soundFile(_ sha: String) -> URL? {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("projmap-demo-sounds", isDirectory: true)
+        let url = dir.appendingPathComponent("\(sha).wav")
+        if FileManager.default.fileExists(atPath: url.path) { return url }
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let name = sounds.first { $0.sha == sha }?.name ?? sha
+        let rate = 22050, seconds = 1.6
+        let noisy = ["rain", "wind", "thunder", "door"].contains { name.contains($0) }
+        let freq = 440.0 * pow(2, Double(abs(sha.hashValue % 12)) / 12)
+        var samples = [Int16]()
+        var seed: UInt32 = 12345
+        var low = 0.0
+        for i in 0..<Int(Double(rate) * seconds) {
+            let t = Double(i) / Double(rate)
+            let env = min(1, t * 40) * exp(-t * (noisy ? 1.4 : 3))
+            var v: Double
+            if noisy {
+                seed = seed &* 1_664_525 &+ 1_013_904_223
+                let white = Double(seed >> 8) / Double(1 << 24) * 2 - 1
+                low += (white - low) * (name.contains("thunder") ? 0.05 : 0.3)
+                v = low * (name.contains("thunder") ? 3 : 1)
+            } else {
+                v = sin(2 * .pi * freq * t) * 0.6 + sin(4 * .pi * freq * t) * 0.2
+            }
+            samples.append(Int16(max(-1, min(1, v * env * 0.5)) * 32767))
+        }
+        var data = Data()
+        func u32(_ v: UInt32) { withUnsafeBytes(of: v.littleEndian) { data.append(contentsOf: $0) } }
+        func u16(_ v: UInt16) { withUnsafeBytes(of: v.littleEndian) { data.append(contentsOf: $0) } }
+        let bytes = UInt32(samples.count * 2)
+        data.append(contentsOf: Array("RIFF".utf8)); u32(36 + bytes); data.append(contentsOf: Array("WAVEfmt ".utf8))
+        u32(16); u16(1); u16(1); u32(UInt32(rate)); u32(UInt32(rate * 2)); u16(2); u16(16)
+        data.append(contentsOf: Array("data".utf8)); u32(bytes)
+        samples.withUnsafeBytes { data.append(contentsOf: $0) }
+        try? data.write(to: url)
+        return url
     }
 
     // MARK: Layers

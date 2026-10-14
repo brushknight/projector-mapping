@@ -1,0 +1,15 @@
+{
+ "id": "imp_3k9x0aa1",
+ "url": "https://youtu.be/aqz-KE-bpKQ",
+ "youtubeId": "aqz-KE-bpKQ",
+ "mode": "download",
+ "status": "running",
+ "progress": 0.42,
+ "message": "downloading 42%",
+ "maxHeight": 1080,
+ "start": 12,
+ "end": 32,
+ "videoId": null,
+ "ref": null,
+ "createdAt": "2026-10-14T10:00:00Z"
+}

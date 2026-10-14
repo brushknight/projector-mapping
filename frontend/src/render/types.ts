@@ -58,6 +58,11 @@ export interface RenderInput {
    * the editor dims to 0.15). The backdrop is skipped while a solo is on.
    */
   solo?: { surfaceIds: string[]; fill: 'content' | 'white' | 'grid'; others?: number } | null
+  /**
+   * (§14) the gain for video layers' own sound (`params.audio`): volume × master on the audio output client, 0 or
+   * absent = every video stays muted. The page passes it only once the browser allows sound.
+   */
+  videoVolume?: number | null
 }
 
 export interface RendererOptions {
@@ -72,6 +77,11 @@ export interface RendererOptions {
   maxSceneSize?: number
   /** resolves asset URLs: scenery ids → /catalog/assets/…, asset:<sha> → /a/<sha> */
   resolveUrl?: (ref: string) => string
+  /**
+   * (§14) a canvas with alpha, for pages that place a YouTube player behind it (/out, /preview, live previews). The
+   * frame stays opaque (alpha 1) unless a YouTube layer shows, so nothing else changes.
+   */
+  transparent?: boolean
 }
 
 export interface EffectError {

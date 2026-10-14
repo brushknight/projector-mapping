@@ -42,6 +42,8 @@ func Seed(ctx context.Context, setups *SetupsModule, scenes *ScenesModule, cat *
 	if err != nil {
 		return false, err
 	}
+	// the fixture's pads, sound clips, cue sounds and video layers point at files this server does not have
+	sc.StripMedia()
 	if err := scenes.Service.Import(ctx, sc); err != nil {
 		return false, err
 	}

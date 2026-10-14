@@ -24,6 +24,8 @@ export default defineConfig({
   server: {
     port: 5410,
     fs: { allow: ['..'] },
+    // Playwright writes traces (with .html files) under e2e/.results; watching them reloads every open page
+    watch: { ignored: ['**/e2e/.results/**', '**/test-results/**'] },
     proxy: {
       '/api': { target: api, changeOrigin: false },
       '/ws': { target: api.replace(/^http/, 'ws'), ws: true, changeOrigin: false },

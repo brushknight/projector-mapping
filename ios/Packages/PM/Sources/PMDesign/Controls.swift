@@ -448,7 +448,7 @@ public struct ImageCard<Art: View>: View {
                 Text(name).font(.pm(14)).tracking(0.2).lineLimit(1).padding(.horizontal, 4)
                     .foregroundStyle(Palette.ink)
                 if let meta {
-                    Text(meta).font(.pm(12)).foregroundStyle(Palette.dim).padding(.horizontal, 4).padding(.top, -6)
+                    Text(meta).font(.pm(12)).foregroundStyle(Palette.dim).lineLimit(1).padding(.horizontal, 4).padding(.top, -6)
                 }
             }
         }

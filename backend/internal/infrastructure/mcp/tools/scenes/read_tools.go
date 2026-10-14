@@ -22,7 +22,7 @@ func Register(s *mcp.Server, env *tools.Env) {
 	tools.Add(s, env, &mcp.Tool{Name: "surface_get", Title: "Read one surface",
 		Description: "One surface in detail: points, edges with lengths, area, centroid, which points it shares with other surfaces and which faces touch it, its parent and details."}, surfaceGet)
 	tools.Add(s, env, &mcp.Tool{Name: "timeline_get", Title: "Read the timeline",
-		Description: "Tracks (with their targets), clips (effect, start, end, fades, params) and cues (GO stops) of the scene."}, timelineGet)
+		Description: "Tracks (with their targets), clips (effect, start, end, fades, params) and cues (GO stops) of the scene. Sound tracks (target kind sound) hold sound clips {sound, offset, volume}; a cue may carry a sound that plays when it starts."}, timelineGet)
 	tools.Add(s, env, &mcp.Tool{Name: "reference_photo_get", Title: "See the reference photo",
 		Description: "The photo taken from the projector lens position (never projected): what the real objects look like from the projector. Scene pixels line up with it when it was taken at the lens."}, referencePhoto)
 	registerWrite(s, env)

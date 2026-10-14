@@ -1,6 +1,7 @@
 # The iPhone app
 
-The app is a remote, a camera for auto map and a way to start agents. It is native SwiftUI for iOS 26, iPhone only.
+The app is a remote, a camera for auto map and a way to start agents. It plays and switches the show; mapping
+happens in the editor. It is native SwiftUI for iOS 26, iPhone only.
 It is not on the App Store yet, so you build it with Xcode.
 
 ## Requirements
@@ -48,7 +49,7 @@ The simulator reaches a server on the same Mac at `127.0.0.1:7400`. Useful launc
 | argument | does |
 | --- | --- |
 | `-pm-demo` | offline demo with sample data, no server |
-| `-pm-screen <name>` | open on one screen: `static`, `live`, `color`, `scenery`, `objects`, `setup`, `automap1`…`automap4`, `connect` |
+| `-pm-screen <name>` | open on one screen: `static`, `live`, `color`, `scenery`, `objects`, `setup`, `automap1`…`automap4`, `connect`, `scenes`, `sounds`, `youtube`, `videos` |
 | `-pm-reset` | forget the server and the cache |
 | `-pm-connect "projmap://connect?server=127.0.0.1:7400&code=K7Q2"` | pair with a code |
 
@@ -77,6 +78,20 @@ The simulator has no camera; auto map shows a drawn desk there.
    Management.
 4. Allow **Local Network** access when asked. Without it the app cannot find or reach the server.
 
+## Using it
+
+- **Tabs** are the modes (static, live, color, scenery, objects); opening one puts it on air.
+- **Scenes:** the scene button at the top of every tab lists the scenes, marks the one on the wall, and switches,
+  creates or duplicates scenes.
+- **Sounds:** the speaker button at the top of every tab opens the soundboard of the active scene, the sound library,
+  the master volume and mute, and the audio output. With the output set to **phone**, the phone itself plays every
+  sound, the timeline's sound clips and cue sounds included.
+- **Objects** plays the timeline: GO, back and stop, a reveal button per object, and the live picture at the wall's
+  clock. Cue sounds play on GO.
+- **Scenery** has a **videos** category beside the photos. **add from YouTube** takes a link (paste it, or share it to
+  projmap), a trim and a quality; **add video file** picks a video from Photos. See
+  [sound-and-video.md](sound-and-video.md).
+
 ## Permissions
 
 | permission | used for |
@@ -84,7 +99,7 @@ The simulator has no camera; auto map shows a drawn desk there.
 | Local Network | finding the server over Bonjour (`_projmap._tcp`) and talking to it |
 | Camera | scanning the pairing QR code, auto map stills and the camera preview |
 | Motion | checking that the phone is steady and level before auto map |
-| Photos | sending a photo you pick to the projector as scenery |
+| Photos | sending a photo or a video you pick to the projector as scenery |
 
 The app speaks plain HTTP on the local network only (App Transport Security allows local networking).
 

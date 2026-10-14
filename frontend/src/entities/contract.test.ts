@@ -13,6 +13,28 @@ import { patchOpShape, sceneShape } from './scene/schema'
 import { setupShape } from './setup/schema'
 import { showShape } from './show/schema'
 import type { Scene } from './scene/types'
+import { soundPlayShape, soundStopShape } from './sound/schema'
+import { importJobShape, videoShape } from './video/schema'
+
+// (§14) a library sound: an asset of kind sound with its name, duration and peaks
+const soundShape: Guard = (v, p) => [...assetShape(v, p), ...obj({ kind: lit('sound'), name: str, duration: num, peaks: arr(num) })(v, p)]
+const sceneSummaryShape = obj({ id: str, name: str, setupId: str, version: int })
+/** snapshot payloads by channel (prefix before ':') */
+const snapshots: Record<string, Guard> = {
+  sounds: arr(soundShape),
+  videos: arr(videoShape),
+  scenes: arr(sceneSummaryShape),
+  import: importJobShape,
+  show: showShape,
+  setup: setupShape,
+  scene: sceneShape,
+}
+/** cmd args by command name (§14) */
+const cmdArgs: Record<string, Guard> = {
+  'sound.play': obj({ padId: nullable(str), soundId: nullable(str), volume: nullable(num), sceneId: nullable(str) }),
+  'sound.stop': obj({ playId: nullable(str), padId: nullable(str) }),
+  'show.audio': obj({ output: nullable(lit('projector', 'editor', 'phone')), volume: nullable(num), muted: nullable(bool) }),
+}
 
 const dir = fileURLToPath(new URL('../../../contract/', import.meta.url))
 const read = (f: string) => JSON.parse(readFileSync(dir + f, 'utf8'))
@@ -28,6 +50,9 @@ const byFile: Record<string, Guard> = {
   'scene.json': sceneShape,
   'setup.json': setupShape,
   'show.json': showShape,
+  'sound.json': soundShape,
+  'video.json': videoShape,
+  'import.json': importJobShape,
 }
 
 const envelope = obj({ t: str, ch: nullable(str), id: nullable(str), re: nullable(str), v: nullable(int), base: nullable(int) })
@@ -48,6 +73,8 @@ const payloads: Record<string, Guard> = {
   rpc: obj({ method: str, args: any }),
   'rpc.result': any,
   telemetry: telemetryShape,
+  'sound.play': soundPlayShape,
+  'sound.stop': soundStopShape,
 }
 
 describe('contract fixtures', () => {
@@ -70,8 +97,27 @@ describe('contract fixtures', () => {
       const g = payloads[m.t]
       expect(g, `payload guard for ${m.t}`).toBeTruthy()
       if (m.d !== undefined) assertShape(g, m.d, `payload ${m.t}`)
-      if (m.t === 'snapshot' && m.ch?.startsWith('setup:')) assertShape(setupShape, m.d, 'setup snapshot')
+      if (m.t === 'snapshot' && m.ch) {
+        const sg = snapshots[m.ch.split(':')[0]]
+        if (sg) assertShape(sg, m.d, `${m.ch} snapshot`)
+      }
+      if (m.t === 'cmd') {
+        const d = m.d as { name: string; args?: unknown }
+        if (cmdArgs[d.name]) assertShape(cmdArgs[d.name], d.args ?? {}, `cmd ${d.name}`)
+      }
     }
+  })
+
+  it('decodes the §14 messages the hub routes', () => {
+    const msgs = read('fixtures/ws-messages.json') as Array<{ t: string; d?: unknown; ch?: string }>
+    for (const t of ['sound.play', 'sound.stop']) expect(msgs.some((m) => m.t === t && !m.ch), t).toBe(true)
+    for (const ch of ['sounds', 'scenes']) expect(msgs.some((m) => m.t === 'snapshot' && m.ch === ch), ch).toBe(true)
+    expect(msgs.some((m) => m.t === 'snapshot' && m.ch?.startsWith('import:'))).toBe(true)
+    // a sound asset without peaks is not a library sound
+    const snd = read('fixtures/sound.json')
+    expect(soundShape({ ...snd, peaks: undefined }, '')).not.toHaveLength(0)
+    expect(soundShape({ ...snd, kind: 'photo' }, '')).not.toHaveLength(0)
+    expect(read('catalog.json').videoParams).toBeTruthy()
   })
 
   it('decodes the catalog', () => {

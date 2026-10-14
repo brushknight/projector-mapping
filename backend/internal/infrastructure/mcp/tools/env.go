@@ -26,6 +26,7 @@ import (
 	scenessvc "projmap/internal/application/services/scenes"
 	setupssvc "projmap/internal/application/services/setups"
 	showsvc "projmap/internal/application/services/show"
+	soundssvc "projmap/internal/application/services/sounds"
 	"projmap/internal/domain/agents"
 	"projmap/internal/domain/devices"
 	"projmap/internal/domain/docpatch"
@@ -42,6 +43,7 @@ type Deps struct {
 	Show         showsvc.ShowService
 	Catalog      catalogsvc.CatalogService
 	Assets       assetssvc.AssetService
+	Sounds       soundssvc.SoundService
 	Agents       agentssvc.AgentService
 	Camera       camerasvc.CameraService
 	Calibrations camerasvc.CalibrationService

@@ -121,6 +121,7 @@ export class Hub {
   private cmds = new Map<string, { resolve: (d: unknown) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }>()
   private rpc = new Map<string, RpcHandler>()
   private listeners = new Map<keyof HubEvents, Set<(v: never) => void>>()
+  private direct = new Map<string, Set<(d: unknown, env: Envelope) => void>>()
   private seq = 0
   private attempts = 0
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
@@ -248,6 +249,18 @@ export class Hub {
     if (!set) this.listeners.set(ev, (set = new Set()))
     set.add(fn as (v: never) => void)
     return () => set.delete(fn as (v: never) => void)
+  }
+
+  /**
+   * Listens to direct server messages of one type (no channel), such as `sound.play` and `sound.stop` (§14).
+   * Returns the unsubscribe function.
+   */
+  onMessage<D = unknown>(type: string, fn: (d: D, env: Envelope) => void): () => void {
+    let set = this.direct.get(type)
+    if (!set) this.direct.set(type, (set = new Set()))
+    const f = fn as (d: unknown, env: Envelope) => void
+    set.add(f)
+    return () => set.delete(f)
   }
 
   private emit<K extends keyof HubEvents>(ev: K, v: HubEvents[K]) {
@@ -466,6 +479,7 @@ export class Hub {
 
   private handle(env: Envelope) {
     this.emit('message', env)
+    if (!env.ch) for (const fn of this.direct.get(env.t) ?? []) fn(env.d, env)
     const c = env.ch ? this.channels.get(env.ch) : undefined
     switch (env.t) {
       case 'welcome': {

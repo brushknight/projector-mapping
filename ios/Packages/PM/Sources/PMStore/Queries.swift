@@ -52,6 +52,14 @@ public enum Queries {
         }
     }
 
+    public static func sounds(_ db: Database) throws -> [Asset] {
+        JSONValue.parse(try KV.get(db, KV.sounds)).flatMap { try? $0.decode([Asset].self) } ?? []
+    }
+
+    public static func videos(_ db: Database) throws -> [Video] {
+        JSONValue.parse(try KV.get(db, KV.videos)).flatMap { try? $0.decode([Video].self) } ?? []
+    }
+
     public static func presets(_ db: Database, mode: String) throws -> [Preset] {
         try String.fetchAll(db, sql: "SELECT doc FROM preset WHERE mode = ? ORDER BY sort", arguments: [mode])
             .compactMap { JSONValue.parse($0).flatMap { try? $0.decode(Preset.self) } }
@@ -79,6 +87,14 @@ extension AppDatabase {
 
     public func observeScenes() -> ValueObservation<ValueReducers.RemoveDuplicates<ValueReducers.Fetch<[SceneSummary]>>> {
         ValueObservation.tracking(Queries.scenes).removeDuplicates()
+    }
+
+    public func observeSounds() -> ValueObservation<ValueReducers.RemoveDuplicates<ValueReducers.Fetch<[Asset]>>> {
+        ValueObservation.tracking(Queries.sounds).removeDuplicates()
+    }
+
+    public func observeVideos() -> ValueObservation<ValueReducers.RemoveDuplicates<ValueReducers.Fetch<[Video]>>> {
+        ValueObservation.tracking(Queries.videos).removeDuplicates()
     }
 
     public func observePresets(mode: String) -> ValueObservation<ValueReducers.RemoveDuplicates<ValueReducers.Fetch<[Preset]>>> {

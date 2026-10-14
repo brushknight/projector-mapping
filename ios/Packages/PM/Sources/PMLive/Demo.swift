@@ -39,12 +39,22 @@ extension LiveHub {
             guard !cues.isEmpty else { throw WireError(code: "no_cues", message: "This scene has no cues.") }
             let next = show.transport.state == "stopped" && show.transport.offset == 0 && show.transport.cue == 0 ? 0 : min(show.transport.cue + 1, cues.count - 1)
             show.transport = Transport(state: "playing", startedAt: nowNs, offset: cues[next].at, cue: next)
+            if let cs = cues[next].sound, !cs.sound.isEmpty {
+                demoSound(.play(SoundPlay(playId: Self.demoPlayId(), sound: cs.sound, cueId: cues[next].id, name: cues[next].label, volume: cs.volume)), show: show)
+            }
+        case "sound.play", "sound.stop", "show.audio":
+            let result = try demoSoundCommand(name, args, show: &show, scene: state.scene)
+            show.version += 1
+            try? db.saveShow(show)
+            return result
         case "show.back":
             guard !cues.isEmpty else { return nil }
             let prev = max(show.transport.cue - 1, 0)
             show.transport = Transport(state: "paused", startedAt: 0, offset: cues[prev].at, cue: prev)
         case "show.stop":
             show.transport = Transport()
+            if !show.audio.loops.isEmpty { demoSound(.stop(SoundStop()), show: show) }
+            show.audio.loops = []
         case "show.play":
             show.transport = Transport(state: "playing", startedAt: nowNs, offset: show.transport.offset, cue: show.transport.cue)
         case "show.pause":
@@ -62,6 +72,8 @@ extension LiveHub {
             if let id = args["sceneId"]?.string {
                 show.activeSceneId = id
                 show.transport = Transport()
+                if !show.audio.loops.isEmpty { demoSound(.stop(SoundStop()), show: show) }
+                show.audio.loops = []
             }
         case "setup.testPattern":
             if let setupId = state.setup?.id, let pattern = args["pattern"]?.string {

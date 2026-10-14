@@ -22,6 +22,34 @@ import (
 // Channel is a scene's realtime channel.
 func Channel(id string) string { return "scene:" + id }
 
+// ListChannel carries the scene list (protocol §14): a snapshot on every create, delete and rename.
+const ListChannel = "scenes"
+
+// MaxNameLen is the longest scene name in characters.
+const MaxNameLen = 80
+
+// CleanName trims a scene name and checks its length.
+func CleanName(name string) (string, error) {
+	name = strings.TrimSpace(name)
+	if n := len([]rune(name)); n < 1 || n > MaxNameLen {
+		return "", app_errors.BadRequest("A scene name needs 1 to %d characters.", MaxNameLen)
+	}
+	return name, nil
+}
+
+// publishList sends the scene list on the scenes channel.
+func (s *Service) publishList(ctx context.Context) {
+	l, err := s.repo.List(ctx)
+	if err != nil {
+		s.log.Warn("scene list", "err", err)
+		return
+	}
+	if l == nil {
+		l = []scene.Summary{}
+	}
+	s.pub.Publish(ListChannel, realtime.Message{T: "snapshot", Ch: ListChannel, V: realtime.Ver(s.now().UnixMilli()), D: realtime.Data(l)})
+}
+
 // Service implements SceneService.
 type Service struct {
 	repo  scenerepo.SceneRepository
@@ -176,9 +204,9 @@ func (s *Service) Validate(sc *scene.Scene) error {
 }
 
 func (s *Service) Create(ctx context.Context, name, setupID string) (*scene.Scene, error) {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return nil, app_errors.BadRequest("A scene needs a name.")
+	name, err := CleanName(name)
+	if err != nil {
+		return nil, err
 	}
 	if setupID == "" {
 		return nil, app_errors.BadRequest("A scene needs a setupId.")
@@ -187,7 +215,42 @@ func (s *Service) Create(ctx context.Context, name, setupID string) (*scene.Scen
 	if err := s.repo.Create(ctx, &sc); err != nil {
 		return nil, err
 	}
+	s.publishList(ctx)
 	return &sc, nil
+}
+
+func (s *Service) Duplicate(ctx context.Context, srcID, name string) (*scene.Scene, error) {
+	name, err := CleanName(name)
+	if err != nil {
+		return nil, err
+	}
+	src, err := s.Scene(ctx, srcID)
+	if err != nil {
+		return nil, err
+	}
+	src.ID, src.Version, src.Name = services.NewID("scn"), 1, name
+	src.Normalize()
+	if err := s.repo.Create(ctx, src); err != nil {
+		return nil, err
+	}
+	s.publishList(ctx)
+	return src, nil
+}
+
+func (s *Service) Rename(ctx context.Context, id, name, by string) (scene.Summary, error) {
+	name, err := CleanName(name)
+	if err != nil {
+		return scene.Summary{}, err
+	}
+	v, err := s.Patch(ctx, scenessvc.PatchCmd{SceneID: id, Ops: []docpatch.Op{docpatch.Replace("/name", name)}, By: by})
+	if err != nil {
+		return scene.Summary{}, err
+	}
+	sc, err := s.Scene(ctx, id)
+	if err != nil {
+		return scene.Summary{}, err
+	}
+	return scene.Summary{ID: sc.ID, Name: sc.Name, SetupID: sc.SetupID, Version: v}, nil
 }
 
 func (s *Service) Import(ctx context.Context, sc *scene.Scene) error {
@@ -201,7 +264,11 @@ func (s *Service) Import(ctx context.Context, sc *scene.Scene) error {
 	if err := s.Validate(sc); err != nil {
 		return err
 	}
-	return s.repo.Create(ctx, sc)
+	if err := s.repo.Create(ctx, sc); err != nil {
+		return err
+	}
+	s.publishList(ctx)
+	return nil
 }
 
 func (s *Service) Delete(ctx context.Context, id string) error {
@@ -214,6 +281,7 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 		a.inbox <- func() { a.closed = true }
 	}
 	s.mu.Unlock()
+	s.publishList(ctx)
 	return nil
 }
 
@@ -251,6 +319,9 @@ func (a *actor) commit(ctx context.Context, ops []docpatch.Op, by, re string) (e
 		return entry{}, app_errors.Invalid("The patch makes an invalid scene: %v", err)
 	}
 	sc.Version = a.version + 1
+	if n := len([]rune(strings.TrimSpace(sc.Name))); sc.Name != a.name && (n < 1 || n > MaxNameLen) {
+		return entry{}, app_errors.Invalid("A scene name needs 1 to %d characters.", MaxNameLen)
+	}
 	if err := a.svc.Validate(sc); err != nil {
 		return entry{}, err
 	}
@@ -259,9 +330,13 @@ func (a *actor) commit(ctx context.Context, ops []docpatch.Op, by, re string) (e
 	if err := a.svc.repo.Commit(ctx, a.id, doc, sc.Name, he); err != nil {
 		return entry{}, err
 	}
+	renamed := a.name != sc.Name
 	a.doc, a.version, a.name = doc, sc.Version, sc.Name
 	a.svc.pub.Publish(Channel(a.id), realtime.Message{T: "patched", Ch: Channel(a.id), V: realtime.Ver(a.version), Re: re,
 		D: realtime.Data(map[string]any{"ops": ops, "by": by})})
+	if renamed {
+		a.svc.publishList(ctx)
+	}
 	return entry{ops: ops, inverse: inverse}, nil
 }
 

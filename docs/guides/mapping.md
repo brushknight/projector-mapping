@@ -136,6 +136,9 @@ The timeline lives under the stage in both spaces. Folded it is the transport ba
 - **Transport**: the editor plays its own preview. Space plays and pauses, L loops, J and K step a frame (Shift: a
   second), Home goes to the start, and the bar scrubs. The wall keeps going unless **wall follows** is on (top bar);
   in backstage the wall then previews your draft. **go** and **on air** in the top bar's wall group run the show.
+- **Sound tracks** hold sound clips (+ track → sound, or drop a sound from the library's **sounds** tab). The
+  preview plays them while you build; the speaker button on the transport bar mutes it. See
+  [sound-and-video.md](sound-and-video.md).
 - Delete removes the selected clip.
 
 ## Cues and GO
@@ -148,11 +151,12 @@ Cues turn a timeline into a show you step through.
 3. **GO** starts the next cue. **Back** restarts the current cue, or goes to the previous one if you press it within
    a second of the cue starting.
 
-Cues sit on the ruler; drag one to move it, or click it to jump there.
+Cues sit on the ruler; drag one to move it, or click it to jump there. **edit cue** in a cue's menu can make it play
+a sound when it starts.
 
 ## GO from the phone
 
-**play this scene on the wall** in the open timeline makes the scene active. On the phone's **objects** tab you get the scene chips, a
+**play this scene on the wall** in the open timeline makes the scene active. The editor's **show** space has the same controls. On the phone's **objects** tab you get the scene chips, a
 progress bar with the cue labels, **back**, **GO** and **stop**, and a list of objects showing which are lit. GO gives
 a firm haptic bump. The timeline runs on the server's clock, so the projector and the phone stay in step to within a
 few milliseconds.

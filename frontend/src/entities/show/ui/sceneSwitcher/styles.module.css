@@ -1,0 +1,123 @@
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.row,
+.confirm {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: var(--row);
+  border-radius: var(--radius-row);
+  min-width: 0;
+}
+.row:hover {
+  background: var(--control);
+}
+.row.cur {
+  background: var(--control-2);
+}
+.main {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 4px 0 8px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+  font-size: var(--fs);
+}
+.dot {
+  width: 8px;
+  display: inline-flex;
+  flex: none;
+}
+.name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.meta {
+  color: var(--dim);
+  font-size: var(--fs-xxs);
+  letter-spacing: 0.4px;
+  white-space: nowrap;
+}
+.acts {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding-right: 3px;
+  opacity: 0;
+  transition: opacity 100ms ease;
+}
+.row:hover .acts,
+.row.cur .acts,
+.row:focus-within .acts {
+  opacity: 1;
+}
+.act {
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.act:hover:not(:disabled) {
+  background: var(--control-3);
+  color: var(--ink);
+}
+.act:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+.rename {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  margin-left: 2px;
+}
+.confirm {
+  padding: 0 4px 0 10px;
+  gap: 6px;
+  background: var(--control);
+}
+.cname {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.foot {
+  display: flex;
+  gap: 6px;
+  padding: 8px 2px 2px;
+}
+.pop {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.popCap {
+  padding: 6px 8px 2px;
+}
+.trig {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

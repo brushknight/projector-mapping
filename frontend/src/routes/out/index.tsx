@@ -1,17 +1,18 @@
 import { useSearch } from '@tanstack/react-router'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useCatalog } from '../../entities/catalog'
 import type { EffectDef } from '../../entities/effect'
 import { effectApi } from '../../entities/effect'
-import { FrameMeter, handleRenderRpcs } from '../../entities/output'
+import { FrameMeter, handleRenderRpcs, useWallDocs } from '../../entities/output'
 import { PairingScreen } from '../../entities/pairing'
-import { activeSolo, ambientClock, playheadNow, useBlackout, useLiveDocs, type Show } from '../../entities/show'
-import { activeTestPattern } from '../../entities/setup'
-import type { Draft } from '../../entities/draft'
-import { applyPatch } from '../../shared/lib/jsonPatch'
-import { Renderer, type OutlineFlash, type OutputPattern } from '../../render'
+import { activeSolo, ambientClock, playheadNow, showAudio, useBlackout } from '../../entities/show'
+import { activeTestPattern, sceneSize } from '../../entities/setup'
+import { useAudioClient } from '../../entities/sound/audioHooks'
+import { YouTubeBackdrop } from '../../entities/video/youtube'
+import { activeYouTube, Renderer, type OutlineFlash, type OutputPattern } from '../../render'
+import { Icon } from '../../shared/components'
 import { setAuthToken } from '../../shared/lib/http'
-import { useChannel, useHubStatus, useOwnHub } from '../../shared/lib/useHub'
+import { useHubStatus, useOwnHub } from '../../shared/lib/useHub'
 import { useRaf } from '../../shared/lib/useRaf'
 import { Hub } from '../../shared/lib/ws'
 import s from './styles.module.css'
@@ -21,28 +22,21 @@ const SPLASH_MS = 8000
 /**
  * The projector output: a fullscreen canvas at device pixels, role `output`. Shows the pairing screen while
  * disconnected, while no scene is active, and for a few seconds after load (skip with ?headless or a click).
+ * It is the default audio output (§14, caps render + audio): until the browser lets it play sound it shows
+ * "click to enable sound" (not with ?headless). A YouTube video layer plays in a player behind the canvas.
  */
 export function OutPage() {
   const { headless, token } = useSearch({ from: '/out' })
   // localhost is trusted; a mini PC by the projector passes its device token as ?token=
   const hub = useOwnHub(() => {
     if (token) setAuthToken(token)
-    return new Hub({ role: 'output', name: 'projector output', caps: ['render'], token: token ?? null })
+    return new Hub({ role: 'output', name: 'projector output', caps: ['render', 'audio'], token: token ?? null })
   })
   const status = useHubStatus(hub)
   // an agent's draft previewed on the wall (backend §9 show.preview) replaces the live scene while it lasts
-  const previewId = useChannel<Show>(hub, 'show').doc?.preview?.draftId ?? null
-  const previewDraft = useChannel<Draft>(hub, previewId ? `draft:${previewId}` : null).doc
-  const live = useLiveDocs(hub, previewDraft?.sceneId ?? null)
-  const { show, setup } = live
-  const scene = useMemo(() => {
-    if (!live.scene || !previewDraft || !previewId) return live.scene
-    try {
-      return applyPatch(live.scene, previewDraft.ops)
-    } catch {
-      return live.scene
-    }
-  }, [live.scene, previewDraft, previewId])
+  const { show, setup, scene } = useWallDocs(hub)
+  // §14: the projector plays every sound while show.audio.output is "projector"
+  const audio = useAudioClient(hub, { role: 'output' })
   const catalog = useCatalog(hub.welcome?.catalogVersion)
   const [effects, setEffects] = useState<EffectDef[]>([])
   const [splash, setSplash] = useState(!headless)
@@ -55,14 +49,14 @@ export function OutPage() {
   const blackout = useBlackout(show?.onAir, setup?.blackoutFadeMs)
   const [glError, setGlError] = useState<string | null>(null)
   const [patternOn, setPatternOn] = useState(false)
-  const latest = useRef({ show, scene, setup, catalog, effects })
-  latest.current = { show, scene, setup, catalog, effects }
+  const latest = useRef({ show, scene, setup, catalog, effects, videoVolume: 0 })
+  latest.current = { show, scene, setup, catalog, effects, videoVolume: audio.masterGain }
 
   // the WebGL2 renderer, sized to the device pixels of the window
   useEffect(() => {
     const canvas = canvasRef.current!
     try {
-      renderer.current = new Renderer(canvas, { space: 'physical', preserveDrawingBuffer: true })
+      renderer.current = new Renderer(canvas, { space: 'physical', preserveDrawingBuffer: true, transparent: true })
     } catch (e) {
       setGlError(e instanceof Error ? e.message : String(e))
       return
@@ -169,6 +163,8 @@ export function OutPage() {
         mode: L.show?.preview?.draftId ? 'objects' : null,
         // a solo from the editor (protocol §12): only those faces, over black
         solo: activeSolo(L.show, hub.serverNow()),
+        // §14: a video layer's own sound, at volume × master, once the browser allows sound
+        videoVolume: L.videoVolume,
       })
     } else if (r && pattern.current) {
       // calibration still works before a setup arrives
@@ -197,10 +193,26 @@ export function OutPage() {
 
   const idle = status !== 'open' || !show?.activeSceneId || !scene
   const showPairing = !patternOn && (idle || splash) && !headless
+  const youtube = patternOn ? null : activeYouTube(scene, { mode: show?.preview?.draftId ? 'objects' : null, solo: activeSolo(show, hub.serverNow()) })
+  const needsClick = !headless && !audio.unlocked && status === 'open' && showAudio(show).output === 'projector'
   return (
-    <div className={s.out} onClick={() => setSplash(false)} data-testid="out">
+    <div
+      className={s.out}
+      onClick={() => {
+        setSplash(false)
+        void audio.unlock()
+      }}
+      data-testid="out"
+    >
+      {setup && <YouTubeBackdrop active={youtube} scene={sceneSize(setup.output)} output={setup.output} />}
       <canvas ref={canvasRef} className={s.canvas} data-testid="out-canvas" />
       {showPairing && <PairingScreen connected={status === 'open'} status={show?.activeSceneId ? 'connected · scene ready' : 'connected · no scene yet'} />}
+      {needsClick && (
+        <button type="button" className={s.sound} onClick={() => void audio.unlock()} data-testid="enable-sound">
+          <Icon name="speakerOff" size={16} />
+          click to enable sound
+        </button>
+      )}
       {glError && <div className={s.error}>This browser can't draw the output: {glError}</div>}
     </div>
   )

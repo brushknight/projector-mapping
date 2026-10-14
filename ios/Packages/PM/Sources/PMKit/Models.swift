@@ -163,7 +163,7 @@ public struct Light: Codable, Sendable, Hashable {
 
 public struct Layer: Codable, Sendable, Hashable, Identifiable {
     public var id: String
-    /// `gobo` | `procedural` | `gradient` | `photo` | `solid`
+    /// `gobo` | `procedural` | `gradient` | `photo` | `solid` | `video`
     public var kind: String
     public var ref: String
     public var name: String
@@ -367,9 +367,11 @@ public struct MapObject: Codable, Sendable, Hashable, Identifiable {
 }
 
 public struct TrackTarget: Codable, Sendable, Hashable {
-    /// `surface` | `object` | `all` | `layer` (a content layer id)
+    /// `surface` | `object` | `all` | `layer` (a content layer id) | `sound` (protocol §14, id null)
     public var kind: String
     public var id: String?
+    public init(kind: String, id: String? = nil) { self.kind = kind; self.id = id }
+    public var isSound: Bool { kind == "sound" }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         kind = c.v(.kind, "all")
@@ -381,6 +383,7 @@ public struct Track: Codable, Sendable, Hashable, Identifiable {
     public var id: String
     public var name: String
     public var target: TrackTarget
+    public init(id: String, name: String, target: TrackTarget) { self.id = id; self.name = name; self.target = target }
 }
 
 public struct Clip: Codable, Sendable, Hashable, Identifiable {
@@ -392,6 +395,14 @@ public struct Clip: Codable, Sendable, Hashable, Identifiable {
     public var fadeIn: Double
     public var fadeOut: Double
     public var params: JSONObject
+
+    public init(id: String, trackId: String, effect: String, start: Double, end: Double, fadeIn: Double = 0, fadeOut: Double = 0, params: JSONObject = [:]) {
+        self.id = id; self.trackId = trackId; self.effect = effect; self.start = start; self.end = end
+        self.fadeIn = fadeIn; self.fadeOut = fadeOut; self.params = params
+    }
+
+    /// `{ sound, offset, volume }` of a clip on a sound track (protocol §14), nil for other clips.
+    public var sound: SoundClipParams? { effect == "sound" ? SoundClipParams(params) : nil }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -411,6 +422,12 @@ public struct Cue: Codable, Sendable, Hashable, Identifiable {
     public var at: Double
     public var label: String
     public var autoFollow: Bool
+    /// The sound the wall plays when this cue starts (protocol §14), nil for none.
+    public var sound: CueSound?
+
+    public init(id: String, at: Double, label: String, autoFollow: Bool = false, sound: CueSound? = nil) {
+        self.id = id; self.at = at; self.label = label; self.autoFollow = autoFollow; self.sound = sound
+    }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -418,6 +435,7 @@ public struct Cue: Codable, Sendable, Hashable, Identifiable {
         at = c.v(.at, 0)
         label = c.v(.label, "")
         autoFollow = c.v(.autoFollow, false)
+        sound = c.opt(.sound)
     }
 }
 
@@ -427,7 +445,15 @@ public struct Timeline: Codable, Sendable, Hashable {
     public var clips: [Clip]
     public var cues: [Cue]
 
-    public init() { duration = 0; tracks = []; clips = []; cues = [] }
+    public init(duration: Double = 0, tracks: [Track] = [], clips: [Clip] = [], cues: [Cue] = []) {
+        self.duration = duration; self.tracks = tracks; self.clips = clips; self.cues = cues
+    }
+
+    /// The clips on sound tracks with their params, in timeline order.
+    public var soundClips: [(clip: Clip, params: SoundClipParams)] {
+        let ids = Set(tracks.filter(\.target.isSound).map(\.id))
+        return clips.filter { ids.contains($0.trackId) }.compactMap { c in c.sound.map { (c, $0) } }.sorted { $0.clip.start < $1.clip.start }
+    }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -450,6 +476,8 @@ public struct Scene: Codable, Sendable, Hashable, Identifiable {
     public var points: [ScenePoint]
     public var objects: [MapObject]
     public var timeline: Timeline
+    /// The soundboard (protocol §14); absent decodes as no pads.
+    public var sounds: SceneSounds
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -471,6 +499,15 @@ public struct Scene: Codable, Sendable, Hashable, Identifiable {
         points = c.v(.points, [])
         objects = c.v(.objects, [])
         timeline = c.v(.timeline, Timeline())
+        sounds = c.v(.sounds, SceneSounds())
+    }
+
+    /// Every sound sha the scene can play now: pads, cue sounds and timeline sound clips.
+    public var soundShas: [String] {
+        var seen = Set<String>(), out: [String] = []
+        let all = sounds.pads.map(\.sound) + timeline.cues.compactMap { $0.sound?.sound } + timeline.soundClips.map(\.params.sound)
+        for s in all where !s.isEmpty && seen.insert(s).inserted { out.append(s) }
+        return out
     }
 
     /// The layers of a backdrop mode.
@@ -564,11 +601,13 @@ public struct Show: Codable, Sendable, Hashable {
     public var version: Int
     /// The output draws only these surfaces until `solo.until` (protocol §12); decoded, not acted on here.
     public var solo: Solo?
+    /// Which client plays sound, the master volume and the looping pads (protocol §14).
+    public var audio: ShowAudio
 
     public init(activeSetupId: String? = nil, activeSceneId: String? = nil, onAir: Bool = true, transport: Transport = .init(), version: Int = 0,
-                solo: Solo? = nil) {
+                solo: Solo? = nil, audio: ShowAudio = .init()) {
         self.activeSetupId = activeSetupId; self.activeSceneId = activeSceneId; self.onAir = onAir
-        self.transport = transport; self.version = version; self.solo = solo
+        self.transport = transport; self.version = version; self.solo = solo; self.audio = audio
     }
 
     public init(from decoder: Decoder) throws {
@@ -579,6 +618,7 @@ public struct Show: Codable, Sendable, Hashable {
         transport = c.v(.transport, Transport())
         version = c.v(.version, 0)
         solo = c.opt(.solo)
+        audio = c.v(.audio, ShowAudio())
     }
 }
 
@@ -757,8 +797,18 @@ public struct Asset: Codable, Sendable, Hashable {
     public var width: Int
     public var height: Int
     public var bytes: Int
-    /// `photo` | `reference` | `snapshot` | `calibration` | `thumb`
+    /// `photo` | `reference` | `snapshot` | `calibration` | `thumb` | `sound` | `video`
     public var kind: String
+    /// Sounds and videos (protocol §14): a display name, the length in seconds and (sounds) 0…1 peaks.
+    public var name: String?
+    public var duration: Double?
+    public var peaks: [Double]
+
+    public init(sha: String, mime: String = "image/jpeg", width: Int = 0, height: Int = 0, bytes: Int = 0, kind: String = "photo",
+                name: String? = nil, duration: Double? = nil, peaks: [Double] = []) {
+        self.sha = sha; self.mime = mime; self.width = width; self.height = height; self.bytes = bytes; self.kind = kind
+        self.name = name; self.duration = duration; self.peaks = peaks
+    }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -768,7 +818,13 @@ public struct Asset: Codable, Sendable, Hashable {
         height = c.v(.height, 0)
         bytes = c.v(.bytes, 0)
         kind = c.v(.kind, "photo")
+        name = c.opt(.name)
+        duration = c.opt(.duration)
+        peaks = c.v(.peaks, [])
     }
+
+    /// The name to show: the asset's name, else a short sha.
+    public var displayName: String { (name?.isEmpty == false ? name : nil) ?? String(sha.prefix(8)) }
 }
 
 // MARK: - REST results

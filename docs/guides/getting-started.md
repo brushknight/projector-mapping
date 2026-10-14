@@ -62,8 +62,9 @@ projmap open
 This opens `http://127.0.0.1:7400/editor` in your browser. A browser on the same Mac needs no login. The command
 also prints a one-time link (valid 5 minutes) for an editor on another computer on the network.
 
-The editor has two spaces on one screen: **map** (draw and adjust the faces on the stage) and **content** (the faces
-unfolded flat, to put pictures, drawings and effects on them); **Tab** switches. The timeline folds under the stage,
+The editor has three spaces: **show** (run the wall: what is on air, presets, cues, the soundboard), **map** (draw
+and adjust the faces on the stage) and **content** (the faces unfolded flat, to put pictures, drawings and effects on
+them). It opens on **show**; **Tab** switches between map and content. The timeline folds under the stage,
 and **set up** in the top bar holds the projector, the reference photo and **auto map** (finding surfaces with the
 phone camera). The rail at the top left walks through reference, faces, content and play. The editor is made for a desktop browser, 1100 px wide or more.
 
@@ -76,6 +77,10 @@ projmap open --out --display 2
 This opens `/out` in its own Chrome window in kiosk mode (fullscreen, no browser chrome) on display 2. Display 1 is
 the main display; the numbers follow macOS's display order. Until a controller connects, the output shows a pairing
 screen with a 4-character code and a QR code.
+
+The kiosk window plays sound effects too (Chrome starts with `--autoplay-policy=no-user-gesture-required`). If you
+open `/out` by hand, click it once when it says **click to enable sound**; see
+[sound-and-video.md](sound-and-video.md).
 
 On Linux, or to do it by hand, open `http://<server>:7400/out` fullscreen in Chrome. More options (mini PC,
 portrait, test patterns) are in [projector-setup.md](projector-setup.md).
@@ -102,18 +107,30 @@ On the phone, each tab is a mode, and opening a tab puts that mode on air. One m
 | static | one gobo (window, blinds, leaves…) with intensity, softness, angle, colour and light effects |
 | live | a stack of moving layers: tree sway, clouds, rain on glass, caustics, day cycle |
 | color | a gradient wash with drift and grain |
-| scenery | a blurred photo, built in or one of yours |
+| scenery | a blurred photo or a looping video, built in or one of yours (files or YouTube) |
 | objects | the mapped objects and their timeline, with GO, back and stop |
 
 Each mode keeps its own settings, so switching from live to static and back brings the live stack back as you left
 it. Presets save and recall one mode's look. The on-air pill at the top toggles blackout.
 
-The editor shows the same scene and a mode switch. To map real objects, continue with [mapping.md](mapping.md). To
+The editor's **show** space has the same tabs, pickers and presets in the browser, with a big live picture of the
+wall, on air and blackout, and the soundboard. You need nothing about mapping to run a show from there.
+
+### Scenes
+
+A scene is one complete look: its mode stacks, mapped objects, timeline and soundboard. Make as many as you like
+with the scene switcher (top bar and show space in the editor, the scene button at the top of every phone tab):
+**new scene** starts empty on the active projector, **duplicate** copies the active one, and picking a scene puts
+it on the wall. The active scene is marked on air. You can rename any scene and delete any but the active one.
+
+The editor also edits a scene that is not on the wall: open it from the switcher in the map or content space. To map real objects, continue with [mapping.md](mapping.md). To
 let the phone camera find the surfaces for you, see [auto-map.md](auto-map.md).
 
 ## Next
 
 - [projector-setup.md](projector-setup.md): HDMI, kiosk, a mini PC by the projector, portrait mounts, test patterns
 - [mapping.md](mapping.md): faces, corners, mesh warp, solo, the content space, templates, effects, timeline and cues
+- [sound-and-video.md](sound-and-video.md): sound effects, the soundboard, sound on the timeline, video loops and
+  YouTube
 - [agents-mcp.md](agents-mcp.md): connect Claude Code or Codex
 - [troubleshooting.md](troubleshooting.md)

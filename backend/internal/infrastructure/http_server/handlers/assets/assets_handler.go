@@ -2,15 +2,19 @@
 package assets
 
 import (
+	"encoding/json"
 	"io"
 	"io/fs"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
 
 	"projmap/internal/application/app_errors"
 	assetssvc "projmap/internal/application/services/assets"
+	soundssvc "projmap/internal/application/services/sounds"
 	"projmap/internal/infrastructure/http_server/middleware"
 )
 
@@ -18,7 +22,12 @@ import (
 type Handler struct {
 	svc     assetssvc.AssetService
 	catalog fs.FS
+	// sounds takes POST /assets with kind=sound (so the sounds channel hears of it)
+	sounds soundssvc.SoundService
 }
+
+// WithSounds routes kind=sound uploads through the sound library.
+func (h *Handler) WithSounds(s soundssvc.SoundService) *Handler { h.sounds = s; return h }
 
 // New makes the handler; catalog is the built-in files (scenery/<id>.jpg).
 func New(svc assetssvc.AssetService, catalog fs.FS) *Handler {
@@ -62,6 +71,18 @@ func ReadUpload(c echo.Context) ([]byte, error) {
 }
 
 func (h *Handler) upload(c echo.Context) error {
+	c.Request().Body = http.MaxBytesReader(c.Response(), c.Request().Body, assetssvc.MaxBytes+1<<20)
+	if c.FormValue("kind") == "sound" && h.sounds != nil {
+		in, data, err := SoundForm(c)
+		if err != nil {
+			return err
+		}
+		a, err := h.sounds.Upload(c.Request().Context(), data, in)
+		if err != nil {
+			return err
+		}
+		return c.JSON(http.StatusCreated, a)
+	}
 	b, err := ReadUpload(c)
 	if err != nil {
 		return err
@@ -111,4 +132,29 @@ func (h *Handler) catalogFile(c echo.Context) error {
 	c.Response().Header().Set("Cache-Control", "public, max-age=86400")
 	http.ServeFileFS(c.Response(), c.Request(), h.catalog, name)
 	return nil
+}
+
+// SoundForm reads an upload's sound fields: the file name, name, and the uploader's duration and peaks.
+func SoundForm(c echo.Context) (assetssvc.SoundIn, []byte, error) {
+	data, err := ReadUpload(c)
+	if err != nil {
+		return assetssvc.SoundIn{}, nil, err
+	}
+	in := assetssvc.SoundIn{Name: c.FormValue("name")}
+	if f, err := c.FormFile("file"); err == nil {
+		in.FileName = f.Filename
+	}
+	if d := strings.TrimSpace(c.FormValue("duration")); d != "" {
+		if v, err := strconv.ParseFloat(d, 64); err == nil {
+			in.Duration = &v
+		}
+	}
+	if p := strings.TrimSpace(c.FormValue("peaks")); p != "" {
+		var peaks []float64
+		if err := json.Unmarshal([]byte(p), &peaks); err != nil {
+			return in, nil, app_errors.BadRequest("peaks must be a JSON array of numbers.")
+		}
+		in.Peaks = peaks
+	}
+	return in, data, nil
 }

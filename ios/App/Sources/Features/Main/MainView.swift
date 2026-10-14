@@ -36,5 +36,8 @@ struct MainView: View {
         .fullScreenCover(isPresented: $model.showSetup) { ProjectorSetupView() }
         .fullScreenCover(isPresented: $model.showAutoMap) { AutoMapFlow() }
         .sheet(isPresented: $model.showAddLayer) { AddLayerSheet() }
+        .sheet(isPresented: $model.showScenes) { ScenesSheet() }
+        .sheet(isPresented: $model.showSounds) { SoundsSheet() }
+        .sheet(isPresented: $model.showYouTube) { YouTubeSheet() }
     }
 }

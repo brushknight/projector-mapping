@@ -3,6 +3,7 @@ package scene
 import (
 	"fmt"
 	"math"
+	"regexp"
 	"strings"
 
 	"projmap/internal/domain/catalog"
@@ -17,13 +18,16 @@ type Refs interface {
 }
 
 var (
-	layerKinds   = set("gobo", "procedural", "gradient", "photo", "solid")
+	layerKinds   = set("gobo", "procedural", "gradient", "photo", "solid", LayerVideo)
 	blends       = set("normal", "multiply", "screen", "add")
 	colorModes   = set("cct", "hsi")
 	fxKinds      = set("none", "candle", "fire", "lightning", "paparazzi", "tv", "breathe", "strobe", "police")
 	surfaceKinds = set("quad", "tri", "poly", "circle", "line", "mask")
 	roles        = set("face", "edge", "detail")
-	targetKinds  = set("surface", "object", "all", "layer")
+	targetKinds  = set("surface", "object", "all", "layer", TargetSound)
+	padColors    = set(PadColors...)
+	padIcons     = set(PadIcons...)
+	padKey       = regexp.MustCompile(`^[a-z0-9]$`)
 	contentKinds = set(ContentMedia, ContentGradient)
 	mediaKinds   = set("image", "video")
 	fits         = set("fill", "fit", "stretch")
@@ -92,7 +96,7 @@ func (s *Scene) Validate(refs Refs) error {
 		w := fmt.Sprintf("layer %s (%s)", l.ID, ml.Mode)
 		uniq("layer", l.ID)
 		if !layerKinds[l.Kind] {
-			c.fail("%s: kind %q is not one of gobo, procedural, gradient, photo, solid", w, l.Kind)
+			c.fail("%s: kind %q is not one of gobo, procedural, gradient, photo, solid, video", w, l.Kind)
 			continue
 		}
 		if !blends[l.Blend] {
@@ -100,7 +104,9 @@ func (s *Scene) Validate(refs Refs) error {
 		}
 		c.rng(w+" opacity", l.Opacity, 0, 1)
 		schema, ok := refs.LayerSchema(l.Kind, l.Ref)
-		if !ok {
+		if l.Kind == LayerVideo && !IsVideoRef(l.Ref) {
+			c.fail("%s: a video ref must be asset:<sha> or youtube:<11 characters>, not %q", w, l.Ref)
+		} else if !ok {
 			c.fail("%s: %s %q is not in the catalog", w, l.Kind, l.Ref)
 		}
 		if err := catalog.CheckParams(schema, l.Params, w+" params"); err != nil {
@@ -240,16 +246,18 @@ func (s *Scene) Validate(refs Refs) error {
 			}
 		}
 	}
+	c.pads(s.Sounds.Pads)
 	t := &s.Timeline
 	c.rng("timeline.duration", t.Duration, 0.1, 24*3600)
 	tracks := map[string]bool{}
 	layerTracks := map[string]bool{}
+	soundTracks := map[string]bool{}
 	for _, tr := range t.Tracks {
 		uniq("track", tr.ID)
 		tracks[tr.ID] = true
 		w := "track " + tr.ID
 		if !targetKinds[tr.Target.Kind] {
-			c.fail("%s: target kind %q is not one of surface, object, all, layer", w, tr.Target.Kind)
+			c.fail("%s: target kind %q is not one of surface, object, all, layer, sound", w, tr.Target.Kind)
 			continue
 		}
 		switch tr.Target.Kind {
@@ -260,6 +268,11 @@ func (s *Scene) Validate(refs Refs) error {
 		case "object":
 			if tr.Target.ID == nil || !objects[*tr.Target.ID] {
 				c.fail("%s: target object does not exist", w)
+			}
+		case TargetSound:
+			soundTracks[tr.ID] = true
+			if tr.Target.ID != nil {
+				c.fail("%s: a sound track's target id must be null", w)
 			}
 		case "layer":
 			layerTracks[tr.ID] = true
@@ -284,6 +297,14 @@ func (s *Scene) Validate(refs Refs) error {
 			c.layerClip(w, cl)
 			continue
 		}
+		if soundTracks[cl.TrackID] {
+			c.soundClip(w, cl)
+			continue
+		}
+		if cl.Effect == EffectSound {
+			c.fail("%s: effect sound only goes on a sound track", w)
+			continue
+		}
 		schema, ok := refs.EffectSchema(cl.Effect)
 		if !ok {
 			c.fail("%s: effect %q does not exist", w, cl.Effect)
@@ -295,6 +316,12 @@ func (s *Scene) Validate(refs Refs) error {
 		uniq("cue", cu.ID)
 		if cu.At < 0 {
 			c.fail("cue %s: at must be >= 0", cu.ID)
+		}
+		if cu.Sound != nil {
+			if cu.Sound.Sound == "" {
+				c.fail("cue %s: sound.sound needs a sound sha", cu.ID)
+			}
+			c.rng("cue "+cu.ID+" sound.volume", cu.Sound.Volume, 0, 1)
 		}
 	}
 	if len(c.errs) > 0 {
@@ -415,4 +442,73 @@ func (c *checker) layerClip(w string, cl Clip) {
 			c.rng(w+" "+k, f, -10, 10)
 		}
 	}
+}
+
+// pads checks the soundboard: unique ids, names 1..40 characters, volume 0..1, colour and icon from the lists, key
+// a-z or 0-9 (or none). A pad may have no sound yet (playing it answers bad_request).
+func (c *checker) pads(pads []Pad) {
+	ids := map[string]bool{}
+	for i, p := range pads {
+		w := fmt.Sprintf("pad %d (%s)", i, p.ID)
+		if p.ID == "" {
+			c.fail("%s needs an id", w)
+		} else if ids[p.ID] {
+			c.fail("%s: id is used twice", w)
+		}
+		ids[p.ID] = true
+		if n := len([]rune(strings.TrimSpace(p.Name))); n < 1 || n > 40 {
+			c.fail("%s: name must be 1..40 characters", w)
+		}
+		c.rng(w+" volume", p.Volume, 0, 1)
+		if !padColors[p.Color] {
+			c.fail("%s: color %q is not one of %s", w, p.Color, strings.Join(PadColors, ", "))
+		}
+		if !padIcons[p.Icon] {
+			c.fail("%s: icon %q is not one of %s", w, p.Icon, strings.Join(PadIcons, ", "))
+		}
+		if p.Key != "" && !padKey.MatchString(p.Key) {
+			c.fail("%s: key must be one of a-z or 0-9", w)
+		}
+	}
+}
+
+// soundClip checks a clip on a sound track: effect sound, params sound (a sha), offset >= 0 and volume 0..1.
+func (c *checker) soundClip(w string, cl Clip) {
+	if cl.Effect != EffectSound {
+		c.fail("%s: a clip on a sound track needs effect sound, not %q", w, cl.Effect)
+	}
+	if s, ok := cl.Params["sound"].(string); !ok || s == "" {
+		c.fail("%s: params.sound must be a sound sha", w)
+	}
+	if v, has := cl.Params["offset"]; has {
+		if f, ok := v.(float64); !ok || f < 0 || math.IsNaN(f) {
+			c.fail("%s: params.offset must be a number >= 0", w)
+		}
+	}
+	if v, has := cl.Params["volume"]; has {
+		if f, ok := v.(float64); !ok {
+			c.fail("%s: params.volume must be a number", w)
+		} else {
+			c.rng(w+" params.volume", f, 0, 1)
+		}
+	}
+}
+
+// LayerVideo is the backdrop layer kind of a video (protocol §14).
+const LayerVideo = "video"
+
+var (
+	youtubeIDRe = regexp.MustCompile(`^[A-Za-z0-9_-]{11}$`)
+	shaRe       = regexp.MustCompile(`^[0-9a-f]{6,64}$`)
+)
+
+// IsVideoRef tells whether ref is asset:<sha> or youtube:<videoId>.
+func IsVideoRef(ref string) bool {
+	if id, ok := strings.CutPrefix(ref, "youtube:"); ok {
+		return youtubeIDRe.MatchString(id)
+	}
+	if sha, ok := strings.CutPrefix(ref, "asset:"); ok {
+		return shaRe.MatchString(sha)
+	}
+	return false
 }

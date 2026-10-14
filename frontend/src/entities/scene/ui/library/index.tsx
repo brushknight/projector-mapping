@@ -10,11 +10,14 @@ import { useEditor } from '../../editor/context'
 import { stackLayers } from '../../lib'
 import { addContentLayer, addLayer, addSurfaceEffect, applyPresetOps, layerPath, mediaLayer, pickSingle, setMode } from '../../ops'
 import { BACKDROP_MODES, type BackdropMode, type GradientStop, type Layer, type LayerKind } from '../../types'
+import { SoundLibrary } from '../../../sound/ui/soundLibrary'
+import { useSounds } from '../../../sound/ui/useSounds'
+import { HubError } from '../../../../shared/lib/ws'
 import s from './styles.module.css'
 
-export type LibraryTab = 'effects' | 'media' | 'backdrops'
+export type LibraryTab = 'effects' | 'media' | 'backdrops' | 'sounds'
 
-export const LAYER_ICON: Record<LayerKind, string> = { gobo: 'gobo', procedural: 'wave', gradient: 'gradient', photo: 'image', solid: 'quad' }
+export const LAYER_ICON: Record<LayerKind, string> = { gobo: 'gobo', procedural: 'wave', gradient: 'gradient', photo: 'image', solid: 'quad', video: 'video' }
 
 export const gradientCss = (stops: GradientStop[], angle = 135) =>
   `linear-gradient(${angle}deg, ${[...stops].sort((a, b) => a.pos - b.pos).map((st) => `${st.color} ${Math.round(st.pos * 100)}%`).join(', ')})`
@@ -34,6 +37,7 @@ export function Library({ tab, onTab }: { tab: LibraryTab; onTab: (t: LibraryTab
       <div className={s.ph}>
         <Segmented<LibraryTab>
           ariaLabel="library"
+          size="sm"
           width="100%"
           value={tab}
           onChange={onTab}
@@ -41,6 +45,7 @@ export function Library({ tab, onTab }: { tab: LibraryTab; onTab: (t: LibraryTab
             { value: 'effects', label: 'effects' },
             { value: 'media', label: 'media' },
             { value: 'backdrops', label: 'backdrops' },
+            { value: 'sounds', label: 'sounds' },
           ]}
         />
       </div>
@@ -48,6 +53,7 @@ export function Library({ tab, onTab }: { tab: LibraryTab; onTab: (t: LibraryTab
         {tab === 'effects' && <EffectsTab onTab={onTab} />}
         {tab === 'media' && <MediaTab />}
         {tab === 'backdrops' && <BackdropsTab />}
+        {tab === 'sounds' && <SoundsTab />}
       </div>
     </>
   )
@@ -317,6 +323,21 @@ function BackdropsTab() {
           )
         })}
       </div>
+    </div>
+  )
+}
+
+/** The sound library in Map and Content: the same list as the Show space; drag a sound onto the timeline. */
+function SoundsTab() {
+  const ed = useEditor()
+  const { sounds, reload } = useSounds(ed.hub)
+  const preview = (sha: string) =>
+    ed.hub.cmd('sound.play', { soundId: sha }).catch((e) =>
+      ed.toast(e instanceof HubError && e.code === 'no_audio' ? 'Nothing plays sound right now. Open /out on the projector computer and click it once.' : e instanceof Error ? e.message : String(e), { bad: true }),
+    )
+  return (
+    <div className={s.sounds}>
+      <SoundLibrary sounds={sounds} reload={reload} toast={ed.toast} onPreview={(sha) => void preview(sha)} compact emptyHint="no sounds yet. upload one, then drag it onto a sound track." />
     </div>
   )
 }

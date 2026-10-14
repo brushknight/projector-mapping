@@ -316,4 +316,75 @@ import PMTestSupport
         #expect(try db.sceneVersion("scn_desk") == 419)
         hub.stop()
     }
+
+    @Test func audioCapListsAndSoundMessages() async throws {
+        let (hub, c, db) = try await online()
+        let hello = try await c.message("hello")
+        #expect(hello.d?["caps"]?.array?.contains("audio") == true)
+        for ch in ["scenes", "sounds", "videos"] { _ = try await c.message("sub", ch: ch) }
+        var events: [SoundEvent] = []
+        hub.onSound = { events.append($0) }
+        for raw in try Fixtures.wsMessages() where ["sound.play", "sound.stop"].contains(raw["t"]?.string ?? "") || raw["t"] == "snapshot" && raw["ch"] != nil && raw["ch"]?.string?.hasPrefix("setup") == false {
+            c.push(raw)
+        }
+        try await eventually { events.count == 2 }
+        #expect(events[0] == .play(SoundPlay(playId: "ply_k2m9x0aa", sound: "a77c31", padId: "pad_thunder", name: "thunder", volume: 0.9)))
+        #expect(events[1] == .stop(SoundStop(padId: "pad_rain")))
+        try await eventually { (try? db.read(Queries.sounds).count) == 1 }
+        #expect(try db.read(Queries.sounds).first?.name == "rain on glass")
+        try await eventually { hub.imports["imp_3k9x0aa1"]?.progress == 0.42 }
+        // The scenes channel is the whole list: scn_party arrives, nothing else is dropped while active.
+        try await eventually { (try? db.read(Queries.scenes).map(\.id)) == ["scn_desk", "scn_party"] }
+        hub.stop()
+    }
+
+    @Test func soundCommandsGoOutAsCmd() async throws {
+        let (hub, c, _) = try await online()
+        Task { try? await hub.playPad("pad_thunder") }
+        let cmd = try await c.message("cmd")
+        #expect(cmd.d?["name"] == "sound.play" && cmd.d?["args"]?["padId"] == "pad_thunder")
+        c.push(Envelope(t: "ack", re: cmd.id, d: ["playId": "ply_1", "outputs": 1]))
+        Task { try? await hub.setAudio(output: "phone", volume: 0.5) }
+        let audio = try await c.message("cmd", skipping: 1)
+        #expect(audio.d?["name"] == "show.audio" && audio.d?["args"] == ["output": "phone", "volume": 0.5])
+        hub.stop()
+    }
+
+    @Test func demoSoundboardTogglesLoopsAndPlaysOnThePhone() async throws {
+        let (hub, _, db) = try makeHub()
+        var show = try show()
+        show.audio = ShowAudio(output: "phone")
+        try db.saveShow(show)
+        try db.saveSceneSnapshot(Fixtures.json("scene"), version: 1)
+        hub.startDemo()
+        var events: [SoundEvent] = []
+        hub.onSound = { events.append($0) }
+        try await hub.playPad("pad_rain")
+        #expect(try db.read(Queries.active).show?.audio.loops == ["pad_rain"])
+        let again = try await hub.playPad("pad_rain")
+        #expect(again?["stopped"] == true)
+        #expect(try db.read(Queries.active).show?.audio.loops == [])
+        #expect(events.count == 2)
+        if case .play(let p) = events[0] { #expect(p.loop && p.sound == "5d1e0a" && abs(p.volume - 0.6) < 1e-9) } else { Issue.record("expected play") }
+        #expect(events[1] == .stop(SoundStop(padId: "pad_rain")))
+        // GO on cue 1 fires its cue sound.
+        try await hub.command("show.stop")
+        try await hub.command("show.go")
+        if case .play(let p) = events.last { #expect(p.cueId == "cue_1" && p.sound == "a77c31") } else { Issue.record("expected the cue sound") }
+        // Projector output: the phone stays silent.
+        try await hub.setAudio(output: "projector", muted: true)
+        let n = events.count
+        try await hub.playPad("pad_thunder")
+        #expect(events.count == n)
+        #expect(try db.read(Queries.active).show?.audio.muted == true)
+        // Scenes: create, duplicate, rename, delete; the active one stays.
+        let id = try await hub.createScene(name: "party")
+        let dup = try await hub.createScene(name: "desk copy", duplicate: "scn_desk")
+        try await hub.renameScene(id, name: "after party")
+        #expect(try db.read(Queries.scenes).first { $0.id == id }?.name == "after party")
+        #expect(try db.sceneDoc(dup)?["sounds"]?["pads"]?.array?.count == 2)
+        try await hub.deleteScene(id)
+        #expect(try db.read(Queries.scenes).contains { $0.id == id } == false)
+        await #expect(throws: WireError.self) { try await hub.deleteScene("scn_desk") }
+    }
 }

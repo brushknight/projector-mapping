@@ -30,9 +30,12 @@ import (
 	scenessvc "projmap/internal/application/services/scenes"
 	setupssvc "projmap/internal/application/services/setups"
 	showsvc "projmap/internal/application/services/show"
+	soundssvc "projmap/internal/application/services/sounds"
+	videossvc "projmap/internal/application/services/videos"
 	"projmap/internal/domain/camera"
 	"projmap/internal/domain/devices"
 	"projmap/internal/domain/docpatch"
+	"projmap/internal/domain/scene"
 )
 
 // Services are what the hub calls.
@@ -46,6 +49,8 @@ type Services struct {
 	Agents       agentssvc.AgentService
 	Calibrations camerasvc.CalibrationService
 	Camera       camerasvc.CameraService
+	Sounds       soundssvc.SoundService
+	Videos       videossvc.VideoService
 	// CatalogVersion goes in welcome.
 	CatalogVersion int
 }
@@ -105,6 +110,7 @@ var (
 	_ realtime.Publisher = (*Hub)(nil)
 	_ realtime.Caller    = (*Hub)(nil)
 	_ realtime.Presence  = (*Hub)(nil)
+	_ realtime.Direct    = (*Hub)(nil)
 	_ cameraport.Feed    = (*Hub)(nil)
 )
 
@@ -239,7 +245,8 @@ func coalesceKey(m *realtime.Message) string {
 	case "camera.frame", "camera.status":
 		return m.T
 	case "snapshot":
-		if m.Ch == "show" || m.Ch == "devices" || m.Ch == "presets" || strings.HasPrefix(m.Ch, "draft:") || strings.HasPrefix(m.Ch, "calib:") {
+		if m.Ch == "show" || m.Ch == "devices" || m.Ch == "presets" || m.Ch == "scenes" || m.Ch == "sounds" || m.Ch == "videos" ||
+			strings.HasPrefix(m.Ch, "draft:") || strings.HasPrefix(m.Ch, "calib:") || strings.HasPrefix(m.Ch, "import:") {
 			return "snapshot|" + m.Ch
 		}
 	}
@@ -597,6 +604,42 @@ func (h *Hub) snapshot(ctx context.Context, ch string) (*realtime.Message, error
 			return nil, err
 		}
 		return snap(int64(p.Done), p), nil
+	case "scenes":
+		l, err := h.svc.Scenes.List(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if l == nil {
+			l = []scene.Summary{}
+		}
+		return snap(now, l), nil
+	case "sounds":
+		if h.svc.Sounds == nil {
+			break
+		}
+		l, err := h.svc.Sounds.List(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return snap(now, l), nil
+	case "videos":
+		if h.svc.Videos == nil {
+			break
+		}
+		l, err := h.svc.Videos.List(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return snap(now, l), nil
+	case "import":
+		if h.svc.Videos == nil {
+			break
+		}
+		j, seq, err := h.svc.Videos.Job(id)
+		if err != nil {
+			return nil, err
+		}
+		return snap(seq, j), nil
 	case "camera":
 		return nil, nil
 	}
@@ -714,6 +757,30 @@ func (h *Hub) command(ctx context.Context, c *conn, m realtime.Message) {
 			break
 		}
 		_, err = h.svc.Scenes.Patch(ctx, scenessvc.PatchCmd{SceneID: a.SceneID, Ops: []docpatch.Op{docpatch.Replace("/mode", a.Mode)}, By: c.dev.ID})
+	case cmd.Name == "sound.play" || cmd.Name == "sound.stop":
+		var ack showsvc.SoundAck
+		if cmd.Name == "sound.play" {
+			var a showsvc.PlayIn
+			if len(cmd.Args) > 0 && string(cmd.Args) != "null" {
+				if err := json.Unmarshal(cmd.Args, &a); err != nil {
+					h.sendTo(c, errMsg(m.ID, app_errors.BadRequest("sound.play needs {padId | soundId, volume?, sceneId?}.")))
+					return
+				}
+			}
+			ack, err = h.svc.Show.PlaySound(ctx, a)
+		} else {
+			var a showsvc.StopIn
+			if len(cmd.Args) > 0 && string(cmd.Args) != "null" {
+				_ = json.Unmarshal(cmd.Args, &a)
+			}
+			ack, err = h.svc.Show.StopSound(ctx, a)
+		}
+		if err != nil {
+			h.sendTo(c, errMsg(m.ID, err))
+			return
+		}
+		h.sendTo(c, realtime.Message{T: "ack", Re: m.ID, D: realtime.Data(ack)})
+		return
 	case cmd.Name == "camera.capture":
 		if h.svc.Camera == nil || !h.Has(realtime.Target{Cap: "camera"}) {
 			h.sendTo(c, realtime.Message{T: "error", Re: m.ID, D: realtime.Data(map[string]string{"code": "no_phone",
@@ -874,6 +941,25 @@ func (h *Hub) pick(t realtime.Target) *conn {
 		}
 	}
 	return best
+}
+
+// SendDirect implements realtime.Direct.
+func (h *Hub) SendDirect(t realtime.Target, m realtime.Message) int {
+	b, err := json.Marshal(m)
+	if err != nil {
+		return 0
+	}
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	n := 0
+	for _, c := range h.conns {
+		if (t.Role != "" && string(c.role) != t.Role) || (t.Cap != "" && !c.caps[t.Cap]) {
+			continue
+		}
+		c.send(b, "")
+		n++
+	}
+	return n
 }
 
 // Has implements realtime.Caller.

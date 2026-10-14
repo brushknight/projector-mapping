@@ -6,7 +6,7 @@ export const lightShape = obj({
   fx: obj({ kind: lit('none', 'candle', 'fire', 'lightning', 'paparazzi', 'tv', 'breathe', 'strobe', 'police'), speed: num }),
 })
 export const layerShape = obj({
-  id: str, kind: lit('gobo', 'procedural', 'gradient', 'photo', 'solid'), ref: str, name: str, visible: bool,
+  id: str, kind: lit('gobo', 'procedural', 'gradient', 'photo', 'solid', 'video'), ref: str, name: str, visible: bool,
   opacity: num, blend: lit('normal', 'multiply', 'screen', 'add'), light: nullable(lightShape), params: record(any),
 })
 export const stackShape = obj({ layers: arr(layerShape) })
@@ -36,14 +36,19 @@ export const surfaceShape = obj({
 export const objectShape = obj({ id: str, name: str, tags: arr(str), visible: bool, surfaces: arr(surfaceShape), atlas: optional(atlasShape), layers: optional(arr(contentLayerShape)) })
 export const trackShape = obj({
   id: str, name: str,
-  target: oneOf(obj({ kind: lit('surface', 'object', 'layer'), id: str }), obj({ kind: lit('all'), id: lit(null) })),
+  target: oneOf(obj({ kind: lit('surface', 'object', 'layer'), id: str }), obj({ kind: lit('all', 'sound'), id: lit(null) })),
 })
 export const clipShape = obj({ id: str, trackId: str, effect: str, start: num, end: num, fadeIn: num, fadeOut: num, params: record(any) })
-export const cueShape = obj({ id: str, at: num, label: str, autoFollow: bool })
+export const cueShape = obj({ id: str, at: num, label: str, autoFollow: bool, sound: optional(obj({ sound: str, volume: num })) })
+export const padShape = obj({
+  id: str, name: str, sound: str, volume: num, color: lit('ink', 'red', 'amber', 'green', 'teal', 'blue', 'violet', 'pink'),
+  icon: optional(lit('none', 'bell', 'door', 'thunder', 'rain', 'wind', 'bird', 'music', 'voice', 'knock', 'spark', 'heart')), key: optional(str), loop: optional(bool),
+})
+export const soundsShape = obj({ pads: arr(padShape) })
 export const timelineShape = obj({ duration: num, tracks: arr(trackShape), clips: arr(clipShape), cues: arr(cueShape) })
 export const sceneShape = obj({
   id: str, setupId: str, name: str, version: int, mode: sceneModeShape, backdrop: backdropShape, underlay: optional(underlayShape), points: arr(pointShape), objects: arr(objectShape),
-  timeline: timelineShape,
+  sounds: optional(soundsShape), timeline: timelineShape,
 })
 export const patchOpShape = oneOf(
   obj({ op: lit('add', 'replace', 'test'), path: str, value: any }),

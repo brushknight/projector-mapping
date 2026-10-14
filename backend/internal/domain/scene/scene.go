@@ -15,6 +15,8 @@ type Scene struct {
 	Underlay Underlay `json:"underlay"`
 	Points   []Point  `json:"points"`
 	Objects  []Object `json:"objects"`
+	// Sounds is the scene's soundboard (protocol §14); always written, absent decodes to no pads.
+	Sounds   Sounds   `json:"sounds"`
 	Timeline Timeline `json:"timeline"`
 }
 
@@ -241,12 +243,14 @@ type Cue struct {
 	At         float64 `json:"at"`
 	Label      string  `json:"label"`
 	AutoFollow bool    `json:"autoFollow"`
+	// Sound plays when the cue starts on the wall (protocol §14); nil = none.
+	Sound *CueSound `json:"sound,omitempty"`
 }
 
 // New is an empty scene.
 func New(id, setupID, name string) Scene {
 	return Scene{ID: id, SetupID: setupID, Name: name, Version: 1, Mode: ModeStatic, Underlay: DefaultUnderlay(), Points: []Point{},
-		Objects: []Object{}, Timeline: Timeline{Duration: 20, Tracks: []Track{}, Clips: []Clip{}, Cues: []Cue{}}}
+		Objects: []Object{}, Sounds: Sounds{Pads: []Pad{}}, Timeline: Timeline{Duration: 20, Tracks: []Track{}, Clips: []Clip{}, Cues: []Cue{}}}
 }
 
 // Normalize replaces nil slices and maps with empty ones so the JSON never carries null where a list is expected.
@@ -273,6 +277,9 @@ func (s *Scene) Normalize() {
 	}
 	if s.Objects == nil {
 		s.Objects = []Object{}
+	}
+	if s.Sounds.Pads == nil {
+		s.Sounds.Pads = []Pad{}
 	}
 	for i := range s.Objects {
 		o := &s.Objects[i]

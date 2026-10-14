@@ -1,0 +1,40 @@
+.wall {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.air {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 46px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--radius-tile);
+  background: var(--control);
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+}
+.air:hover {
+  background: var(--control-3);
+}
+.air.black {
+  background: var(--bg);
+  box-shadow: inset 0 0 0 1px var(--control-line);
+}
+.airText {
+  font-family: var(--num);
+  font-weight: 700;
+  font-size: 15px;
+}
+.airHint {
+  margin-left: auto;
+  color: var(--faint);
+  font-size: var(--fs-xxs);
+}
+.out {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}

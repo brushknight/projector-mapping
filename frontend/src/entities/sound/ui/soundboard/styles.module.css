@@ -1,0 +1,117 @@
+.board {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.addWrap {
+  display: flex;
+  min-width: 0;
+}
+.add {
+  width: 100%;
+  aspect-ratio: 1 / 0.86;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px dashed var(--control-3);
+  border-radius: var(--radius-tile);
+  background: transparent;
+  color: var(--dim);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+.add:hover {
+  color: var(--ink);
+  border-color: var(--dim-3);
+}
+.foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.hint {
+  color: var(--faint);
+  font-size: var(--fs-xxs);
+  letter-spacing: 0.3px;
+}
+.ed {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.two {
+  display: grid;
+  grid-template-columns: 1fr 110px;
+  gap: 8px;
+}
+.warn {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
+}
+.soundPick {
+  max-width: 100%;
+  justify-content: flex-start;
+}
+.swatches {
+  display: flex;
+  gap: 8px;
+}
+.swatch {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 0;
+  cursor: pointer;
+  box-shadow: 0 0 0 2px var(--dialog);
+}
+.swatch.on {
+  box-shadow: 0 0 0 2px var(--dialog), 0 0 0 4px var(--ink);
+}
+.icons {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+}
+.iconBtn {
+  height: 40px;
+  border: 0;
+  border-radius: var(--radius-row);
+  background: var(--control);
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.iconBtn:hover {
+  background: var(--control-3);
+}
+.iconBtn.on {
+  background: var(--ink);
+  color: var(--on-ink);
+}
+.aa {
+  font-family: var(--num);
+  font-weight: 700;
+  font-size: var(--fs-sm);
+}
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.actions {
+  display: flex;
+  justify-content: space-between;
+  padding-top: 4px;
+}

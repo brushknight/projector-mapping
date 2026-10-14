@@ -42,6 +42,14 @@ var (
 	Timeout      = mk("timeout", http.StatusGatewayTimeout)
 	NoScene      = mk("no_scene", http.StatusConflict)
 	NoCue        = mk("no_cue", http.StatusConflict)
+	// Unsupported answers a file of a kind the server does not take (protocol §14).
+	Unsupported = mk("unsupported", http.StatusBadRequest)
+	// SceneActive refuses to delete the scene on the wall.
+	SceneActive = mk("scene_active", http.StatusConflict)
+	// NoAudio says no client plays sound right now.
+	NoAudio = mk("no_audio", http.StatusConflict)
+	// InvalidURL answers a link that is not a YouTube video.
+	InvalidURL = mk("invalid_url", http.StatusBadRequest)
 )
 
 // Stale is the patch rejection of protocol §3.

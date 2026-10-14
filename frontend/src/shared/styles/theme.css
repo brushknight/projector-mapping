@@ -59,6 +59,16 @@
   --qr-paper: #ffffff;
   --qr-ink: #000000;
 
+  /* soundboard pad colours (protocol §14 pad.color); muted so the one red stays the on-air signal */
+  --pad-ink: #f5f4f0;
+  --pad-red: #e0786c;
+  --pad-amber: #e2b45c;
+  --pad-green: #86c48f;
+  --pad-teal: #67c2ba;
+  --pad-blue: #7aa3e6;
+  --pad-violet: #a891e3;
+  --pad-pink: #e293bf;
+
   /* type */
   --ui: 'Share Tech Mono', ui-monospace, Menlo, monospace;
   --num: 'Roboto Mono', ui-monospace, Menlo, monospace;

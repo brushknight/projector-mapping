@@ -36,7 +36,8 @@ export async function canvasPixels(page: Page, selector: string, x: number, y: n
 }
 
 export async function waitForOutput(request: APIRequestContext) {
-  for (let i = 0; i < 100; i++) {
+  // up to 60 s: with an editor rendering in the same browser, a busy machine can take a while to start /out
+  for (let i = 0; i < 600; i++) {
     const st = await mockState(request)
     if (st.clients.some((c) => c.role === 'output' && c.subs.some((s) => s.startsWith('scene:')))) return
     await new Promise((r) => setTimeout(r, 100))

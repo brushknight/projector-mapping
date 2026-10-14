@@ -93,10 +93,48 @@ describe('scene ops', () => {
   it('plans what goes on air per mode', () => {
     expect(onAirPlan(scene, 'static')).toMatchObject({ objects: false, level: 1 })
     expect(onAirPlan(scene, 'static').layers.map((l) => l.id)).toEqual(['lay_window'])
-    expect(onAirPlan(scene, 'scenery').layers.map((l) => l.id)).toEqual(['lay_flowers'])
+    expect(onAirPlan(scene, 'scenery').layers.map((l) => l.id)).toEqual(['lay_waves', 'lay_flowers'])
     expect(onAirPlan(scene, 'objects')).toEqual({ layers: [], level: 0.35, objects: true })
     const under = onAirPlan({ ...scene, underlay: { on: true, from: 'color', level: 0.2 } }, 'objects')
     expect(under.layers.map((l) => l.id)).toEqual(['lay_ember'])
     expect(under.level).toBe(0.2)
+  })
+})
+
+describe('sound ops (§14)', () => {
+  const noSound: Scene = { ...scene, timeline: { ...scene.timeline, tracks: scene.timeline.tracks.filter((t) => t.target.kind !== 'sound'), clips: scene.timeline.clips.filter((c) => c.effect !== 'sound') } }
+
+  it('adds a sound clip to the first sound track', () => {
+    const clip = ops.soundClip('clp_x', 'trk_faces', 'a77c31', 1, 3.5)
+    const s = applyPatch(scene, ops.addSoundClip(scene, clip, 'trk_new'))
+    expect(s.timeline.clips.find((c) => c.id === 'clp_x')).toMatchObject({ trackId: 'trk_sound', effect: 'sound', start: 1, end: 3.5, params: { sound: 'a77c31', offset: 0, volume: 1 } })
+    expect(s.timeline.tracks.length).toBe(scene.timeline.tracks.length)
+  })
+
+  it('makes a sound track when there is none', () => {
+    const s = applyPatch(noSound, ops.addSoundClip(noSound, ops.soundClip('clp_x', '', 'a77c31', 0, 2), 'trk_new'))
+    expect(s.timeline.tracks.at(-1)).toEqual({ id: 'trk_new', name: 'sound', target: { kind: 'sound', id: null } })
+    expect(s.timeline.clips.at(-1)?.trackId).toBe('trk_new')
+    expect(ops.firstSoundTrack(noSound)).toBeNull()
+  })
+
+  it('changes clip params as leaves', () => {
+    const o = ops.setClipParams(scene, 'clp_rain', { volume: 0.5, offset: 0.5, sound: 'a77c31' })!
+    expect(o).toEqual([
+      { op: 'replace', path: '/timeline/clips/11/params/volume', value: 0.5 },
+      { op: 'replace', path: '/timeline/clips/11/params/sound', value: 'a77c31' },
+    ])
+    expect(ops.setClipParams(scene, 'clp_grid', { volume: 1 })).toEqual([{ op: 'add', path: '/timeline/clips/0/params/volume', value: 1 }])
+    expect(ops.setClipParams(scene, 'nope', { volume: 1 })).toBeNull()
+  })
+
+  it('sets, replaces and clears a cue sound', () => {
+    let s = applyPatch(scene, ops.setCueSound(scene, 'cue_2', { sound: '5d1e0a', volume: 2 })!)
+    expect(s.timeline.cues.find((c) => c.id === 'cue_2')?.sound).toEqual({ sound: '5d1e0a', volume: 1 })
+    s = applyPatch(s, ops.setCueSound(s, 'cue_1', { sound: '5d1e0a', volume: 0.3 })!)
+    expect(s.timeline.cues.find((c) => c.id === 'cue_1')?.sound).toEqual({ sound: '5d1e0a', volume: 0.3 })
+    s = applyPatch(s, ops.setCueSound(s, 'cue_1', null)!)
+    expect('sound' in s.timeline.cues.find((c) => c.id === 'cue_1')!).toBe(false)
+    expect(ops.setCueSound(s, 'cue_1', null)).toBeNull()
   })
 })

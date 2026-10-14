@@ -37,6 +37,8 @@ export interface Catalog {
   gradientParams: ParamSchema
   scenery: SceneryItem[]
   photoParams: ParamSchema
+  /** (§14, catalog version 3) params of a `video` backdrop layer; absent on older servers */
+  videoParams?: ParamSchema
   effects: EffectDef[]
 }
 

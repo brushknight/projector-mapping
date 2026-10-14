@@ -1,0 +1,10 @@
+.wave {
+  display: block;
+  width: 100%;
+}
+.bar {
+  fill: var(--dim-3);
+}
+.played {
+  fill: var(--ink);
+}

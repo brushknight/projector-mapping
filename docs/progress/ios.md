@@ -1,6 +1,6 @@
 # iPhone app progress
 
-Status as of 2026-10-11. Native SwiftUI, iOS 26, iPhone only, dark, Swift 6 language mode, bundle
+Status as of 2026-10-14. Native SwiftUI, iOS 26, iPhone only, dark, Swift 6 language mode, bundle
 `com.brushknight.projmap`, team 3J46XQAXC4. Only dependency: GRDB 7.
 
 ## Build, test, run
@@ -24,7 +24,8 @@ xcrun simctl launch $SIM com.brushknight.projmap -pm-reset -pm-connect "projmap:
 ```
 
 Launch arguments: `-pm-demo` (offline, fixtures + board data in memory), `-pm-screen <static|staticfx|live|addlayer|
-color|scenery|objects|setup|automap1…4|connect>`, `-pm-scroll <pt>`, `-pm-reset` (forget server and cache),
+color|scenery|objects|setup|automap1…4|connect|scenes|sounds|youtube|videos>` (the last four have no board: use
+`scripts/shot.sh`), `-pm-scroll <pt>`, `-pm-reset` (forget server and cache),
 `-pm-connect <projmap://connect?server=…&code=…|token=…>`. The URL scheme `projmap://connect` works too.
 
 ## Layout
@@ -100,6 +101,64 @@ color|scenery|objects|setup|automap1…4|connect>`, `-pm-scroll <pt>`, `-pm-rese
 - Tests: contract (mode, stacks, underlay, drawing strokes, `testPatternUntil`, legacy split, catalog v2), intents
   (mode patch, static pick keeps light, scenery pick keeps params, preset ops), store (preset apply shows at once),
   hub (tab sends a mode patch, demo mode + test pattern).
+
+## Show control, sound and video (2026-10-14, protocol §14)
+
+The phone is the remote: it plays and switches, it does not map.
+
+- **PMKit.** `Pad` (`PadColor` / `PadIcon` decode unknown values as `ink` / `none`), `SceneSounds` (`scene.sounds`,
+  absent = no pads), `CueSound` (`cue.sound`), `SoundClipParams` (`clip.sound`, `timeline.soundClips`), track target
+  `sound`, `Scene.soundShas`, `ShowAudio` (`show.audio`, defaults when absent, `master` = 0 while muted), Asset
+  `name` / `duration` / `peaks`, `Video`, `ImportJob`, `VideoTools`, `VideoRef` (`asset:` / `youtube:`), catalog v3
+  `videoParams` (+ `videoDefaults`), `SoundPlay` / `SoundStop` / `SoundEvent`, channels `scenes`, `sounds`, `videos`,
+  `import:{id}`. `YouTube.videoId` validates watch / youtu.be / Shorts links with the web client's rules.
+  `SoundSchedule` is the pure timeline math (which clips sound from playhead t, start delay, file offset, length,
+  fade gains and ramps). `SceneIntent.addPad` / `setPadField` / `removePad`; `StackPick.video` (keeps blur,
+  brightness, warmth, drift; photo picks keep a video's look too). REST: scenes create / duplicate / rename / delete,
+  sounds list / rename / delete / upload / play / stop, show audio, videos list / tools / rename / delete / import /
+  job, `uploadVideo` (multipart with progress).
+- **PMStore / PMLive.** Sound and video lists in the store (`observeSounds`, `observeVideos`); the `scenes` channel
+  replaces the scene list (pruning deleted scenes). `hello` caps include `audio`; the hub subscribes to `scenes`,
+  `sounds`, `videos`, follows `import:{id}` (and polls `GET /videos/import/{id}` as a fallback), hands `sound.play` /
+  `sound.stop` to `onSound`. `ShowControl.swift`: `createScene`, `renameScene`, `deleteScene`, `playPad`,
+  `playSound`, `stopSound`, `setAudio`, `importVideo`, `uploadVideo`, `videoTools`, each with an offline demo twin
+  (loops toggle in `show.audio.loops`, cue sounds fire on GO, the phone plays only while it is the output).
+- **Audio output** (`App/Shared/AudioOutput.swift`). Only while `show.audio.output == "phone"`: AVAudioSession
+  `.playback`; downloads `/a/{sha}` into Caches and warms a player for every pad, cue and clip sound of the active
+  scene; `sound.play` → `AVAudioPlayer` (looping pads `numberOfLoops = -1`) at `volume × master`; `sound.stop` by
+  play, pad or all; master volume and mute apply live; timeline clips from `SoundSchedule` with
+  `play(atTime:)`, `currentTime` = file offset and `setVolume(_:fadeDuration:)` ramps, scheduled again on every
+  transport, timeline, master or library change (and when a file arrives); paused or stopped = silent.
+- **Scene picker** on every tab header (the stacked-squares pill): all scenes, the active one in ink with the on-air
+  dot; tap = `show.activate`; new scene, duplicate (of the active one), and rename / duplicate / delete in each row's
+  menu and context menu (delete only for scenes not on the wall). The objects tab keeps its scene chips.
+- **Sounds sheet** on every tab header (the speaker pill): the active scene's pads (`PadTile`, pad colour + §14 icon
+  glyph or the name's initial, tap = `cmd sound.play` with a haptic, hold = stop, loop pads marked and lit while in
+  `show.audio.loops`, "stop all"), "wall" (plays on projector / laptop / this phone, volume, mute = `cmd show.audio`),
+  the library (name, length, waveform from peaks; tap previews with `sound.play { soundId }`). The objects tab shows
+  the soundboard under its objects.
+- **Objects.** The hero is `/preview` (verified: it renders `playheadNow(show.transport)`); the native demo stand-in
+  now follows whatever clip plays at the wall clock. The cue card says "plays <sound>" for a cue with a sound.
+- **Scenery videos.** A "videos" category (last pill) with 16:10 tiles from the `videos` channel (thumb asset, or
+  YouTube's hqdefault for embeds; play badge; length and quality); picking replaces the scenery stack with a video
+  layer. "add from youtube" sheet: link field with paste button, validation message, preview image, trim (seconds or
+  m:ss), name, quality (360…4k), the yt-dlp hint when `tools.ytdlp` is false, import progress, "put it on the wall"
+  (an embed's trim becomes the layer's `start` / `end`). `projmap://youtube?url=…` opens it filled in. "add video
+  file": PhotosPicker (movies) → `POST /videos` with a progress line. Video layer controls: the photo sliders (drift
+  off for embeds), "loop from", "play its sound" (asset videos).
+- **Header and pixel match.** Two more 34 pt pills in `TabHeader`; the title keeps 32 pt when it fits (24 pt
+  otherwise). compare.sh: static 4.2 % → 4.7 %, objects 5.9 % → 6.8 % (the new pills), scenery 7.1 %.
+- **Demo.** Three scenes with documents (each with its own pads), eight sounds with peaks and eight pads (generated
+  WAVs so pads sound offline), four videos (thumbs from the bundled photos), phone as the audio output. New
+  `-pm-screen` values `scenes`, `sounds`, `youtube`, `videos`.
+- **Tests.** 75 package tests green (`swift test`): every fixture (sound, video, import, the new ws messages) with
+  field checks, unknown pad enums, show audio defaults, YouTube links, pad intents, the video pick, the schedule math
+  (fades, start inside a clip, fade-out, file end, transport), hub audio cap / subscriptions / sound messages / list
+  snapshots / import channel, `cmd sound.play` / `show.audio`, demo loops, cue sounds and scene CRUD.
+
+Left out: adding or editing pads on the phone (the intents exist; the web is the pad editor), a share extension
+(the URL scheme covers handing links over), sound upload from the phone, OGG Vorbis/Opus files (AVAudioPlayer cannot
+decode them, so they stay silent on the phone), the video's own sound on the phone (§14: only `/out` plays it).
 
 ## Stubbed or left out
 

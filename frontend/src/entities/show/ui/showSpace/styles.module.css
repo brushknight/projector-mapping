@@ -1,0 +1,519 @@
+.show {
+  grid-column: 1 / -1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr) 330px;
+  gap: 8px;
+}
+.left,
+.right {
+  overflow: auto;
+}
+.sec {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 12px 14px;
+  flex: none;
+}
+.sec + .sec {
+  border-top: 1px solid var(--sep);
+}
+.grow {
+  flex: 1;
+}
+.secHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 2px;
+  min-width: 0;
+}
+.secHead .dim {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dim {
+  color: var(--dim);
+  font-size: var(--fs-xs);
+}
+.count {
+  color: var(--dim);
+  font-family: var(--num);
+  font-size: var(--fs-xs);
+}
+.keys {
+  margin-top: auto;
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 12px 14px 14px;
+  color: var(--faint);
+  font-size: var(--fs-xxs);
+  line-height: 1.6;
+  border-top: 1px solid var(--sep);
+}
+.keys svg {
+  flex: none;
+  margin-top: 2px;
+}
+.keys kbd {
+  font-family: var(--num);
+  color: var(--ink-2);
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--control);
+}
+
+/* centre column */
+.center {
+  min-height: 0;
+  min-width: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.heroWrap {
+  display: flex;
+  justify-content: center;
+  border-radius: var(--radius-panel);
+  background: var(--panel);
+  padding: 8px;
+  flex: none;
+}
+.hero {
+  position: relative;
+  /* as big as the column allows without pushing the mode tabs off a laptop screen; --ar is the output's aspect */
+  height: max(220px, min(calc(100vh - 500px), calc((100vw - 640px) / var(--ar, 1.7778))));
+  max-width: 100%;
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--bg);
+  box-shadow: 0 0 0 1px var(--control-line);
+}
+.canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.heroTop,
+.heroBottom {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  pointer-events: none;
+}
+.heroTop {
+  top: 12px;
+}
+.heroBottom {
+  bottom: 12px;
+  justify-content: flex-end;
+}
+.heroRight {
+  display: flex;
+  gap: 6px;
+}
+.tc {
+  font-family: var(--num);
+  font-variant-numeric: tabular-nums;
+}
+.playDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--red);
+}
+.tabs {
+  flex: none;
+}
+.empty {
+  padding: 40px;
+  text-align: center;
+  color: var(--dim);
+}
+.modeBody {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: none;
+}
+
+/* mode panels */
+.split {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+}
+.card {
+  background: var(--panel);
+  border-radius: var(--radius-panel);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.cardHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 20px;
+  padding: 0 2px;
+}
+.cardHead .dim {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tiles4 {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px 10px;
+}
+.tiles3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px 10px;
+}
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.two {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.capRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 4px;
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.chipNum {
+  font-family: var(--num);
+  opacity: 0.6;
+  font-size: var(--fs-xxs);
+}
+.switchRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: var(--fs-sm);
+}
+.note {
+  margin: 0;
+  color: var(--dim);
+  font-size: var(--fs-xs);
+  line-height: 1.5;
+}
+.bigSwatch {
+  height: 56px;
+  border-radius: var(--radius-tile);
+}
+
+/* presets */
+.presets {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: var(--radius-card);
+  background: var(--panel);
+  min-width: 0;
+}
+.presets > :first-child {
+  flex: none;
+}
+.presetChips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.preset {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  border-radius: var(--radius-pill);
+  background: var(--control);
+}
+.preset:hover {
+  background: var(--control-3);
+}
+.presetMain {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 100%;
+  padding: 0 4px 0 11px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+.presetSw {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background-size: cover;
+}
+.presetDel {
+  width: 24px;
+  height: 24px;
+  margin-right: 2px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--faint);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.presetDel:hover {
+  color: var(--ink);
+  background: var(--control-2);
+}
+.presetInput {
+  width: 160px;
+  height: 28px;
+}
+
+/* live stack and objects rows */
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.lrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 6px 6px 6px;
+  border-radius: var(--radius-tile);
+  cursor: pointer;
+  min-width: 0;
+}
+.lrow:hover {
+  background: var(--control);
+}
+.lsel,
+.lsel:hover {
+  background: var(--ink);
+  color: var(--on-ink);
+}
+.lsel .lmeta {
+  color: var(--on-ink-dim);
+}
+.lsel .iconBtn {
+  color: var(--on-ink);
+}
+.lsel .iconBtn:hover:not(:disabled) {
+  background: var(--fill-soft);
+  color: var(--on-ink);
+}
+.lhidden .ltext {
+  opacity: 0.45;
+}
+.lit,
+.lit:hover {
+  background: var(--ink);
+  color: var(--on-ink);
+}
+.lit .lmeta,
+.lit .ostate {
+  color: var(--on-ink-dim);
+}
+.lit .iconBtn {
+  color: var(--on-ink);
+}
+.thumb {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: 10px;
+  background: var(--control-2);
+  background-size: cover;
+  background-position: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink);
+}
+.lit .thumb {
+  background: var(--bg);
+  color: var(--ink);
+}
+.ltext {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.lname {
+  font-size: var(--fs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lmeta {
+  font-size: var(--fs-xs);
+  color: var(--dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lacts {
+  display: flex;
+  gap: 0;
+  flex: none;
+}
+.iconBtn {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex: none;
+}
+.iconBtn:hover:not(:disabled) {
+  color: var(--ink);
+  background: var(--control-3);
+}
+.iconBtn:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+.up {
+  transform: rotate(180deg);
+}
+.ostate {
+  font-size: var(--fs-xxs);
+  letter-spacing: var(--cap-spacing);
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.underlay {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--sep);
+}
+
+/* cue card */
+.cueHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 2px;
+}
+.cueName {
+  font-size: 15px;
+}
+.goRow {
+  display: grid;
+  grid-template-columns: 54px 1fr 54px;
+  gap: 8px;
+}
+.sq,
+.go {
+  height: 58px;
+  border: 0;
+  border-radius: var(--radius-card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  cursor: pointer;
+}
+.sq {
+  background: var(--control);
+  color: var(--ink);
+}
+.sq:hover {
+  background: var(--control-3);
+}
+.go {
+  background: var(--ink);
+  color: var(--on-ink);
+  font-family: var(--num);
+  font-weight: 700;
+  font-size: 22px;
+  letter-spacing: 2px;
+}
+.go:active,
+.sq:active {
+  transform: scale(0.98);
+}
+.cueSound {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--dim);
+  font-size: var(--fs-sm);
+}
+
+/* scenery */
+.sceneryCard {
+  gap: 14px;
+}
+.catRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.addTile {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px dashed var(--control-3);
+  border-radius: var(--radius-tile);
+  background: transparent;
+  color: var(--dim);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+  overflow: hidden;
+}
+.addTile:hover:not(:disabled) {
+  color: var(--ink);
+  border-color: var(--dim-3);
+}
+.addProg {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+}

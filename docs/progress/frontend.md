@@ -177,12 +177,143 @@ The editor follows option B of `docs/research/editor-ux.md`. Guide: `docs/mappin
   holds the atlas and one PNG per face) and `mapping.spec.ts` (rail, Tab keeps the selection, the cube's three faces
   share edges in the unfold, edit face + drawing + [ ] + Esc).
 
+## Show space, scenes, soundboard and video tiles (protocol §14, 2026-10-14, web show)
+
+The editor now lands on **Show** (`/` and `/editor` redirect to `/editor/show`; `/editor/map`, `/editor/content`,
+automap and animate work as before). The top toggle is **Show | Map | Content**.
+
+- **Show** (`entities/show/ui/showSpace`) runs the wall without any mapping knowledge, with the phone's information
+  architecture in the editor v2 look. It always shows and controls the **scene on the wall** (`show.activeSceneId`)
+  and edits it live through its own `useSceneEditing(…, 'live')`, whatever the backstage switch says; Map and Content
+  still follow `?scene=` (any scene). Layout: scenes and the wall on the left, the big live preview (the engine's
+  `LivePreview`: active scene at the wall clock, test pattern, solo and the YouTube backdrop) with "● on air · detail",
+  the format and (objects) the wall playhead, then the mode tabs (`ModeTabs`, red dot on the mode on air) and the
+  mode's panel; soundboard and sounds on the right.
+  - Opening a tab puts it on air (`replace /mode`); the tab follows the wall when another client switches it.
+  - static: gobo tiles (thumbnails drawn once by the real engine, `showSpace/thumbs.ts`) + intensity, softness, angle,
+    scale, colour (CCT kelvin/tint with the catalog presets, or HSI hue/sat) and light FX chips with speed.
+  - live: the stack top first (thumbnail, blend/kelvin/opacity meta, up, down, eye, remove), add layer (live layers
+    and gobos from the catalog), the selected layer's blend, opacity, motion params and light.
+  - color: gradient tiles + drift, grain, brightness, angle.
+  - scenery: category chips from the catalog plus **videos** (tiles from the `videos` channel; embeds use YouTube's
+    hqdefault thumbnail and an "embed" badge), photo/video controls (blur, brightness, warmth, drift; videos: loop
+    from/to, play its sound + volume), **add from YouTube** (`entities/video/ui/youtubeDialog`: live link check with
+    `youtubeId()`, trim start/end as seconds or m:ss, quality 360p…4k default 1080p, the yt-dlp hint from
+    `GET /videos/tools`, job progress from `import:{id}`) and **add video file** (MP4/MOV/WebM, upload progress).
+  - objects: cue card (current and next cue, cue segments, progress through the cue, back / GO / stop, the cue's
+    sound), objects with lit / waiting / off and ▸ reveal (seek to the first clip and play), backdrop under the
+    objects (underlay on, from, level).
+  - Single-choice picks use the new `pickOne` op (§10/§14): one layer that keeps the previous layer's id, its light
+    (gobo) or blur/brightness/warmth/drift (photo or video, either way round).
+  - Presets per mode as chips: apply, save (name inline), delete.
+  - The wall: on air / blackout, master volume + mute and "sound plays on" projector | laptop | phone, all via
+    `cmd show.audio`.
+- **Soundboard** (`entities/sound/ui/soundboard`): the scene's pads in grid order (`Pad`: tone from the `--pad-*`
+  theme tokens, glyph or name, key badge, loop icon, "missing sound"), click or key → `cmd sound.play { padId }`;
+  looping pads show playing while in `show.audio.loops` (one-shots for their duration); stop all; add pad (pick a
+  library sound or upload; picks a free key); pad editor dialog (name, key with clash warning, sound, volume, color,
+  icon, loop, delete) writing leaf patches through the new ops `addPad`, `updatePad`, `removePad`, `movePad`,
+  `padForKey`. `no_audio` answers toast "Nothing plays sound right now. Open /out on the projector computer and
+  click it once."
+- **Sound library** (`entities/sound/ui/soundLibrary`, in Show and as a **sounds** tab of the Map/Content library):
+  upload (button or drop; WAV, MP3, M4A, AIFF, OGG) decoded first with Web Audio (`entities/sound/peaks.ts`:
+  duration + 128 peaks sent as form fields, upload progress through `http.formProgress`), list with `Waveform` and
+  duration, preview (`sound.play { soundId }`), rename, delete (asks). Rows drag as `sound:<sha>` onto the timeline's sound tracks.
+- **Scenes** (`entities/show/ui/sceneSwitcher`): `useScenes` (the `scenes` channel, `GET /scenes` fallback) and
+  `SceneList` / `SceneSwitcher`: on-air dot and "on the wall", put on the wall (`cmd show.activate`), new (empty, on
+  the active setup, then rename inline), duplicate ("… copy"), rename (double-click or pen), delete (asks; disabled
+  for the scene on the wall). In the top bar a row click opens the scene in Map/Content and activates it in Show.
+- **Keys in Show**: a pad's key plays it, **Enter** (or **G** when no pad uses g) is GO; Space, Tab and the map keys do
+  nothing there, so a stray key never moves the wall. Written in the left panel's hint.
+- Shared components with demos on `/components`: `ModeTabs`, `Tile`, `Pad`, `Waveform`, `VolumeSlider`,
+  `ProgressBar`; new icons (mode glyphs, speaker, the 11 pad glyphs, youtube, copy, arrowRight, keyboard); pad colour
+  tokens in `theme.css`.
+- `vite.config.ts` ignores `e2e/.results` so Playwright traces no longer full-reload open pages.
+- Tests: unit `scene/show.test.ts` (picks keep id/light/photo controls, pads add/edit/remove/move/key) and
+  `sound/peaks.test.ts`; e2e `show.spec.ts` (Show is the landing space; switching modes in Show changes `/out`
+  pixels; a pad click and its key reach `/out`'s `__pmAudio.started`, the looping pad toggles via `show.audio.loops`,
+  stop all; the no_audio toast; pad add/edit/delete patches; scene switcher create/rename/duplicate/activate/delete
+  and Map editing a scene off the wall; YouTube link validation, embed fallback, video tile picked onto the wall with
+  the YouTube backdrop in the preview; sound upload with browser-decoded duration and peaks). `editor.spec.ts` now
+  opens `/editor/map`; `e2e/lib.ts` `waitForOutput` waits up to 60 s (an editor and /out rendering with SwiftShader
+  in one browser start slowly on a busy machine).
+- Left: the live stack reorders with up/down buttons (no drag); the pad grid has no drag reorder (`movePad` exists);
+  the phone's "hold to reorder" is not reproduced.
+
+## Sound engine, timeline sound, video layers and YouTube backdrops (protocol §14, 2026-10-14, web engine)
+
+- **Hub** (`shared/lib/ws.ts`): `hub.onMessage(type, fn)` hears direct server messages (no channel) such as
+  `sound.play` / `sound.stop`; caps are passed through to `hello` as before (`/out` and the editor now say `audio`).
+- **Audio engine** (`entities/sound/audio.ts`): one AudioContext per page (`audioContext`, `unlockAudio`,
+  `unlockOnGesture`, `onAudioState`), a buffer cache (`loadSound(sha)`: fetch `/a/{sha}`, decode once), and
+  `AudioEngine`s with their own master gain: `playOneShot(sound.play)` (gain = msg.volume, loop), `stop({ playId? |
+  padId? })` (neither = every one-shot, not the timeline), `syncTimeline(planner)` that starts timeline clips with
+  `AudioBufferSourceNode.start(when, offset, duration)` and the fades as linear gain ramps, keeping a voice that already
+  plays the same clip within 30 ms (so show updates do not glitch), and `setMaster(volume, muted)` live.
+  Test hook `window.__pmAudio = { unlocked, started[], stopped[] }` (every source start and stop).
+- **Scheduling math** (`entities/sound/audioSchedule.ts`, pure, unit-tested): sound clips of sound tracks,
+  `planClips(scene, playhead, { until, fileDuration, mutedTracks, horizon })` → delay, file offset
+  (`offset + (t − start)`), duration (cut at the next hold cue, the end of the timeline or the end of the file) and
+  the exact gain breakpoints (`clipEnvelope`, including where overlapping fades cross); `holdPoint` (backend §9).
+- **Hooks** (`entities/sound/audioHooks.ts`): `useAudioClient(hub, { role, enabled })` plays `sound.play` /
+  `sound.stop` and the active scene's timeline on the server clock (playing transports only, re-planned on every show
+  or scene change and clock sync) while `show.audio.output` names the role (projector → output, editor → editor,
+  phone → remote); one-shots that arrive while the browser still blocks sound are dropped, not played late.
+  `usePreviewAudio(scene, preview, { muted, mutedTracks })` plays the editor preview's sound clips locally (re-plans on
+  play, pause, seek and loop wraps). `useAudioUnlocked()`, `useSoundList(hub)`.
+- **/out** says caps `render` + `audio`, runs the audio client, shows **click to enable sound** (bottom centre pill)
+  until its context runs while it is the audio output (hidden with `?headless=1`; any click on the page unlocks it),
+  and unmutes an `asset:` video layer with `params.audio` at volume × master. **/preview** never plays sound.
+- **Video layers in the engine**: kind `video` with `asset:<sha>` is a looping muted video texture drawn exactly like
+  a photo (cover, blur, brightness, warmth, drift) inside the loop window `start…end`; `youtube:<id>` draws nothing.
+  Renderers created with `transparent: true` (/out, /preview, `LivePreview`, `OutputView`) clear to transparent only
+  while a YouTube layer shows (`render/youtube.ts activeYouTube`: the lowest visible one of the drawn stack, also as the
+  objects-mode underlay); backdrop blends then keep coverage in alpha, the underlay level, master and blackout dim
+  the player through the canvas alpha, test patterns and outlines stay opaque. Every other frame is byte-identical.
+- **YouTubeBackdrop** (`entities/video/youtube.tsx`): the youtube-nocookie embed (muted, looping, no controls,
+  start/end) behind the canvas, covering the frame (16:9 scaled up plus a blur margin), turned and flipped like the
+  output on /out, CSS blur and brightness plus a multiply warmth tint, layer opacity, no pointer events
+  (`data-testid="youtube-backdrop"`).
+- **LivePreview** (`entities/output`, used by Show): exactly what the wall shows (active scene or previewed draft at
+  the wall clock, blackout, test pattern, solo, YouTube backdrop). `useWallDocs(hub)` is shared with /out.
+- **Timeline**: "sound" in + track; sound clips show the sound's name and the part of its waveform they play; drag
+  and trim like other clips but only between sound tracks; drop a library row (`sound:<sha>`) on a sound track (the
+  clip takes the sound's length); a sound track's ⋯ menu adds any library sound at the playhead; a speaker toggle on
+  the transport bar mutes the preview sound (remembered in localStorage). Cue menus get "edit cue": the **cue
+  inspector** (label, time, follow on, play a sound on GO with volume, clear). The **sound clip inspector** picks the
+  sound, file offset, volume, start/end, fades and "fit the clip to the sound". Video layers get their params from
+  the catalog `videoParams` (fallback built in) plus a note on what YouTube can't do.
+- Ops (`scene/ops.ts`): `soundTrack`, `firstSoundTrack`, `soundClip`, `addSoundClip` (makes a sound track when there
+  is none), `setClipParams`, `setCueSound`.
+- Contract test decodes `sound.json`, `video.json`, `import.json`, the `sound.play` / `sound.stop` messages, the
+  `sounds` / `scenes` / `import:` snapshots and the `sound.play`, `sound.stop`, `show.audio` command args.
+- Tests: unit `sound/audioSchedule.test.ts`, `video/youtube.test.ts` (link parser, refs, embed URL, the active
+  YouTube layer, CSS look), sound ops in `scene/ops.test.ts`, the hub's `onMessage`; e2e `sound-video.spec.ts` (the
+  preview schedules `clp_rain` 2 s ahead at file offset 0.5; the sound clip inspector; the cue sound edit; a YouTube
+  layer gives /out an iframe and a see-through canvas that blackout closes; /preview shows it too; the click to
+  enable sound overlay; an uploaded WebM video layer draws on /out) and `sound-autoplay.spec.ts` (Chrome with
+  `--autoplay-policy=no-user-gesture-required` as `projmap open --out` runs it: REST pad press reaches /out, the
+  looping pad toggles, library sound + stop all, `no_audio`, GO plays the cue sound and schedules the rain clip on the
+  wall clock, stop silences it).
+- Left: video layer sound plays on /out only (as §14 says); YouTube players are always muted and their loop is the
+  player's own (not frame-locked to anything); one-shots play on the context clock as they arrive (no server
+  timestamp to align them); the editor stage (objects mode) does not show a YouTube underlay.
+
 ## Mock server
 
 `frontend/dev/mock-server.mjs` implements protocol §2/§3 well enough for the UI (fixtures, JSON Patch, param
 coalescing, stale rejects, drafts with ack + snapshot, scripted agent sessions, scripted calibration that drives the
 output's `output.pattern`, assets in memory, `show.solo` with expiry and `show.preview`). Test hooks: `/__mock/log`, `/__mock/state`, `/__mock/rpc`,
 `/__mock/reset`. It is a dev tool, not the product.
+
+§14 in the mock (listed at the top of the file): scene create/duplicate/rename/delete (409 `scene_active`) and the
+`scenes` channel; `show.audio` (cmd and POST) with `loops`; the sound library (two generated WAVs under the fixture
+shas, uploads keep the `duration`/`peaks` form fields) and the `sounds` channel; `sound.play` / `sound.stop` (cmd and
+REST) routed to connections with cap `audio` whose role matches `show.audio.output`, `no_audio`, looping pads that
+toggle, the cue sound on `show.go` (GO now follows backend §9: from stopped it starts cue `cue`); videos
+(upload, rename, delete, `tools`, YouTube import with the embed fallback by default; `MOCK_YTDLP=1` or
+`POST /__mock/tools {ytdlp}` runs a download job with progress on `import:{id}`) and the `videos` channel. Extra
+hooks: `POST /__mock/send {role?, cap?, t, d}` and caps in `/__mock/state`.
 
 ## What's left / approximations
 

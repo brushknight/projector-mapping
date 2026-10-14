@@ -40,6 +40,7 @@ import {
 } from '../../ops'
 import type { BlendMode, GradientStop, Layer, LightFxKind, Scene, Surface, SurfaceRole } from '../../types'
 import { ContentLayerInspector, LayerList } from './content'
+import { CueInspector, SoundClipInspector, VideoLayerNote } from './sound'
 import { locateContentLayer } from '../../ops'
 import { LAYER_CLIP_DEFAULTS } from '../../../../render/timeline'
 import { resolveAtlas } from '../../../../render'
@@ -66,8 +67,11 @@ export function Inspector() {
   }
   if (f === 'clip' && ed.sel.clipId) {
     const clip = scene.timeline.clips.find((c) => c.id === ed.sel.clipId)
+    // §14: a clip on a sound track plays a sound
+    if (clip && scene.timeline.tracks.find((t) => t.id === clip.trackId)?.target.kind === 'sound') return <SoundClipInspector scene={scene} clipId={clip.id} />
     if (clip) return <ClipInspector scene={scene} clipId={clip.id} />
   }
+  if (f === 'cue' && ed.sel.cueId && scene.timeline.cues.some((c) => c.id === ed.sel.cueId)) return <CueInspector scene={scene} cueId={ed.sel.cueId} />
   return <SceneInspector scene={scene} />
 }
 
@@ -495,6 +499,8 @@ function LayerInspector({ scene, layer }: { scene: Scene; layer: Layer }) {
           </div>
         </Section>
       )}
+
+      {layer.kind === 'video' && <VideoLayerNote layer={layer} />}
 
       {stops && (
         <Section>

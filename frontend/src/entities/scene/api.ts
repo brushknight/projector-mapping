@@ -4,7 +4,10 @@ import type { HistoryEntry, PatchOp, Scene, SceneSummary } from './types'
 export const sceneApi = {
   list: () => http.get<SceneSummary[]>('/api/v1/scenes'),
   get: (id: string) => http.get<Scene>(`/api/v1/scenes/${id}`),
-  create: (name: string, setupId: string) => http.post<Scene>('/api/v1/scenes', { name, setupId }),
+  create: (name: string, setupId?: string | null) => http.post<Scene>('/api/v1/scenes', setupId ? { name, setupId } : { name }),
+  /** (§14) a deep copy of another scene */
+  duplicate: (sourceId: string, name: string) => http.post<Scene>('/api/v1/scenes', { name, duplicate: sourceId }),
+  rename: (id: string, name: string) => http.patch<SceneSummary>(`/api/v1/scenes/${id}`, { name }),
   remove: (id: string) => http.del(`/api/v1/scenes/${id}`),
   patch: (id: string, base: number, ops: PatchOp[]) => http.post<{ version: number }>(`/api/v1/scenes/${id}/patch`, { base, ops }),
   undo: (id: string) => http.post<{ version: number }>(`/api/v1/scenes/${id}/undo`),

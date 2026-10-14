@@ -16,5 +16,13 @@
   ],
   "fill": "grid",
   "until": 1791700060123456789
+ },
+ "audio": {
+  "output": "projector",
+  "volume": 0.8,
+  "muted": false,
+  "loops": [
+   "pad_rain"
+  ]
  }
 }

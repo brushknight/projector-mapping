@@ -1,0 +1,88 @@
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.grid {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr;
+  gap: 8px;
+}
+.bad {
+  margin: 0;
+  color: var(--ink);
+  font-size: var(--fs-sm);
+  padding: 8px 12px;
+  border-radius: var(--radius-row);
+  background: var(--control);
+  box-shadow: inset 2px 0 0 var(--ink);
+}
+.dim {
+  color: var(--dim);
+  margin: 0;
+  font-size: var(--fs-sm);
+}
+.found {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  border-radius: var(--radius-tile);
+  background: var(--control);
+}
+.thumb {
+  width: 96px;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius-clip);
+  background: var(--control-3) center / cover no-repeat;
+  flex: none;
+}
+.foundText {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: var(--fs-sm);
+}
+.quality {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.hint {
+  margin: 0;
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  color: var(--ink-2);
+  padding: 10px 12px;
+  border-radius: var(--radius-row);
+  background: var(--control);
+}
+.hint svg {
+  flex: none;
+  margin-top: 2px;
+}
+.job {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: var(--radius-tile);
+  background: var(--card);
+}
+.jobRow {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--fs-sm);
+}
+.num {
+  font-family: var(--num);
+}
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}

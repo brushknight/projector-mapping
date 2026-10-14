@@ -1,5 +1,5 @@
 /** Protocol §1 Scene, Layer, Object, Surface, Timeline. */
-export type LayerKind = 'gobo' | 'procedural' | 'gradient' | 'photo' | 'solid'
+export type LayerKind = 'gobo' | 'procedural' | 'gradient' | 'photo' | 'solid' | 'video'
 export type BlendMode = 'normal' | 'multiply' | 'screen' | 'add'
 export type LightFxKind = 'none' | 'candle' | 'fire' | 'lightning' | 'paparazzi' | 'tv' | 'breathe' | 'strobe' | 'police'
 
@@ -38,7 +38,7 @@ export type Params = Record<string, ParamValue | unknown>
 export interface Layer {
   id: string
   kind: LayerKind
-  /** catalog id of that kind; for photo a scenery id or `asset:<sha>` */
+  /** catalog id of that kind; for photo a scenery id or `asset:<sha>`; for video `asset:<sha>` or `youtube:<id>` (§14) */
   ref: string
   name: string
   visible: boolean
@@ -190,7 +190,7 @@ export interface SceneObject {
   layers?: ContentLayer[]
 }
 
-export type TrackTarget = { kind: 'surface' | 'object' | 'layer'; id: string } | { kind: 'all'; id: null }
+export type TrackTarget = { kind: 'surface' | 'object' | 'layer'; id: string } | { kind: 'all' | 'sound'; id: null }
 
 export interface Track {
   id: string
@@ -209,11 +209,48 @@ export interface Clip {
   params: Params
 }
 
+/** (§14) a sound fired when the cue starts on the wall */
+export interface CueSound {
+  sound: string
+  volume: number
+}
+
 export interface Cue {
   id: string
   at: number
   label: string
   autoFollow: boolean
+  /** (§14) optional; null or absent = none */
+  sound?: CueSound | null
+}
+
+/** (§14) params of a clip on a sound track (`effect: "sound"`) */
+export interface SoundClipParams {
+  sound: string
+  /** seconds into the file at the clip's start */
+  offset: number
+  volume: number
+}
+
+/** (§14) soundboard pads */
+export type PadColor = 'ink' | 'red' | 'amber' | 'green' | 'teal' | 'blue' | 'violet' | 'pink'
+export const PAD_COLORS: PadColor[] = ['ink', 'red', 'amber', 'green', 'teal', 'blue', 'violet', 'pink']
+export type PadIcon = 'none' | 'bell' | 'door' | 'thunder' | 'rain' | 'wind' | 'bird' | 'music' | 'voice' | 'knock' | 'spark' | 'heart'
+export const PAD_ICONS: PadIcon[] = ['none', 'bell', 'door', 'thunder', 'rain', 'wind', 'bird', 'music', 'voice', 'knock', 'spark', 'heart']
+export interface SoundPad {
+  id: string
+  name: string
+  /** sound sha */
+  sound: string
+  volume: number
+  color: PadColor
+  icon?: PadIcon
+  /** a-z or 0-9; the web Show space plays the pad on that key */
+  key?: string | null
+  loop?: boolean
+}
+export interface SceneSounds {
+  pads: SoundPad[]
 }
 
 export interface Timeline {
@@ -234,6 +271,8 @@ export interface Scene {
   underlay?: Underlay
   points: Point[]
   objects: SceneObject[]
+  /** (§14) the soundboard; optional on the wire (absent = { pads: [] }) */
+  sounds?: SceneSounds
   timeline: Timeline
 }
 

@@ -59,7 +59,7 @@ func NewSceneRepository(db *gorm.DB) *SceneRepository { return &SceneRepository{
 
 func (r *SceneRepository) List(ctx context.Context) ([]scene.Summary, error) {
 	var rows []SceneModel
-	if err := r.db.WithContext(ctx).Select("id", "setup_id", "name", "version").Order("name, id").Find(&rows).Error; err != nil {
+	if err := r.db.WithContext(ctx).Select("id", "setup_id", "name", "version").Order("rowid").Find(&rows).Error; err != nil {
 		return nil, err
 	}
 	out := make([]scene.Summary, 0, len(rows))

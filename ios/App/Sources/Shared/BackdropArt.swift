@@ -39,7 +39,7 @@ struct BackdropArt: View {
                 Palette.hero
             }
         case .photo:
-            if let p = layers.first(where: { $0.kind == "photo" }) {
+            if let p = layers.first(where: { $0.kind == "photo" || $0.kind == "video" }) {
                 PhotoHero(layer: p)
             } else {
                 Palette.hero
@@ -63,15 +63,25 @@ struct BackdropArt: View {
     }
 }
 
-/// The scenery hero: the photo with its blur, brightness and warmth.
+/// The scenery hero: the photo (or a video's still) with its blur, brightness and warmth.
 struct PhotoHero: View {
     var layer: Layer
+    @Environment(AppModel.self) private var model
+
+    @ViewBuilder var picture: some View {
+        if layer.kind == "video" {
+            VideoThumb(video: model.videos.first { $0.ref == layer.ref }, ref: layer.ref)
+        } else {
+            SceneryImage(ref: layer.ref)
+        }
+    }
+
     var body: some View {
         let blur = layer.param("blur") ?? 0.74
         let brightness = layer.param("brightness") ?? 0.66
         let warmth = layer.param("warmth") ?? 0
         GeometryReader { g in
-            SceneryImage(ref: layer.ref)
+            picture
                 .frame(width: g.size.width, height: g.size.height)
                 .blur(radius: blur * 9.5)
                 .scaleEffect(1 + blur * 0.114)

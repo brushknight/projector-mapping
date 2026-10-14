@@ -63,6 +63,7 @@ public final class AppDatabase: Sendable {
 
 enum KV {
     static let show = "show", catalog = "catalog", catalogVersion = "catalogVersion"
+    static let sounds = "sounds", videos = "videos"
 
     static func get(_ db: Database, _ key: String) throws -> String? {
         try String.fetchOne(db, sql: "SELECT value FROM kv WHERE key = ?", arguments: [key])

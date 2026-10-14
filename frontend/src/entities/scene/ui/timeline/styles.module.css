@@ -74,6 +74,10 @@
   flex: none;
   cursor: pointer;
 }
+.cue.cueSel {
+  background: var(--ink);
+  color: var(--on-ink);
+}
 .body {
   grid-column: 1 / -1;
   grid-row: 3;
@@ -271,4 +275,18 @@
   margin-left: -2px;
   border-radius: 2px;
   background: var(--red);
+}
+
+/* §14: a sound clip shows the part of its sound's waveform that it plays */
+.clipWave {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  opacity: 0.55;
+  pointer-events: none;
+}
+.clip.sel .clipWave {
+  opacity: 0.35;
 }

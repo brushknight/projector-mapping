@@ -14,6 +14,18 @@ export const DEFAULT_LIGHT: Light = {
   fx: { kind: 'none', speed: 0.35 },
 }
 
+/** (§14) the video layer params, for a catalog older than version 3 */
+export const VIDEO_PARAMS: ParamSchema = {
+  blur: { type: 'number', min: 0, max: 1, default: 0.2, label: 'background blur' },
+  brightness: { type: 'number', min: 0, max: 1, default: 0.8, label: 'brightness' },
+  warmth: { type: 'number', min: -1, max: 1, default: 0, label: 'warmth' },
+  drift: { type: 'number', min: 0, max: 1, default: 0, label: 'drift' },
+  start: { type: 'number', min: 0, max: 36000, default: 0, label: 'loop from' },
+  end: { type: 'number', min: 0, max: 36000, default: 0, label: 'loop to' },
+  audio: { type: 'boolean', default: false, label: 'play its sound' },
+  volume: { type: 'number', min: 0, max: 1, default: 1, label: 'volume' },
+}
+
 /** The light block with the catalog's defaults for intensity, softness, angle and scale. */
 export function defaultLight(catalog: Catalog | null): Light {
   const d = schemaDefaults(catalog?.light.params) as Partial<Light>
@@ -30,6 +42,8 @@ export function layerParamSchema(catalog: Catalog | null, layer: Pick<Layer, 'ki
       return catalog.gradientParams
     case 'photo':
       return catalog.photoParams
+    case 'video':
+      return catalog.videoParams ?? VIDEO_PARAMS
     case 'solid':
       return { color: { type: 'color', default: '#000000', label: 'color' } }
     case 'gobo':

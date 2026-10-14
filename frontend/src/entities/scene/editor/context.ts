@@ -9,11 +9,11 @@ import type { Scene, SceneMode, SceneSummary } from '../types'
 import type { PreviewClock } from './preview'
 
 export type Tool = 'select' | 'quad' | 'tri' | 'poly' | 'circle' | 'mesh' | 'line' | 'mask'
-/** map and content are the two spaces of one screen; automap is the calibration wizard */
-export type Workspace = 'map' | 'content' | 'automap'
-export type Space = 'map' | 'content'
+/** show runs the wall (the default); map and content are the two mapping spaces of one screen; automap is the calibration wizard */
+export type Workspace = 'show' | 'map' | 'content' | 'automap'
+export type Space = 'show' | 'map' | 'content'
 export type StageView = 'input' | 'output' | 'split'
-export type Focus = 'surface' | 'object' | 'layer' | 'clip' | 'content' | null
+export type Focus = 'surface' | 'object' | 'layer' | 'clip' | 'content' | 'cue' | null
 export type SoloFill = 'content' | 'white' | 'grid'
 
 export interface Selection {
@@ -26,6 +26,8 @@ export interface Selection {
   contentLayerId: string | null
   /** index into the selected quad's mesh offsets */
   meshIndex: number | null
+  /** a timeline cue (its inspector: label, follow on, sound on GO) */
+  cueId?: string | null
   focus: Focus
 }
 
@@ -82,7 +84,7 @@ export interface EditorState {
   testPattern: { pattern: Setup['testPattern']; secondsLeft: number | null }
   /** turns a test pattern on for 60 s (or renews it), or off */
   setTestPattern: (p: Setup['testPattern']) => void
-  /** Map (the warp) or Content (the unfolded faces) */
+  /** Show (run the wall), Map (the warp) or Content (the unfolded faces) */
   space: Space
   setSpace: (s: Space) => void
   /** the editor's own playhead; the wall only follows it when wallFollows is on */

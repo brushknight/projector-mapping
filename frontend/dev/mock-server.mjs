@@ -9,6 +9,26 @@
  *
  * Test hooks (not part of the protocol): GET /__mock/log?t=param, POST /__mock/rpc {method,args,role?}, POST /__mock/attach {agent?},
  * POST /__mock/reset, GET /__mock/state.
+ *
+ * Protocol §14 (show control, sound and video), all in memory:
+ *   scenes     GET/POST /scenes {name, setupId?, duplicate?}, PATCH /scenes/{id} {name}, DELETE (409 scene_active),
+ *              channel `scenes` (summary list, v = ms timestamp; also after a patch that changes /name)
+ *   audio      cmd show.audio / POST /show/audio {output?, volume?, muted?}; show.audio.loops toggles looping pads
+ *   sounds     GET/POST /sounds (multipart file, name?, duration?, peaks? kept as sent), PATCH/DELETE /sounds/{sha},
+ *              POST /assets kind=sound does the same; channel `sounds`. Seeded with two generated WAVs under the
+ *              fixture shas: 5d1e0a "rain on glass" (12.48 s) and a77c31 "thunder" (3 s), served at /a/{sha}.
+ *   playing    cmd sound.play {padId?|soundId?, volume?, sceneId?} / POST /sounds/play, cmd sound.stop / POST
+ *              /sounds/stop: direct `sound.play` / `sound.stop` messages to every connection with cap `audio` whose
+ *              role matches show.audio.output (projector → output, editor → editor, phone → remote); 409 no_audio
+ *              (cmd: error no_audio) when there is none. show.go fires the started cue's `sound` (with cueId).
+ *   videos     GET/POST /videos (multipart file), PATCH/DELETE /videos/{id}, GET /videos/tools, POST /videos/import
+ *              {url, maxHeight?, start?, end?, name?} (400 invalid_url), GET /videos/import/{id}; channels `videos`
+ *              and `import:{id}`. Seeded with one embed video (youtube:aqz-KE-bpKQ, the fixture's lay_waves).
+ *              Without yt-dlp (the default) an import is `done` at once with mode `embed`. MOCK_YTDLP=1 or
+ *              POST /__mock/tools {ytdlp, ffmpeg} pretends yt-dlp exists: the job runs (mode `download`) with a
+ *              progress snapshot on `import:{id}` every 150 ms (0 → 0.8 download, 0.95 trim, 1 store) and ends with
+ *              a Video `asset:<sha>` (fake bytes, so it draws no texture).
+ *   hooks      GET /__mock/state also lists clients with caps; POST /__mock/send {role?, cap?, t, d} sends any message.
  */
 import { createHash } from 'node:crypto'
 import { readFileSync, existsSync, readdirSync } from 'node:fs'
@@ -83,15 +103,59 @@ const applyPatch = (doc, ops) => ops.reduce((d, op) => applyOp(d, op), clone(doc
 const leafOnly = (ops, doc) => ops.every((op) => op.op === 'replace' && (getAt(doc, op.path) === null || typeof getAt(doc, op.path) !== 'object'))
 
 // ── state ────────────────────────────────────────────────────────────────────
+// ── generated sounds (§14): small mono 16-bit WAVs so Web Audio can decode them in e2e ─
+function wav(seconds, sample, rate = 8000) {
+  const n = Math.round(seconds * rate)
+  const b = Buffer.alloc(44 + n * 2)
+  b.write('RIFF', 0)
+  b.writeUInt32LE(36 + n * 2, 4)
+  b.write('WAVEfmt ', 8)
+  b.writeUInt32LE(16, 16)
+  b.writeUInt16LE(1, 20)
+  b.writeUInt16LE(1, 22)
+  b.writeUInt32LE(rate, 24)
+  b.writeUInt32LE(rate * 2, 28)
+  b.writeUInt16LE(2, 32)
+  b.writeUInt16LE(16, 34)
+  b.write('data', 36)
+  b.writeUInt32LE(n * 2, 40)
+  for (let i = 0; i < n; i++) b.writeInt16LE(Math.max(-32767, Math.min(32767, Math.round(sample(i / rate) * 32767))), 44 + i * 2)
+  return b
+}
+function peaksOf(seconds, sample, count = 128) {
+  const out = []
+  for (let k = 0; k < count; k++) {
+    let m = 0
+    for (let j = 0; j < 40; j++) m = Math.max(m, Math.abs(sample(((k + j / 40) / count) * seconds)))
+    out.push(Math.round(m * 100) / 100)
+  }
+  return out
+}
+let noiseSeed = 7
+const noise = () => ((noiseSeed = (noiseSeed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff) * 2 - 1
+const rainSample = (t) => noise() * 0.25 * (0.6 + 0.4 * Math.sin(t * 1.3))
+const thunderSample = (t) => (Math.sin(2 * Math.PI * 55 * t) * 0.5 + noise() * 0.3) * Math.exp(-t * 1.2)
+function seededSounds() {
+  const base = fixture('sound.json')
+  const mk = (sha, name, seconds, sample) => {
+    const data = wav(seconds, sample)
+    const asset = { ...base, sha, mime: 'audio/wav', bytes: data.length, name, duration: seconds, peaks: sha === base.sha ? base.peaks : peaksOf(seconds, sample) }
+    return { asset, data }
+  }
+  return [mk('a77c31', 'thunder', 3, thunderSample), mk(base.sha, base.name, base.duration, rainSample)]
+}
+const SEEDED_SOUNDS = seededSounds()
+
 let S
 function reset() {
   const scene = fixture('scene.json')
   const setup = fixture('setup.json')
+  const showFx = fixture('show.json')
   S = {
     setups: new Map([[setup.id, { doc: setup, version: 1 }]]),
     scenes: new Map([[scene.id, { doc: scene, version: scene.version, undo: [], redo: [] }]]),
     history: new Map([[scene.id, []]]),
-    show: { activeSetupId: setup.id, activeSceneId: scene.id, onAir: true, transport: { state: 'stopped', startedAt: 0, offset: 0, cue: 0 }, version: 1 },
+    show: { activeSetupId: setup.id, activeSceneId: scene.id, onAir: true, transport: { state: 'stopped', startedAt: 0, offset: 0, cue: 0 }, version: 1, audio: { ...showFx.audio, volume: 1, loops: [] } },
     presets: [fixture('preset.json')],
     effects: [fixture('effect-glsl.json')],
     devices: new Map(),
@@ -99,7 +163,12 @@ function reset() {
     sessions: new Map(),
     events: new Map(),
     calibs: new Map(),
-    assets: new Map(),
+    assets: new Map(SEEDED_SOUNDS.map((x) => [x.asset.sha, { asset: clone(x.asset), data: x.data }])),
+    // newest first
+    sounds: SEEDED_SOUNDS.map((x) => clone(x.asset)).reverse(),
+    videos: [{ id: 'vid_bunny', name: 'big buck bunny', ref: 'youtube:aqz-KE-bpKQ', source: 'youtube', url: 'https://www.youtube.com/watch?v=aqz-KE-bpKQ', youtubeId: 'aqz-KE-bpKQ', sha: null, thumb: null, duration: 0, width: 0, height: 0, createdAt: '2026-10-14T10:00:00Z' }],
+    imports: new Map(),
+    tools: { ytdlp: !!process.env.MOCK_YTDLP, ffmpeg: !!process.env.MOCK_YTDLP },
     settings: { agentMayPreview: false, agentMayGoLive: false, agentMayApply: false },
     log: [],
     camera: null,
@@ -125,7 +194,11 @@ function channelDoc(ch) {
   if (ch === 'presets') return { v: 1, d: S.presets }
   if (ch === 'devices') return { v: 1, d: devicesList() }
   if (ch === 'camera') return null
+  if (ch === 'scenes') return { v: Date.now(), d: sceneList() }
+  if (ch === 'sounds') return { v: Date.now(), d: S.sounds }
+  if (ch === 'videos') return { v: Date.now(), d: S.videos }
   const [kind, id] = ch.split(':')
+  if (kind === 'import') { const j = S.imports.get(id); return j ? { v: j.n, d: j.job } : null }
   if (kind === 'scene') { const s = S.scenes.get(id); return s ? { v: s.version, d: s.doc } : null }
   if (kind === 'setup') { const s = S.setups.get(id); return s ? { v: s.version, d: s.doc } : null }
   if (kind === 'draft') { const d = S.drafts.get(id); return d ? { v: d.ops.length, d } : null }
@@ -137,6 +210,74 @@ function pushSnapshot(ch) {
   const doc = channelDoc(ch)
   if (doc) broadcast(ch, { t: 'snapshot', v: doc.v, d: doc.d })
 }
+const sceneList = () => [...S.scenes.values()].map((s) => ({ id: s.doc.id, name: s.doc.name, setupId: s.doc.setupId, version: s.version }))
+
+// ── §14 audio routing ────────────────────────────────────────────────────────
+const AUDIO_ROLE = { projector: 'output', editor: 'editor', phone: 'remote' }
+const audioClients = () => [...clients].filter((c) => c.caps?.includes('audio') && c.role === AUDIO_ROLE[S.show.audio?.output ?? 'projector'])
+const fail = (code, message) => Object.assign(new Error(message), { code })
+const NO_AUDIO = 'Nothing plays sound right now. Open /out on the projector computer and click it once.'
+function soundName(sha) {
+  return S.sounds.find((x) => x.sha === sha)?.name
+}
+function sendAudio(t, d) {
+  const to = audioClients()
+  to.forEach((c) => send(c, { t, d }))
+  return to.length
+}
+/** cmd sound.play / POST /sounds/play */
+function soundPlay(args = {}) {
+  if (args.padId) {
+    const sc = S.scenes.get(String(args.sceneId ?? S.show.activeSceneId))
+    const pad = sc?.doc.sounds?.pads?.find((p) => p.id === args.padId)
+    if (!pad) throw fail('not_found', `Pad ${args.padId} does not exist.`)
+    if (!pad.sound) throw fail('bad_request', 'This pad has no sound.')
+    const loops = S.show.audio.loops ?? (S.show.audio.loops = [])
+    if (pad.loop && loops.includes(pad.id)) {
+      sendAudio('sound.stop', { padId: pad.id })
+      S.show.audio.loops = loops.filter((x) => x !== pad.id)
+      bumpShow()
+      return { stopped: true }
+    }
+    if (!audioClients().length) throw fail('no_audio', NO_AUDIO)
+    const playId = rid('ply')
+    const outputs = sendAudio('sound.play', { playId, sound: pad.sound, padId: pad.id, name: pad.name, volume: (pad.volume ?? 1) * Number(args.volume ?? 1), loop: !!pad.loop })
+    if (pad.loop) {
+      loops.push(pad.id)
+      bumpShow()
+    }
+    return { playId, outputs }
+  }
+  if (!args.soundId) throw fail('bad_request', 'Send padId or soundId.')
+  if (!audioClients().length) throw fail('no_audio', NO_AUDIO)
+  const playId = rid('ply')
+  const outputs = sendAudio('sound.play', { playId, sound: String(args.soundId), name: soundName(args.soundId), volume: Number(args.volume ?? 1), loop: false })
+  return { playId, outputs }
+}
+/** cmd sound.stop / POST /sounds/stop */
+function soundStop(args = {}) {
+  const d = {}
+  if (args.playId) d.playId = String(args.playId)
+  if (args.padId) d.padId = String(args.padId)
+  sendAudio('sound.stop', d)
+  const loops = S.show.audio.loops ?? []
+  const left = d.playId ? loops : d.padId ? loops.filter((x) => x !== d.padId) : []
+  if (left.length !== loops.length) {
+    S.show.audio.loops = left
+    bumpShow()
+  }
+  return {}
+}
+function clearLoops() {
+  for (const padId of S.show.audio.loops ?? []) sendAudio('sound.stop', { padId })
+  S.show.audio.loops = []
+}
+function cueSound(sortedCues, idx) {
+  const cue = sortedCues[idx]
+  if (!cue?.sound?.sound) return
+  sendAudio('sound.play', { playId: rid('ply'), sound: cue.sound.sound, cueId: cue.id, name: soundName(cue.sound.sound) ?? cue.label, volume: cue.sound.volume ?? 1, loop: false })
+}
+
 function bumpShow() {
   S.show.version++
   pushSnapshot('show')
@@ -160,6 +301,7 @@ function commit(ch, ops, by, re) {
     S.history.get(id)?.push({ version: store.version, author: by, ts: new Date().toISOString(), ops })
   }
   broadcast(ch, { t: 'patched', v: store.version, re, d: { ops, by } })
+  if (kind === 'scene' && ops.some((o) => o.path === '/name' || o.path === '')) pushSnapshot('scenes')
   return store.version
 }
 
@@ -190,7 +332,18 @@ function showAction(action, args = {}) {
       break
     case 'stop':
       Object.assign(t, { state: 'stopped', offset: 0, startedAt: 0, cue: 0 })
+      clearLoops()
       break
+    case 'audio': {
+      const a = S.show.audio
+      if (args.output != null) {
+        if (!['projector', 'editor', 'phone'].includes(args.output)) throw fail('bad_request', 'output must be projector, editor or phone.')
+        a.output = args.output
+      }
+      if (args.volume != null) a.volume = Math.max(0, Math.min(1, Number(args.volume)))
+      if (args.muted != null) a.muted = !!args.muted
+      break
+    }
     case 'seek': {
       const at = Number(args.t ?? 0)
       Object.assign(t, { offset: at, startedAt: nowNs() })
@@ -198,10 +351,12 @@ function showAction(action, args = {}) {
     }
     case 'go': {
       if (!scene) throw Object.assign(new Error('No active scene.'), { code: 'no_scene' })
-      const ph = playheadOf(t)
-      const next = cues.findIndex((c) => c.at > ph + 1e-3)
-      const idx = next < 0 ? 0 : next
-      Object.assign(t, { state: 'playing', offset: cues[idx]?.at ?? 0, startedAt: nowNs(), cue: idx })
+      // backend §9: from stopped GO starts cue `cue` (0 after a stop); from playing or paused the next one
+      const sorted = [...cues].sort((a, b) => a.at - b.at)
+      const idx = t.state === 'stopped' ? t.cue ?? 0 : (t.cue ?? 0) + 1
+      if (sorted.length && idx >= sorted.length) throw Object.assign(new Error('That was the last cue.'), { code: 'no_cue' })
+      Object.assign(t, { state: 'playing', offset: sorted[idx]?.at ?? 0, startedAt: nowNs(), cue: idx })
+      cueSound(sorted, idx)
       break
     }
     case 'back': {
@@ -220,6 +375,8 @@ function showAction(action, args = {}) {
       S.show.activeSceneId = s.doc.id
       S.show.activeSetupId = s.doc.setupId
       Object.assign(t, { state: 'stopped', offset: 0, startedAt: 0, cue: 0 })
+      S.show.preview = null
+      clearLoops()
       break
     }
     case 'solo': {
@@ -352,6 +509,8 @@ function onMessage(c, env) {
           if (!['static', 'live', 'color', 'scenery', 'objects'].includes(args?.mode)) throw Object.assign(new Error(`mode ${args?.mode} is not one of static, live, color, scenery, objects`), { code: 'invalid' })
           commit(`scene:${sid}`, [{ op: 'replace', path: '/mode', value: args.mode }], by)
         }
+        else if (name === 'sound.play') return send(c, { t: 'ack', re: env.id, d: soundPlay(args ?? {}) })
+        else if (name === 'sound.stop') return send(c, { t: 'ack', re: env.id, d: soundStop(args ?? {}) })
         else if (name?.startsWith('show.')) showAction(name.slice(5), args ?? {})
         else throw Object.assign(new Error(`Unknown command ${name}.`), { code: 'unknown_command' })
         send(c, { t: 'ack', re: env.id })
@@ -507,7 +666,8 @@ function parseMultipart(buf, ctype) {
     const body = part.subarray(sep + 4)
     const name = /name="([^"]+)"/.exec(head)?.[1]
     const ct = /content-type:\s*([^\r\n]+)/i.exec(head)?.[1]
-    if (name) out[name] = ct || /filename=/.test(head) ? { data: body, type: ct ?? 'application/octet-stream' } : body.toString()
+    const filename = /filename="([^"]*)"/.exec(head)?.[1]
+    if (name) out[name] = ct || filename != null ? { data: body, type: ct ?? 'application/octet-stream', filename } : body.toString()
     pos = next
   }
   return out
@@ -527,6 +687,92 @@ function jpegSize(b) {
     i += 2 + len
   }
   return { width: 0, height: 0 }
+}
+
+const stem = (f) => String(f ?? '').replace(/^.*[\\/]/, '').replace(/\.[^.]+$/, '')
+const SOUND_EXT = /\.(wav|wave|mp3|m4a|aac|aif|aiff|ogg|oga|opus)$/i
+function addSound(res, parts) {
+  const f = parts.file
+  if (!/^audio\//.test(f.type) && !SOUND_EXT.test(f.filename ?? '')) return err(res, 400, 'unsupported', 'Send a WAV, MP3, M4A, AIFF or OGG file.')
+  const a = storeAsset(f.data, f.type.startsWith('audio/') ? f.type : 'audio/wav', 'sound')
+  let peaks = []
+  try {
+    const p = JSON.parse(typeof parts.peaks === 'string' ? parts.peaks : '[]')
+    if (Array.isArray(p)) peaks = p.map(Number).filter((x) => Number.isFinite(x))
+  } catch {
+    peaks = []
+  }
+  a.width = 0
+  a.height = 0
+  a.name = typeof parts.name === 'string' && parts.name.trim() ? parts.name.trim() : stem(f.filename) || 'sound'
+  a.duration = Number(parts.duration) || 0
+  a.peaks = peaks
+  S.sounds = [a, ...S.sounds.filter((x) => x.sha !== a.sha)]
+  pushSnapshot('sounds')
+  return json(res, 201, a)
+}
+
+function youtubeIdOf(url) {
+  let u
+  try {
+    u = new URL(url.trim())
+  } catch {
+    return null
+  }
+  if (u.protocol !== 'https:' && u.protocol !== 'http:') return null
+  const ok = (id) => (id && /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null)
+  const host = u.hostname.toLowerCase()
+  if (host === 'youtu.be') return ok(u.pathname.split('/')[1])
+  if (['youtube.com', 'www.youtube.com', 'm.youtube.com'].includes(host)) {
+    if (u.pathname === '/watch') return ok(u.searchParams.get('v'))
+    const sh = /^\/shorts\/([^/]+)/.exec(u.pathname)
+    if (sh) return ok(sh[1])
+  }
+  return null
+}
+
+const EMBED_MESSAGE = 'yt-dlp is not installed, so this loop plays as an embedded YouTube player. Install it with brew install yt-dlp for offline, sharper loops you can fully blur.'
+function startImport({ url, youtubeId, maxHeight, start, end, name }) {
+  const id = rid('imp')
+  const createdAt = new Date().toISOString()
+  const download = S.tools.ytdlp
+  const job = { id, url, youtubeId, mode: download ? 'download' : 'embed', status: 'running', progress: 0, message: 'starting', maxHeight, start, end, videoId: null, ref: null, createdAt }
+  const entry = { job, n: 0 }
+  S.imports.set(id, entry)
+  const update = (patch) => {
+    Object.assign(job, patch)
+    entry.n++
+    pushSnapshot(`import:${id}`)
+  }
+  const finish = (ref, sha) => {
+    const v = { id: rid('vid'), name: name ?? `youtube ${youtubeId}`, ref, source: 'youtube', url, youtubeId, sha: sha ?? null, thumb: null, duration: end ? end - start : 0, width: sha ? 1920 : 0, height: sha ? 1080 : 0, createdAt }
+    S.videos.unshift(v)
+    pushSnapshot('videos')
+    return v
+  }
+  if (!download) {
+    const v = finish(`youtube:${youtubeId}`)
+    Object.assign(job, { status: 'done', progress: 1, message: EMBED_MESSAGE, videoId: v.id, ref: v.ref })
+    entry.n++
+    return job
+  }
+  let step = 0
+  const tick = () => {
+    step++
+    if (step <= 8) {
+      const p = Math.round(step * 10) / 100
+      update({ progress: p, message: `downloading ${Math.round((p / 0.8) * 100)}%` })
+    } else if (step === 9) update({ progress: 0.95, message: 'trimming' })
+    else {
+      const a = storeAsset(Buffer.from(`mock video ${id}`), 'video/mp4', 'video')
+      const v = finish(`asset:${a.sha}`, a.sha)
+      update({ status: 'done', progress: 1, message: 'done', videoId: v.id, ref: v.ref })
+      return
+    }
+    setTimeout(tick, 150)
+  }
+  setTimeout(tick, 150)
+  return job
 }
 
 function storeAsset(data, mime, kind) {
@@ -585,13 +831,23 @@ async function api(req, res, path, url) {
       return json(res, 200, s.doc)
     }
   }
-  if (path === '/scenes' && m === 'GET') return json(res, 200, [...S.scenes.values()].map((s) => ({ id: s.doc.id, name: s.doc.name, setupId: s.doc.setupId, version: s.version })))
+  if (path === '/scenes' && m === 'GET') return json(res, 200, sceneList())
   if (path === '/scenes' && m === 'POST') {
     const b = j()
     const id = rid('scn')
-    const doc = { id, setupId: b.setupId ?? S.show.activeSetupId, name: b.name ?? 'untitled', version: 1, mode: 'static', backdrop: { static: { layers: [] }, live: { layers: [] }, color: { layers: [] }, scenery: { layers: [] } }, underlay: { on: false, from: 'static', level: 0.35 }, points: [], objects: [], timeline: { duration: 20, tracks: [], clips: [], cues: [] } }
+    const name = String(b.name ?? 'untitled').trim()
+    if (!name || name.length > 80) return err(res, 400, 'bad_request', 'Name the scene (1 to 80 characters).')
+    let doc
+    if (b.duplicate) {
+      const src = S.scenes.get(String(b.duplicate))
+      if (!src) return err(res, 404, 'not_found', `Scene ${b.duplicate} does not exist.`)
+      doc = { ...clone(src.doc), id, name, version: 1 }
+    } else {
+      doc = { id, setupId: b.setupId ?? S.show.activeSetupId, name, version: 1, mode: 'static', backdrop: { static: { layers: [] }, live: { layers: [] }, color: { layers: [] }, scenery: { layers: [] } }, underlay: { on: false, from: 'static', level: 0.35 }, points: [], objects: [], sounds: { pads: [] }, timeline: { duration: 20, tracks: [], clips: [], cues: [] } }
+    }
     S.scenes.set(id, { doc, version: 1, undo: [], redo: [] })
     S.history.set(id, [])
+    pushSnapshot('scenes')
     return json(res, 201, doc)
   }
   if (path === '/scenes/from-photo' && m === 'POST') {
@@ -611,8 +867,16 @@ async function api(req, res, path, url) {
     const act = r[2]
     if (!act && m === 'GET') return json(res, 200, s.doc)
     if (!act && m === 'DELETE') {
+      if (S.show.activeSceneId === r[1]) return err(res, 409, 'scene_active', 'Activate another scene first.')
       S.scenes.delete(r[1])
+      pushSnapshot('scenes')
       return json(res, 204)
+    }
+    if (!act && m === 'PATCH') {
+      const name = String(j().name ?? '').trim()
+      if (!name || name.length > 80) return err(res, 400, 'bad_request', 'Name the scene (1 to 80 characters).')
+      commit(`scene:${r[1]}`, [{ op: 'replace', path: '/name', value: name }], 'rest')
+      return json(res, 200, sceneList().find((x) => x.id === r[1]))
     }
     if (act === 'history') return json(res, 200, (S.history.get(r[1]) ?? []).slice(-Number(url.searchParams.get('limit') ?? 50)).reverse())
     if (act === 'patch') {
@@ -692,7 +956,87 @@ async function api(req, res, path, url) {
   if (path === '/assets' && m === 'POST') {
     const parts = parseMultipart(body, req.headers['content-type'])
     if (!parts.file?.data) return err(res, 400, 'bad_request', 'Send a file.')
+    if (parts.kind === 'sound') return addSound(res, parts)
     return json(res, 201, storeAsset(parts.file.data, parts.file.type, typeof parts.kind === 'string' ? parts.kind : 'photo'))
+  }
+  // ── §14 sounds ──
+  if (path === '/sounds' && m === 'GET') return json(res, 200, S.sounds)
+  if (path === '/sounds' && m === 'POST') {
+    const parts = parseMultipart(body, req.headers['content-type'])
+    if (!parts.file?.data) return err(res, 400, 'bad_request', 'Send a file.')
+    return addSound(res, parts)
+  }
+  if ((path === '/sounds/play' || path === '/sounds/stop') && m === 'POST') {
+    try {
+      return json(res, 200, path === '/sounds/play' ? soundPlay(j()) : soundStop(j()))
+    } catch (e) {
+      return err(res, e.code === 'not_found' ? 404 : e.code === 'bad_request' ? 400 : 409, e.code ?? 'error', e.message)
+    }
+  }
+  if ((r = /^\/sounds\/([^/]+)$/.exec(path))) {
+    const snd = S.sounds.find((x) => x.sha === r[1])
+    if (!snd) return err(res, 404, 'not_found', 'No such sound.')
+    if (m === 'GET') return json(res, 200, snd)
+    if (m === 'PATCH') {
+      const name = String(j().name ?? '').trim()
+      if (!name) return err(res, 400, 'bad_request', 'Name the sound.')
+      snd.name = name
+      pushSnapshot('sounds')
+      return json(res, 200, snd)
+    }
+    if (m === 'DELETE') {
+      S.sounds = S.sounds.filter((x) => x !== snd)
+      pushSnapshot('sounds')
+      return json(res, 204)
+    }
+  }
+  // ── §14 videos ──
+  if (path === '/videos' && m === 'GET') return json(res, 200, S.videos)
+  if (path === '/videos' && m === 'POST') {
+    const parts = parseMultipart(body, req.headers['content-type'])
+    const f = parts.file
+    if (!f?.data) return err(res, 400, 'bad_request', 'Send a file.')
+    if (!/^video\/(mp4|quicktime|webm)$/.test(f.type) && !/\.(mp4|mov|webm)$/i.test(f.filename ?? '')) return err(res, 400, 'unsupported', 'Send an MP4, MOV or WebM file.')
+    const a = storeAsset(f.data, f.type.startsWith('video/') ? f.type : 'video/mp4', 'video')
+    const name = typeof parts.name === 'string' && parts.name.trim() ? parts.name.trim() : stem(f.filename) || 'video'
+    a.name = name
+    const v = { id: rid('vid'), name, ref: `asset:${a.sha}`, source: 'file', url: null, youtubeId: null, sha: a.sha, thumb: null, duration: 0, width: 0, height: 0, createdAt: new Date().toISOString() }
+    S.videos.unshift(v)
+    pushSnapshot('videos')
+    return json(res, 201, v)
+  }
+  if (path === '/videos/tools' && m === 'GET') return json(res, 200, S.tools)
+  if (path === '/videos/import' && m === 'POST') {
+    const b = j()
+    const yt = youtubeIdOf(String(b.url ?? ''))
+    if (!yt) return err(res, 400, 'invalid_url', 'Paste a YouTube link: youtube.com/watch, youtu.be or a Shorts link.')
+    const maxHeight = b.maxHeight == null ? 1080 : Number(b.maxHeight)
+    if (![360, 480, 720, 1080, 1440, 2160].includes(maxHeight)) return err(res, 400, 'bad_request', 'maxHeight must be 360, 480, 720, 1080, 1440 or 2160.')
+    const start = Math.max(0, Number(b.start ?? 0) || 0)
+    const end = Math.max(0, Number(b.end ?? 0) || 0)
+    if (end && end <= start) return err(res, 400, 'bad_request', 'The end must be after the start.')
+    return json(res, 202, startImport({ url: String(b.url), youtubeId: yt, maxHeight, start, end, name: typeof b.name === 'string' && b.name.trim() ? b.name.trim() : null }))
+  }
+  if ((r = /^\/videos\/import\/([^/]+)$/.exec(path))) {
+    const jb = S.imports.get(r[1])
+    return jb ? json(res, 200, jb.job) : err(res, 404, 'not_found', 'No such import.')
+  }
+  if ((r = /^\/videos\/([^/]+)$/.exec(path))) {
+    const v = S.videos.find((x) => x.id === r[1])
+    if (!v) return err(res, 404, 'not_found', 'No such video.')
+    if (m === 'GET') return json(res, 200, v)
+    if (m === 'PATCH') {
+      const name = String(j().name ?? '').trim()
+      if (!name) return err(res, 400, 'bad_request', 'Name the video.')
+      v.name = name
+      pushSnapshot('videos')
+      return json(res, 200, v)
+    }
+    if (m === 'DELETE') {
+      S.videos = S.videos.filter((x) => x !== v)
+      pushSnapshot('videos')
+      return json(res, 204)
+    }
   }
   if (path === '/devices') return json(res, 200, devicesList())
   if ((r = /^\/devices\/([^/]+)$/.exec(path)) && m === 'DELETE') {
@@ -771,7 +1115,18 @@ const server = createServer(async (req, res) => {
       const t = url.searchParams.get('t')
       return json(res, 200, t ? S.log.filter((e) => e.t === t) : S.log)
     }
-    if (path === '/__mock/state') return json(res, 200, { show: S.show, scenes: [...S.scenes.values()].map((s) => ({ id: s.doc.id, version: s.version })), clients: [...clients].map((c) => ({ role: c.role, subs: [...c.subs] })) })
+    if (path === '/__mock/state') return json(res, 200, { show: S.show, scenes: [...S.scenes.values()].map((s) => ({ id: s.doc.id, version: s.version })), clients: [...clients].map((c) => ({ role: c.role, caps: c.caps ?? [], subs: [...c.subs] })) })
+    if (path === '/__mock/tools' && req.method === 'POST') {
+      const b = JSON.parse((await readBody(req)).toString() || '{}')
+      S.tools = { ytdlp: !!b.ytdlp, ffmpeg: b.ffmpeg == null ? !!b.ytdlp : !!b.ffmpeg }
+      return json(res, 200, S.tools)
+    }
+    if (path === '/__mock/send' && req.method === 'POST') {
+      const b = JSON.parse((await readBody(req)).toString() || '{}')
+      const to = [...clients].filter((c) => (!b.role || c.role === b.role) && (!b.cap || c.caps?.includes(b.cap)))
+      to.forEach((c) => send(c, { t: b.t, d: b.d }))
+      return json(res, 200, { sent: to.length })
+    }
     if (path === '/__mock/reset' && req.method === 'POST') {
       reset()
       return json(res, 200, { ok: true })

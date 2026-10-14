@@ -30,7 +30,7 @@ func TestScenes(t *testing.T) {
 	}
 	apitest.ExpectErr(t, h.Do("POST", "/api/v1/scenes", map[string]any{"name": ""}), http.StatusBadRequest, "bad_request")
 	apitest.ExpectErr(t, h.Do("POST", "/api/v1/scenes", map[string]any{"name": "x", "setupId": "set_nope"}), http.StatusNotFound, "not_found")
-	apitest.ExpectErr(t, h.Do("DELETE", "/api/v1/scenes/scn_desk", nil), http.StatusConflict, "conflict")
+	apitest.ExpectErr(t, h.Do("DELETE", "/api/v1/scenes/scn_desk", nil), http.StatusConflict, "scene_active")
 	apitest.Expect(t, h.Do("DELETE", "/api/v1/scenes/"+nw["id"].(string), nil), http.StatusNoContent)
 	apitest.ExpectErr(t, h.Do("DELETE", "/api/v1/scenes/"+nw["id"].(string), nil), http.StatusNotFound, "not_found")
 }

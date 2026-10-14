@@ -67,3 +67,10 @@ type Presence interface {
 	// Kick closes a device's connections (after a revoke).
 	Kick(deviceID string)
 }
+
+// Direct sends messages that belong to no channel (sound.play, sound.stop) to chosen connections.
+type Direct interface {
+	// SendDirect queues m (ordered) on every connection matching to (role and cap; DeviceID is ignored) and says how
+	// many got it.
+	SendDirect(to Target, m Message) int
+}

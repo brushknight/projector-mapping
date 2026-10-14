@@ -23,6 +23,7 @@ import (
 	rendertools "projmap/internal/infrastructure/mcp/tools/render"
 	scenetools "projmap/internal/infrastructure/mcp/tools/scenes"
 	showtools "projmap/internal/infrastructure/mcp/tools/show"
+	soundtools "projmap/internal/infrastructure/mcp/tools/sounds"
 )
 
 // StyleGuide is docs://style-guide.
@@ -74,6 +75,8 @@ func NewServer(d *tools.Deps, p tools.Principal) *gomcp.Server {
 				"Coordinates are scene pixels (0,0 top left). To draw an object's real details on its faces: object_unfold_get, " +
 				"face_template_get, face_draw (points in face UV: (0,0) = the face's first point, u toward the 2nd, v toward the 4th), " +
 				"face_render to look, then proposal_submit; docs://drawing and the dress-object prompt walk through it. " +
+				"Sound effects: sound_list shows the library and the soundboard pads; clip_add {sound, offset?, volume?} puts a sound on the " +
+				"timeline (a sound track), and sound_play plays a pad or sound on the audio output. " +
 				"Projector, live-show and apply tools need the editor's agent toggles.",
 			InitializedHandler: func(ctx context.Context, req *gomcp.InitializedRequest) {
 				if ip := req.Session.InitializeParams(); ip != nil && ip.ClientInfo != nil {
@@ -87,6 +90,7 @@ func NewServer(d *tools.Deps, p tools.Principal) *gomcp.Server {
 	cameratools.Register(s, env)
 	showtools.Register(s, env)
 	facetools.Register(s, env)
+	soundtools.Register(s, env)
 	registerResources(s, env)
 	registerPrompts(s)
 	return s

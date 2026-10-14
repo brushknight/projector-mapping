@@ -233,6 +233,97 @@ const paths: Record<string, ReactNode> = {
       <path d="M4 4v4.7h4.7M12 8v4.5l3 2" />
     </>
   ),
+  // ── show space: modes, sound and video (§14) ──
+  modeStatic: (
+    <>
+      <rect x="4" y="4" width="16" height="16" rx="3" />
+      <path d="M12 4v16M4 12h16" />
+    </>
+  ),
+  modeLive: <path d="M3 8h9a2.5 2.5 0 1 0-2.5-2.5M3 12h14a3 3 0 1 1-3 3M3 16h6" />,
+  modeColor: (
+    <>
+      <circle cx="12" cy="12" r="8" />
+      <path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor" />
+    </>
+  ),
+  speaker: (
+    <>
+      <path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" />
+      <path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" />
+    </>
+  ),
+  speakerOff: (
+    <>
+      <path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" />
+      <path d="M16 9.5l5 5M21 9.5l-5 5" />
+    </>
+  ),
+  bell: (
+    <>
+      <path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z" />
+      <path d="M10 20.5a2 2 0 0 0 4 0" />
+    </>
+  ),
+  door: (
+    <>
+      <path d="M6 21V4h10v17M3.5 21h17" />
+      <circle cx="13.2" cy="12.5" r="0.9" fill="currentColor" />
+    </>
+  ),
+  thunder: (
+    <>
+      <path d="M7 15a4.5 4.5 0 1 1 1.2-8.8A5.5 5.5 0 0 1 18.5 8a3.5 3.5 0 0 1-.5 7" />
+      <path d="M12.5 12l-2.5 4h3l-2 4" />
+    </>
+  ),
+  rain: (
+    <>
+      <path d="M7 14a4.5 4.5 0 1 1 1.2-8.8A5.5 5.5 0 0 1 18.5 7a3.5 3.5 0 0 1-.5 7" />
+      <path d="M8 17l-1 2.5M12 17l-1 2.5M16 17l-1 2.5" />
+    </>
+  ),
+  wind: <path d="M3 9h11a2.5 2.5 0 1 0-2.5-2.5M3 13h15a2.5 2.5 0 1 1-2.5 2.5M3 17h7" />,
+  bird: <path d="M3 9.5c3 0 4.5 1.5 6 4 1-4 3.5-6.5 7.5-6.5L21 5l-2 4c0 6-4.5 9-10 9-2.5 0-4.5-1-5.5-2.5 2.5 0 4-.5 5-1.5-3-1-4.5-2.5-5.5-4.5z" />,
+  music: (
+    <>
+      <path d="M9 18V5.5l11-2V16" />
+      <circle cx="6.5" cy="18" r="2.5" />
+      <circle cx="17.5" cy="16" r="2.5" />
+    </>
+  ),
+  voice: (
+    <>
+      <rect x="9" y="3" width="6" height="11" rx="3" />
+      <path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" />
+    </>
+  ),
+  knock: (
+    <>
+      <path d="M7 12V7.5a1.5 1.5 0 0 1 3 0V11M10 10V6a1.5 1.5 0 0 1 3 0v4M13 10V7a1.5 1.5 0 0 1 3 0v4M16 10.5a1.5 1.5 0 0 1 3 0V15a6 6 0 0 1-6 6h-1a6 6 0 0 1-5-2.7L4.5 14a1.5 1.5 0 0 1 2.5-1.7L7 12" />
+    </>
+  ),
+  spark: <path d="M12 3v5M12 16v5M3 12h5M16 12h5M5.6 5.6l3 3M15.4 15.4l3 3M5.6 18.4l3-3M15.4 8.6l3-3" />,
+  heart: <path d="M12 20s-7.5-4.5-7.5-10A4.3 4.3 0 0 1 12 7.3 4.3 4.3 0 0 1 19.5 10c0 5.5-7.5 10-7.5 10z" />,
+  youtube: (
+    <>
+      <rect x="2.5" y="5.5" width="19" height="13" rx="4" />
+      <path d="M10 9.3v5.4l4.6-2.7z" fill="currentColor" />
+    </>
+  ),
+  copy: (
+    <>
+      <rect x="8" y="8" width="12" height="12" rx="2" />
+      <path d="M16 8V5.5A1.5 1.5 0 0 0 14.5 4h-9A1.5 1.5 0 0 0 4 5.5v9A1.5 1.5 0 0 0 5.5 16H8" />
+    </>
+  ),
+  arrowRight: <path d="M4 12h15M13 6l6 6-6 6" />,
+  keyboard: (
+    <>
+      <rect x="2.5" y="6" width="19" height="12" rx="2.5" />
+      <path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10" />
+    </>
+  ),
 }
 
 export type IconName = keyof typeof paths

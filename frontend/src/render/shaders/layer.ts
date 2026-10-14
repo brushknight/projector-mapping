@@ -9,7 +9,8 @@ import { FULLSCREEN_VS, HEADER, NOISE } from './common'
 
 export const GOBO_IDS = ['window', 'blinds', 'tree', 'palm', 'arch', 'lattice', 'dots', 'spot'] as const
 export const PROCEDURAL_IDS = ['tree-sway', 'palm-sway', 'clouds', 'rain-glass', 'lightning', 'day-cycle', 'sun-drift', 'candle-flicker', 'caustics', 'dapple', 'film-grain', 'haze'] as const
-export const KIND_CODE = { gobo: 0, procedural: 1, gradient: 2, photo: 3, solid: 4 } as const
+/** video (§14) draws like a photo, from a video texture */
+export const KIND_CODE = { gobo: 0, procedural: 1, gradient: 2, photo: 3, solid: 4, video: 3 } as const
 
 export const LAYER_VS = FULLSCREEN_VS
 

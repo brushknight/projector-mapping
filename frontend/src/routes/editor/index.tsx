@@ -7,7 +7,7 @@ import { useCamera } from '../../entities/camera'
 import { useCatalog } from '../../entities/catalog'
 import { effectApi, type EffectDef } from '../../entities/effect'
 import { handleRenderRpcs } from '../../entities/output'
-import { sceneApi, useSceneEditing, type EditMode, type SceneMode, type SceneSummary } from '../../entities/scene'
+import { sceneApi, useSceneEditing, type EditMode, type SceneMode } from '../../entities/scene'
 import { EditorContext, EMPTY_SELECTION, type EditorState, type Selection, type SoloFill, type Space, type StageView, type Tool, type Workspace } from '../../entities/scene/editor/context'
 import { usePreviewClock } from '../../entities/scene/editor/preview'
 import { addContentLayer, deleteObject, deleteSurface, locateSurface, mediaLayer, removeClip, removeContentLayer, removeLayer, setAtlas, setMode as setModeOps } from '../../entities/scene/ops'
@@ -22,6 +22,9 @@ import { SurfaceTree } from '../../entities/scene/ui/surfaceTree'
 import { Timeline } from '../../entities/scene/ui/timeline'
 import { activeTestPattern, setupApi, testPatternSecondsLeft, type Setup } from '../../entities/setup'
 import { ambientClock, type Show } from '../../entities/show'
+import { useScenes } from '../../entities/show/ui/sceneSwitcher/useScenes'
+import { ShowSpace } from '../../entities/show/ui/showSpace'
+import { useAudioClient } from '../../entities/sound/audioHooks'
 import { autoAtlas } from '../../render'
 import { Panel, Segmented, useToast } from '../../shared/components'
 import { newId } from '../../shared/lib/ids'
@@ -63,10 +66,12 @@ function EditorApp({ workspace, timeline }: { workspace: Workspace; timeline?: b
   const search = useSearch({ strict: false }) as { scene?: string }
   const nav = useNavigate()
   const toast = useToast()
-  const hub = useOwnHub(() => new Hub({ role: 'editor', name: 'laptop editor', caps: ['render'], token: authToken() }))
+  // §14: the editor is an audio client too (it plays every sound while show.audio.output is "editor")
+  const hub = useOwnHub(() => new Hub({ role: 'editor', name: 'laptop editor', caps: ['render', 'audio'], token: authToken() }))
+  useAudioClient(hub, { role: 'editor' })
   const show = useChannel<Show>(hub, 'show').doc
   const catalog = useCatalog(hub.welcome?.catalogVersion)
-  const [scenes, setScenes] = useState<SceneSummary[]>([])
+  const { scenes, reload: reloadScenes } = useScenes(hub)
   const [userEffects, setUserEffects] = useState<EffectDef[]>([])
   const [mode, setMode] = useState<EditMode>('live')
   const [sel, setSel] = useState<Selection>(EMPTY_SELECTION)
@@ -87,7 +92,8 @@ function EditorApp({ workspace, timeline }: { workspace: Workspace; timeline?: b
   const [faceZoom, setFaceZoom] = useState<string | null>(null)
   const [setupOpen, setSetupOpen] = useState(false)
 
-  const sceneId = search.scene ?? show?.activeSceneId ?? scenes[0]?.id ?? null
+  // Show always works on the scene on the wall; Map and Content follow ?scene= (any scene) or the wall
+  const sceneId = workspace === 'show' ? (show?.activeSceneId ?? null) : (search.scene ?? show?.activeSceneId ?? scenes[0]?.id ?? null)
   const bad = useCallback((m: string) => toast(m, { bad: true }), [toast])
   const editing = useSceneEditing(hub, sceneId, mode, bad, previewDraftId)
   const scene = editing.scene
@@ -96,7 +102,7 @@ function EditorApp({ workspace, timeline }: { workspace: Workspace; timeline?: b
   const now = useServerSecond(hub)
   const livePattern = activeTestPattern(setup, now)
   const testGrid = livePattern === 'grid'
-  const space: Space = workspace === 'content' ? 'content' : 'map'
+  const space: Space = workspace === 'show' ? 'show' : workspace === 'content' ? 'content' : 'map'
 
   // ── the editor preview clock; the wall follows it only when asked ─────────
   const follow = useRef({ on: false, mode, draftId: null as string | null })
@@ -129,16 +135,12 @@ function EditorApp({ workspace, timeline }: { workspace: Workspace; timeline?: b
     [hub, mode, editing.draft],
   )
 
-  const reloadScenes = useCallback(() => {
-    sceneApi.list().then(setScenes, () => {})
-  }, [])
   const reloadEffects = useCallback(() => {
     effectApi.list().then(setUserEffects, () => {})
   }, [])
   useEffect(() => {
-    reloadScenes()
     reloadEffects()
-  }, [reloadScenes, reloadEffects, hub.status])
+  }, [reloadEffects, hub.status])
   useEffect(() => {
     if (scene && !scenes.some((x) => x.id === scene.id)) reloadScenes()
   }, [scene, scenes, reloadScenes])
@@ -181,7 +183,8 @@ function EditorApp({ workspace, timeline }: { workspace: Workspace; timeline?: b
   )
 
   const goWorkspace = useCallback(
-    (w: Workspace, id: string | null = sceneId) => nav({ to: '/editor/$space', params: { space: w }, search: id ? { scene: id } : {} }),
+    // Show follows the wall, so it carries no ?scene=
+    (w: Workspace, id: string | null = sceneId) => nav({ to: '/editor/$space', params: { space: w }, search: id && w !== 'show' ? { scene: id } : {} }),
     [nav, sceneId],
   )
   const setSpace = useCallback((sp: Space) => goWorkspace(sp), [goWorkspace])
@@ -364,7 +367,8 @@ function EditorApp({ workspace, timeline }: { workspace: Workspace; timeline?: b
         ;(e.shiftKey ? sceneApi.redo(sceneId) : sceneApi.undo(sceneId)).catch((err) => bad(String(err.message ?? err)))
         return
       }
-      if (mod || e.altKey || workspace === 'automap') return
+      // Show has its own keys (pads, Enter = GO); Space, Tab and the map keys do nothing there
+      if (mod || e.altKey || workspace === 'automap' || workspace === 'show') return
       const k = e.key.toLowerCase()
       if (e.key === 'Tab') {
         e.preventDefault()
@@ -444,15 +448,18 @@ function EditorApp({ workspace, timeline }: { workspace: Workspace; timeline?: b
   }
 
   const tlRow = workspace === 'automap' ? 80 : timelineOpen ? 300 : 52
+  const rows = workspace === 'show' ? '46px minmax(0, 1fr)' : `46px minmax(0, 1fr) ${tlRow}px`
   const agentPanel = (
     <AgentPanel hub={hub} sceneId={sceneId} onError={bad} onNotice={(m) => toast(m)} previewDraftId={previewDraftId} onPreviewDraft={setPreviewDraftId} />
   )
 
   return (
     <EditorContext.Provider value={state}>
-      <main className={s.ed} style={{ gridTemplateRows: `46px minmax(0, 1fr) ${tlRow}px` }} data-testid="editor" data-space={workspace}>
+      <main className={s.ed} style={{ gridTemplateRows: rows }} data-testid="editor" data-space={workspace}>
         <EditorBar />
-        {workspace === 'automap' ? (
+        {workspace === 'show' ? (
+          <ShowSpace hub={hub} show={show} catalog={catalog} effects={effects} scenes={scenes} reloadScenes={reloadScenes} toast={toast} command={command} onFromPhoto={() => setFromPhoto(true)} />
+        ) : workspace === 'automap' ? (
           <>
             <Panel as="aside" aria-label="auto map steps">
               <AutoMapPanel st={autoState} />

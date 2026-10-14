@@ -25,7 +25,19 @@ public enum StackPick {
     public static func photo(ref: String, name: String, defaults: JSONObject, keeping old: Layer?, id: String) -> JSONValue {
         var params = defaults
         if let old, old.kind == "photo" { for (k, v) in old.params { params[k] = v } }
+        if let old, old.kind == "video" { for k in ["blur", "brightness", "warmth", "drift"] { if let v = old.params[k] { params[k] = v } } }
         return ["id": .string(old?.id ?? id), "kind": "photo", "ref": .string(ref), "name": .string(name), "visible": true,
+                "opacity": .number(old?.opacity ?? 1), "blend": "normal", "light": nil, "params": .object(params)]
+    }
+
+    /// A video layer for `scenery` (protocol §14): keeps blur, brightness, warmth and drift of the previous photo or
+    /// video; the loop window and sound come from the defaults (a new video starts its own loop).
+    public static func video(ref: String, name: String, defaults: JSONObject, keeping old: Layer?, id: String) -> JSONValue {
+        var params = defaults
+        if let old, old.kind == "photo" || old.kind == "video" {
+            for k in ["blur", "brightness", "warmth", "drift"] { if let v = old.params[k] { params[k] = v } }
+        }
+        return ["id": .string(old?.id ?? id), "kind": "video", "ref": .string(ref), "name": .string(name), "visible": true,
                 "opacity": .number(old?.opacity ?? 1), "blend": "normal", "light": nil, "params": .object(params)]
     }
 }

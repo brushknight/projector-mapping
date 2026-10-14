@@ -26,17 +26,23 @@ struct TabPage<Content: View>: View {
     }
 }
 
-/// `.hd`: the large mono title, the projector settings button and the on-air pill.
+/// `.hd`: the large mono title, the scene picker, the sounds sheet, the projector settings button and the on-air pill.
 struct TabHeader: View {
     var title: String
     @Environment(AppModel.self) private var model
 
     var body: some View {
         HStack(spacing: 8) {
-            Text(title).titleStyle()
-            Spacer(minLength: 8)
+            ViewThatFits(in: .horizontal) {
+                Text(title).titleStyle().lineLimit(1).fixedSize()
+                Text(title).titleStyle(24).lineLimit(1).fixedSize()
+                Text(title).titleStyle(24).lineLimit(1).minimumScaleFactor(0.5)
+            }
+            Spacer(minLength: 4)
+            IconPill(.scenes, size: 18, label: "scenes, \(model.scene?.name ?? "none") on the wall") { model.showScenes = true }
+            IconPill(.speaker, size: 19, label: "sounds") { model.showSounds = true }
             IconPill(.projector, size: 19, label: "projector settings") { model.showSetup = true }
-            OnAirPill()
+            OnAirPill().fixedSize()
         }
         .frame(height: 35)
         .padding(EdgeInsets(top: 4, leading: 4, bottom: 2, trailing: 4))

@@ -1,0 +1,82 @@
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--dim);
+  cursor: pointer;
+  text-align: left;
+}
+.tile:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.sw {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  border-radius: var(--radius-tile);
+  background: var(--control);
+  background-size: cover;
+  background-position: center;
+  color: var(--dim);
+  box-shadow: 0 0 0 1px var(--sep);
+  overflow: hidden;
+}
+.tile:hover .sw {
+  box-shadow: 0 0 0 1px var(--dim-3);
+}
+.tile.on .sw {
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ink);
+}
+.tile:focus-visible {
+  outline: none;
+}
+.tile:focus-visible .sw {
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--dim);
+}
+.label {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  padding: 0 4px;
+  font-size: var(--fs-sm);
+}
+.tile.on .label {
+  color: var(--ink);
+}
+.name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.meta {
+  margin-left: auto;
+  color: var(--faint);
+  font-family: var(--num);
+  font-size: var(--fs-xxs);
+  flex: none;
+}
+.badge {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 7px;
+  border-radius: var(--radius-pill);
+  background: var(--glass);
+  backdrop-filter: blur(10px);
+  color: var(--ink);
+  font-size: var(--fs-xxs);
+  font-family: var(--num);
+}

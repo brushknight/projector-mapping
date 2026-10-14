@@ -1,0 +1,33 @@
+.row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.sl {
+  flex: 1;
+  min-width: 0;
+}
+.mute {
+  width: var(--row);
+  height: var(--row);
+  flex: none;
+  border: 0;
+  border-radius: var(--radius-row);
+  background: var(--control-2);
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.mute:hover {
+  background: var(--control-3);
+}
+.muted .mute {
+  background: var(--ink);
+  color: var(--on-ink);
+}
+.muted .sl {
+  opacity: 0.5;
+}

@@ -42,21 +42,22 @@ const previewRoute = createRoute({
 
 export type EditorSearch = { scene?: string; login?: string }
 const editorSearch = (s: Record<string, unknown>): EditorSearch => ({ ...(str(s.scene) ? { scene: str(s.scene) } : {}), ...(str(s.login) ? { login: str(s.login) } : {}) })
-// one route for every editor space, so switching Map, Content and auto map keeps the editor (and its hub) mounted
+// one route for every editor space, so switching Show, Map, Content and auto map keeps the editor (and its hub) mounted;
+// Show (run the wall) is where the editor lands
 const editorRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/editor',
   validateSearch: editorSearch,
   beforeLoad: ({ search }) => {
-    throw redirect({ to: '/editor/$space', params: { space: 'map' }, search })
+    throw redirect({ to: '/editor/$space', params: { space: 'show' }, search })
   },
 })
-const SPACES = ['map', 'content', 'automap', 'animate'] as const
+const SPACES = ['show', 'map', 'content', 'automap', 'animate'] as const
 function EditorSpace() {
   const { space } = editorSpaceRoute.useParams()
-  const s = (SPACES as readonly string[]).includes(space) ? space : 'map'
+  const s = (SPACES as readonly string[]).includes(space) ? space : 'show'
   // the old animate workspace is the map with the timeline open
-  return <EditorPage workspace={s === 'animate' ? 'map' : (s as 'map' | 'content' | 'automap')} timeline={s === 'animate'} />
+  return <EditorPage workspace={s === 'animate' ? 'map' : (s as 'show' | 'map' | 'content' | 'automap')} timeline={s === 'animate'} />
 }
 const editorSpaceRoute = createRoute({ getParentRoute: () => rootRoute, path: '/editor/$space', component: EditorSpace, validateSearch: editorSearch })
 
@@ -65,7 +66,7 @@ const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
   beforeLoad: () => {
-    throw redirect({ to: '/editor' })
+    throw redirect({ to: '/editor/$space', params: { space: 'show' }, search: {} })
   },
 })
 

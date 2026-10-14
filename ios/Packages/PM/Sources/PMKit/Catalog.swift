@@ -185,6 +185,8 @@ public struct Catalog: Decodable, Sendable, Hashable {
     public var gradientParams: ParamList
     public var scenery: [SceneryItem]
     public var photoParams: ParamList
+    /// Video layer params (catalog v3, protocol §14): the photo controls plus `start`, `end`, `audio`, `volume`.
+    public var videoParams: ParamList
     public var effects: [Effect]
 
     public init(from decoder: Decoder) throws {
@@ -197,10 +199,11 @@ public struct Catalog: Decodable, Sendable, Hashable {
         gradientParams = c.v(.gradientParams, ParamList())
         scenery = c.v(.scenery, [])
         photoParams = c.v(.photoParams, ParamList())
+        videoParams = c.v(.videoParams, ParamList())
         effects = c.v(.effects, [])
     }
 
-    enum CodingKeys: String, CodingKey { case version, light, gobos, procedural, gradients, gradientParams, scenery, photoParams, effects }
+    enum CodingKeys: String, CodingKey { case version, light, gobos, procedural, gradients, gradientParams, scenery, photoParams, videoParams, effects }
 
     public static let empty = try! Catalog.decode(Data("{}".utf8))
 
@@ -212,6 +215,7 @@ public struct Catalog: Decodable, Sendable, Hashable {
         for i in cat.procedural.indices { cat.procedural[i].params.order(by: order["/procedural/\(i)/params"]) }
         cat.gradientParams.order(by: order["/gradientParams"])
         cat.photoParams.order(by: order["/photoParams"])
+        cat.videoParams.order(by: order["/videoParams"])
         return cat
     }
 
@@ -220,12 +224,27 @@ public struct Catalog: Decodable, Sendable, Hashable {
     public func gradient(_ id: String) -> GradientItem? { gradients.first { $0.id == id } }
     public func scenery(_ id: String) -> SceneryItem? { scenery.first { $0.id == id } }
 
+    /// Defaults of a param list as a layer `params` object.
+    public static func defaults(_ list: ParamList) -> JSONObject {
+        var o = JSONObject()
+        for p in list.items { if let d = p.spec.default { o[p.key] = d } }
+        return o
+    }
+
+    /// Video defaults (§14) when an older catalog has no `videoParams`.
+    public var videoDefaults: JSONObject {
+        var o: JSONObject = ["blur": 0.2, "brightness": 0.8, "warmth": 0, "drift": 0, "start": 0, "end": 0, "audio": false, "volume": 1]
+        for (k, v) in Self.defaults(videoParams) { o[k] = v }
+        return o
+    }
+
     /// The param list that drives a layer's controls.
     public func params(for layer: Layer) -> ParamList {
         switch layer.kind {
         case "procedural": procedural(layer.ref)?.params ?? ParamList()
         case "gradient": gradientParams
         case "photo": photoParams
+        case "video": videoParams
         default: ParamList()
         }
     }

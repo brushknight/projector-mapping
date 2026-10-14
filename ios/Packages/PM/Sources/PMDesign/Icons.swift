@@ -74,6 +74,46 @@ extension LineIcon {
     public static let qr = LineIcon([.rect(3.5, 3.5, 7, 7, rx: 1.5), .rect(13.5, 3.5, 7, 7, rx: 1.5), .rect(3.5, 13.5, 7, 7, rx: 1.5), .path("M14 14h2.5v2.5M20 14v.01M14 20h.01M17 17h3v3")])
     public static let wifi = LineIcon([.path("M2.5 9a14 14 0 0 1 19 0M5.5 12.5a9.5 9.5 0 0 1 13 0M8.8 16a4.8 4.8 0 0 1 6.4 0"), .circle(12, 19.3, 0.9, fill: true)])
 
+    // Show control, sound and video (protocol §14)
+    public static let scenes = LineIcon([.rect(3.5, 8, 13, 12.5, rx: 2), .path("M7 5h11.5a2 2 0 0 1 2 2v9.5")])
+    public static let speaker = LineIcon([.path("M4 9.5h3.5L12 5.5v13l-4.5-4H4z"), .path("M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11")])
+    public static let speakerOff = LineIcon([.path("M4 9.5h3.5L12 5.5v13l-4.5-4H4z"), .path("M16 9.5l5 5M21 9.5l-5 5")])
+    public static let film = LineIcon([.rect(3.5, 5, 17, 14, rx: 2.5), .path("M10 9.2v5.6l4.8-2.8z", fill: true)])
+    public static let link = LineIcon([.path("M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"), .path("M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1")])
+    public static let clipboard = LineIcon([.rect(5.5, 5, 13, 16, rx: 2), .path("M9 5V3.5h6V5"), .path("M9 11h6M9 15h4")])
+    public static let loop = LineIcon([.path("M4 12a6 6 0 0 1 6-6h9"), .path("M16 3l3 3-3 3"), .path("M20 12a6 6 0 0 1-6 6H5"), .path("M8 21l-3-3 3-3")])
+    public static let phone = LineIcon([.rect(7, 2.5, 10, 19, rx: 2.5), .path("M11 18.5h2")])
+    public static let note = LineIcon([.path("M9 18V5.5l11-2V16"), .circle(6.5, 18, 2.5), .circle(17.5, 16, 2.5)])
+    public static let waveform = LineIcon([.path("M3 12h1.5M6.5 8v8M10 4.5v15M13.5 8.5v7M17 6v12M20.5 10.5v3")])
+
+    // Pad icons (§14 icon set)
+    public static let bell = LineIcon([.path("M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2H4.5z"), .path("M10 21h4")])
+    public static let door = LineIcon([.path("M6 21V4.5A1.5 1.5 0 0 1 7.5 3h9A1.5 1.5 0 0 1 18 4.5V21"), .path("M3.5 21h17"), .circle(14.5, 12.5, 0.9, fill: true)])
+    public static let rain = LineIcon([.path("M7 14.5a4.5 4.5 0 0 1-.4-9 5.5 5.5 0 0 1 10.6 1.5A3.8 3.8 0 0 1 17 14.5z"), .path("M8 18l-1 2.5M12 18l-1 2.5M16 18l-1 2.5")])
+    public static let bird = LineIcon([.path("M3 11c3-1 5 0 6.5 1.5C11 9 14 6.5 18 7l2.5-1.5L20 8.5c0 5-4 9-10 9-2.5 0-4.5-1-6-3 2 0 3.5-.5 4.5-1.5C5.5 13 4 12.5 3 11z")])
+    public static let voice = LineIcon([.path("M4 18.5V7a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3H8z"), .path("M8.5 9h7M8.5 12.5h4.5")])
+    public static let knock = LineIcon([.path("M7 11V7.5a1.5 1.5 0 0 1 3 0V10m0-3a1.5 1.5 0 0 1 3 0v3m0-2a1.5 1.5 0 0 1 3 0v3m0-1a1.5 1.5 0 0 1 3 0v4a6 6 0 0 1-6 6h-1a6 6 0 0 1-5-2.7L4.5 14a1.5 1.5 0 0 1 2.5-1.6l1 1.3")])
+    public static let spark = LineIcon([.path("M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M5.6 18.4l2.8-2.8M15.6 8.4l2.8-2.8")])
+    public static let heart = LineIcon([.path("M12 20s-7.5-4.6-7.5-10A4.3 4.3 0 0 1 12 7.3 4.3 4.3 0 0 1 19.5 10c0 5.4-7.5 10-7.5 10z")])
+
+    /// The glyph of a pad icon name (§14), nil for `none` or a name this app has no glyph for.
+    public static func pad(_ icon: String) -> LineIcon? {
+        switch icon {
+        case "bell": .bell
+        case "door": .door
+        case "thunder": .lightning
+        case "rain": .rain
+        case "wind": .wind
+        case "bird": .bird
+        case "music": .note
+        case "voice": .voice
+        case "knock": .knock
+        case "spark": .spark
+        case "heart": .heart
+        default: nil
+        }
+    }
+
     /// The icon for a light FX kind.
     public static func fx(_ kind: String) -> LineIcon {
         switch kind {

@@ -38,6 +38,7 @@ struct ObjectsTab: View {
             cueCard(cues: cues, transport: transport)
             autoMapCard
             objectsSection(scene: scene, transport: transport)
+            Soundboard(columns: 4)
             HStack(spacing: 7) {
                 Icon(.laptop, size: 16)
                 Text("objects are mapped on the laptop").font(.pm(13))
@@ -48,9 +49,13 @@ struct ObjectsTab: View {
         }
     }
 
-    /// How far the outline trace has run (0…1) inside the current clip of the cube, for the native preview.
+    /// How far the outline has run (0…1) for the native preview: through the trace clip playing now, else through
+    /// whatever clip plays now, so the stand-in moves with the wall's clock for the whole show.
     func heroProgress(_ t: Double, scene: PMKit.Scene?) -> Double {
-        guard let clip = scene?.timeline.clips.first(where: { $0.effect == "trace" && $0.start <= t && t < $0.end }) else { return 1 }
+        let timeline = scene?.timeline ?? Timeline()
+        let sound = Set(timeline.tracks.filter(\.target.isSound).map(\.id))
+        let playing = timeline.clips.filter { !sound.contains($0.trackId) && $0.start <= t && t < $0.end }
+        guard let clip = playing.first(where: { $0.effect == "trace" }) ?? playing.first else { return 1 }
         return (t - clip.start) / max(0.01, clip.end - clip.start) * 1.15
     }
 
@@ -67,6 +72,17 @@ struct ObjectsTab: View {
                 Text(next.map { "next · \($0.label)" } ?? "last cue").font(.pm(13)).tracking(0.2).foregroundStyle(Palette.dim)
             }
             .padding(.horizontal, 2)
+            if let cs = current?.sound {
+                HStack(spacing: 7) {
+                    Icon(.speaker, size: 15)
+                    Text("plays \(model.sound(cs.sound)?.displayName ?? (model.sounds.isEmpty ? "a sound" : "a missing sound"))")
+                        .font(.pm(13)).tracking(0.2).lineLimit(1)
+                }
+                .foregroundStyle(Palette.dim)
+                .padding(.horizontal, 2)
+                .padding(.top, -4)
+                .accessibilityElement(children: .combine)
+            }
             HStack(spacing: 4) {
                 ForEach(0..<max(1, cues.count), id: \.self) { k in
                     Capsule().fill(!cues.isEmpty && k <= i ? Palette.ink : Palette.off)
