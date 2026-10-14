@@ -291,6 +291,8 @@ public struct ScenePoint: Codable, Sendable, Hashable, Identifiable {
 
 public struct SurfaceEffect: Codable, Sendable, Hashable, Identifiable {
     public var id: String
+    /// Optional label, for example an MCP drawing layer ("bays", "logo").
+    public var name: String?
     public var effect: String
     public var enabled: Bool
     public var params: JSONObject
@@ -298,6 +300,7 @@ public struct SurfaceEffect: Codable, Sendable, Hashable, Identifiable {
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = c.v(.id, "")
+        name = c.opt(.name)
         effect = c.v(.effect, "")
         enabled = c.v(.enabled, true)
         params = c.v(.params, [:])

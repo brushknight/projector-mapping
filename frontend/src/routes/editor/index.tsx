@@ -6,7 +6,7 @@ import { AutoMapPanel, AutoMapStage, AutoMapSteps, useCalibration, type AutoMapS
 import { useCamera } from '../../entities/camera'
 import { useCatalog } from '../../entities/catalog'
 import { effectApi, type EffectDef } from '../../entities/effect'
-import { renderFrameRpc, type RenderFrameArgs } from '../../entities/output'
+import { handleRenderRpcs } from '../../entities/output'
 import { sceneApi, useSceneEditing, type EditMode, type SceneMode, type SceneSummary } from '../../entities/scene'
 import { EditorContext, EMPTY_SELECTION, type EditorState, type Selection, type SoloFill, type Space, type StageView, type Tool, type Workspace } from '../../entities/scene/editor/context'
 import { usePreviewClock } from '../../entities/scene/editor/preview'
@@ -147,8 +147,8 @@ function EditorApp({ workspace, timeline }: { workspace: Workspace; timeline?: b
     document.title = scene ? `${scene.name} · projector map` : 'projector map'
   }, [scene])
 
-  // the editor can render frames for agents too (cap "render")
-  useEffect(() => hub.handleRpc('render.frame', (args) => renderFrameRpc(args as unknown as RenderFrameArgs, ambientClock(hub))), [hub])
+  // the editor renders frames, faces and unfolds for agents too (cap "render")
+  useEffect(() => handleRenderRpcs(hub, () => ambientClock(hub)), [hub])
 
   const effects = useMemo(() => [...(catalog?.effects ?? []), ...userEffects.filter((u) => !catalog?.effects.some((b) => b.id === u.id))], [catalog, userEffects])
 

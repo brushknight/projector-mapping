@@ -134,7 +134,7 @@ func New(ctx context.Context, o Options) (*App, error) {
 	a.e.Any("/ws", echo.WrapHandler(a.Hub))
 	mh := mcp.Handler(&tools.Deps{Scenes: a.Scenes.Service, Drafts: a.Scenes.Drafts, Presets: a.Scenes.Presets, Setups: a.Setups.Service,
 		Show: a.Show.Service, Catalog: a.Catalog.Service, Assets: a.Assets.Service, Agents: a.Agents.Service, Camera: a.Camera.Camera,
-		Calibrations: a.Camera.Calibrations, Caller: a.Hub, EffectAPI: catalog.EffectAPI}, a.Devices.Service)
+		Calibrations: a.Camera.Calibrations, Caller: a.Hub, EffectAPI: catalog.EffectAPI, Port: cfg.Port}, a.Devices.Service)
 	a.e.Any("/mcp", echo.WrapHandler(mh))
 	a.e.Any("/mcp/*", echo.WrapHandler(mh))
 	webApp := web.Handler()

@@ -96,9 +96,29 @@ The built-in effects (grid build, trace, scan, glitch, fill, particles, label, p
 | `preview_on_projector(from, to)` | plays the draft on the real projector. **Needs the "agent may preview" toggle** |
 | `transport(play / stop / go / blackout)` | live control. **Needs the "agent may go live" toggle (off by default)** |
 
+### Dress an object: draw on the flat faces (implemented)
+
+The agent draws a real device's details (drive bays, fan grille, logo, LEDs, panel seams) on each face of a mapped object, flat and unwarped, in the face's own UV; the renderer warps it onto the wall. Face UV: (0,0) is the face's first point (corner 1), u runs toward corner 2, v toward the 3rd and 4th points, both 0..1 of the face's flat width and height. Stroke widths and text sizes are in the face's scene pixels.
+
+| tool | does |
+|---|---|
+| `object_unfold_get(object_id)` | the atlas (size, stored or auto layout) and per face: rect and rotation, sizePx and aspect, corners in order (point id, scene px, uv, atlas px), edges (top, right, bottom, left) with the face across each and whether they touch in the atlas, details with their box in the face's UV, content layers and drawing layers |
+| `face_get(surface_id)` | the same for one face, plus every drawing layer's strokes and the UV and stroke conventions |
+| `face_template_get(surface_id \| object_id)` | a template image drawn by the server: outlines, a 0/.25/.5/.75/1 grid with ticks, corner numbers, u and v arrows, dashed named details, neighbours |
+| `face_render(surface_id, t?, with_outline?, size?)` | the face flat at its aspect (at most 1280 px), from the agent's draft, rendered by the editor or `/out` through the `render.face` RPC; without a browser, a built-in approximation (drawings, gradients, PNG/JPEG pictures) that says so |
+| `object_unfold_render(object_id, t?, size?)` | the whole unfold through `render.unfold`, with face names and corner marks |
+| `face_draw(surface_id, strokes[], mode: append \| replace, layer_name?)` | strokes (pen, line, rect, ellipse, circle, polygon, text) into a named `drawing` layer on the face, validated with errors that say how to fix them |
+| `face_drawing_clear(surface_id, layer_name?)` | removes one drawing layer, or all of them |
+| `object_draw(object_id, strokes[], mode, layer_name?)` | strokes in atlas px across the unfold, split onto each face they cross as that face's drawing layer (no object level drawing in the data model, so this is how a line runs on across a shared edge) |
+| `layer_add(target_kind, target_id, kind, …)` / `layer_update(layer_id, …)` / `layer_remove(layer_id)` | media and gradient content layers on a surface or across an object (protocol §12); an object layer pins the auto atlas |
+| `asset_upload(data_base64 \| path)` | PNG, JPEG or SVG (base64, or a file under the home folder on this Mac), at most 16 MB, returns `asset:<sha>` |
+| `draft_apply(summary?)` | applies the agent's draft. **Needs "agent may apply" (`agentMayApply`), off by default** |
+
+Resource `docs://drawing` explains face UV and strokes with a worked example (four drive bays on the right face). Prompt `dress-object(objectId, device)`: read the unfold, get the templates, draw details per face in named layers, render, compare, iterate, then `proposal_submit`.
+
 ### Resources and prompts
-- Resources: `scene://current`, `effects://catalog`, `docs://effect-api`, `docs://style-guide` (house style: tron-like lines, pixel stepping, black and white plus one accent).
-- Prompts: `animate-object(object, mood, duration)` and `reveal-sequence(objects[], duration)`. These are starters that make the agent call `scene_get`, then `reference_photo_get`, and then look before writing.
+- Resources: `scene://current`, `effects://catalog`, `docs://effect-api`, `docs://style-guide` (house style: tron-like lines, pixel stepping, black and white plus one accent), `docs://drawing`.
+- Prompts: `animate-object(object, mood, duration)`, `reveal-sequence(objects[], duration)` and `dress-object(objectId, device)`. These are starters that make the agent call `scene_get`, then `reference_photo_get`, and then look before writing.
 
 ## The agent loop
 
@@ -112,7 +132,7 @@ The built-in effects (grid build, trace, scan, glitch, fill, particles, label, p
 ## Safety and control
 
 - **Drafts by default.** The agent edits a backstage copy, and live output is untouched until you apply.
-- **Two explicit toggles** in the editor: "agent may preview on projector" and "agent may go live". Both are off by default.
+- **Three explicit toggles** in the editor: "agent may preview on projector", "agent may go live" and "agent may apply its drafts". All are off by default.
 - **Sandboxed effects.** GLSL only reaches the uniforms. JS runs in a worker with no DOM or network, and a frame-time budget kills runaway code.
 - **Undo for everything.** Every agent patch is one history entry with its own diff.
 - **Local only.** The MCP server binds to localhost (stdio for Claude Code and Codex). Phone pairing uses a one-time code, as in agents-deck.
@@ -162,15 +182,15 @@ Camera from the phone to the laptop: **WebRTC over the LAN**, peer-to-peer from 
 
 ```bash
 # Claude Code
-claude mcp add projector-map -- npx projector-map mcp
+claude mcp add --scope user projmap -- /abs/path/to/projmap mcp
 
 # Codex (~/.codex/config.toml)
-[mcp_servers.projector-map]
-command = "npx"
-args = ["projector-map", "mcp"]
+[mcp_servers.projmap]
+command = "/abs/path/to/projmap"
+args = ["mcp"]
 ```
 
-Both talk to the running local server. If the server isn't running, the MCP server starts it.
+Both talk to the running local server (`projmap mcp` is a stdio bridge to `http://127.0.0.1:7400/mcp`; `PROJMAP_URL`, `PROJMAP_PORT` or `--url` point it elsewhere). If the server isn't running, the bridge starts it. See [guides/agents-mcp.md](guides/agents-mcp.md).
 
 ## Build order
 

@@ -43,8 +43,10 @@ type Event struct {
 	TS         time.Time `json:"ts"`
 }
 
-// Settings are the editor's agent toggles; both are off by default.
+// Settings are the editor's agent toggles; all are off by default.
 type Settings struct {
 	AgentMayPreview bool `json:"agentMayPreview"`
 	AgentMayGoLive  bool `json:"agentMayGoLive"`
+	// AgentMayApply lets an agent apply its own draft to the live scene (MCP draft_apply).
+	AgentMayApply bool `json:"agentMayApply"`
 }

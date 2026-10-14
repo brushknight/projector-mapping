@@ -276,7 +276,7 @@ const (
 	MaxStrokePoints = 20000
 )
 
-var strokeTools = map[string]int{"pen": 2, "line": 2, "rect": 2, "ellipse": 2, "text": 1}
+var strokeTools = map[string]int{"pen": 2, "line": 2, "rect": 2, "ellipse": 2, "text": 1, "polygon": 3, "circle": 2}
 
 // CheckStrokes validates a drawing's strokes: tool, points in surface UV (a little outside 0..1 is fine), #rrggbb
 // colour, width and text size in surface px.
@@ -298,7 +298,7 @@ func CheckStrokes(v any, where string) error {
 		tool, _ := st["tool"].(string)
 		minPts, known := strokeTools[tool]
 		if !known {
-			return fmt.Errorf("%s.tool must be pen, line, rect, ellipse or text", w)
+			return fmt.Errorf("%s.tool must be pen, line, rect, ellipse, polygon, circle or text", w)
 		}
 		pts, ok := st["points"].([]any)
 		if !ok || len(pts) < minPts {

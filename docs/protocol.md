@@ -160,9 +160,12 @@ Surfaces reference point ids, so faces that share a corner share a point, and mo
 
   - `points` are normalized surface UV: (0,0) is the surface's first corner (top left of its content), (1,1) the
     opposite one, v down. `line`, `rect` and `ellipse` take two points (`rect` and `ellipse` from opposite corners
-    of their box); `pen` takes 2 or more; `text` takes one (the top left of the text).
-  - `tool`: `pen` | `line` | `rect` | `ellipse` | `text`. `width` (stroke) and `size` (text height) are in scene
-    pixels of the surface, like other effects' px params. `fill` (rect, ellipse) fills with `color`.
+    of their box); `circle` takes two (its centre, then a point on its rim); `pen` takes 2 or more; `polygon` 3 or
+    more (closed); `text` takes one (the top left of the text).
+  - `tool`: `pen` | `line` | `rect` | `ellipse` | `circle` | `polygon` | `text`. `width` (stroke) and `size` (text
+    height) are in scene pixels of the surface, like other effects' px params. `fill` (rect, ellipse, circle,
+    polygon) fills with `color`. A circle's radius is the centre to rim distance measured in surface pixels, so it
+    stays round on a face of any aspect.
   - `reveal` 0…1 draws the strokes on in order: the first `reveal` fraction of the total stroke length is drawn
     (text counts as its width). A timeline clip with effect `drawing` and its own `strokes` uses `progress` as the
     reveal (`reveal × progress`), so a clip draws them on.
@@ -413,8 +416,8 @@ follows whatever lands here.
 - **Agent session channel (frontend).** On `sub agent:{id}` the client accepts a `snapshot` whose `d` is the
   AgentEvent array (or `{ session, events }`), and live messages `event { AgentEvent }` and
   `session { AgentSession }` on the same channel. It also reads `GET /agents/sessions/{id}/events` on open.
-- **Agent permission toggles (frontend).** `GET /api/v1/settings` → `{ agentMayPreview, agentMayGoLive, … }` and
-  `PATCH /api/v1/settings` with a partial body. Both toggles default to false. The editor hides them on 404.
+- **Agent permission toggles (frontend).** `GET /api/v1/settings` → `{ agentMayPreview, agentMayGoLive, agentMayApply }`
+  and `PATCH /api/v1/settings` with a partial body. Every toggle defaults to false. The editor hides them on 404.
 - **Asking the phone for a photo (frontend).** The editor's "take with iphone" sends `cmd camera.capture
   { purpose: "scene" }`. The server forwards a `camera.capture` RPC to a phone and answers `ack { sha }` with the
   uploaded still (or `error { code: "no_phone" }`). Without it the editor falls back to upload only.
@@ -666,3 +669,31 @@ this canvas, and each face shows the part of it under its rect, so content runs 
 The editor plays its own clock: space plays the stage, the content view and thumbnails without sending anything.
 Only with **wall follows editor** on does it send `show.seek` / `show.play` / `show.pause` (or `show.preview` with its
 draft in backstage). GO and on air stay separate controls.
+
+## 13. Drawing on faces over MCP (2026-10-14)
+
+Additive. Every new field is optional on decode.
+
+- **Named effect instances.** A surface effect instance may carry `name` (string, optional):
+  `{ "id": "fx_1", "name": "bays", "effect": "drawing", "enabled": true, "params": { … } }`. Agents keep one
+  `drawing` instance per idea ("bays", "logo", "leds") so they can redo one without touching the others. A drawing
+  instance without a name is the editor's own and counts as the layer `drawing`. The editor draws into the first
+  drawing instance of a surface; every instance renders.
+- **Stroke tools.** `circle` (points `[centre, rim]`) and `polygon` (3 or more points, closed) join the `drawing`
+  strokes (section 1).
+- **Settings.** `agentMayApply` (default false) lets an agent apply its own draft with the MCP tool `draft_apply`.
+- **Render RPCs.** Like `render.frame`, sent to the newest client with cap `render` (the editor or `/out`):
+
+  | method | args | the client |
+  | --- | --- | --- |
+  | `render.face` | `{ sceneId, draftId?, surfaceId, t, width, height }` | renders the surface's content flat (unwarped) into exactly `width × height`: canvas px (x, y) is the surface's uv (x / width, y / height). A face with a place in its object's atlas renders the way the editor's face view does (its details inside it); other surfaces render alone |
+  | `render.unfold` | `{ sceneId, draftId?, objectId, t, width, height }` | renders the object's atlas (protocol §12) over the whole canvas |
+
+  Both upload the PNG as a `snapshot` asset and answer `{ sha, width, height }`, or `rpc.error` when the surface or
+  object does not exist. With `draftId` the client renders the scene with that draft's ops applied.
+- **SVG assets.** `POST /assets` (and the MCP tool `asset_upload`) store SVG as `image/svg+xml`, with `width` and
+  `height` read from the root's size or `viewBox`. `/a/{sha}` serves an SVG with a sandboxing
+  `Content-Security-Policy`. Renderers draw an SVG media layer through an image element at up to 2048 px.
+- **MCP sessions (backend).** A client that connected on its own (Claude Code, Codex) and whose draft gets applied or
+  discarded starts a new session and draft on its next write; until then its reads show the live scene. Tool events
+  on `agent:{id}` read `tool · target · layer`, for example `face_draw · srf_right · bays · 16 strokes`.

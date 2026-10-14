@@ -27,6 +27,28 @@ version section, and the release workflow uses that section as the GitHub releas
   projector, reference photo, auto map and devices; the timeline folds into the transport bar; the tools moved onto
   the stage bar. Line is now E and mask M; [ and ] step through points.
 
+### Agents draw on faces (MCP)
+
+- **Read the unfold.** `object_unfold_get` and `face_get` give each face's atlas rect and rotation, real aspect, corners,
+  edges with the face across each, details in the face's UV, and its layers and drawings, with the UV convention
+  spelled out.
+- **Look flat.** `face_render` and `object_unfold_render` render faces and the whole unfold from the agent's draft
+  in the editor or `/out` (new `render.face` and `render.unfold` RPCs), with a built-in fallback when no browser is
+  open. `face_template_get` draws templates with outlines, a UV grid, corner numbers and details.
+- **Draw.** `face_draw` writes strokes into named drawing layers ("bays", "logo"), `face_drawing_clear` removes them,
+  `object_draw` draws across the unfold in atlas pixels, `layer_add`, `layer_update` and `layer_remove` place pictures
+  and gradients, and `asset_upload` stores PNG, JPEG or SVG pictures.
+- **Apply.** `draft_apply` puts the agent's draft on air when the new **agent may apply its drafts** toggle is on (off
+  by default). Proposals from Claude Code or Codex sessions started outside the editor now show in the agent panel.
+- **Guidance.** The `dress-object` prompt and the `docs://drawing` resource walk an agent through drawing a real
+  device's details on its faces.
+- Drawings take two more tools, `circle` and `polygon`; SVG pictures render on faces.
+
+### Protocol (§13)
+
+- Surface effect instances take an optional `name`; the `drawing` strokes take `circle` and `polygon`; settings
+  take `agentMayApply`; the `render.face` and `render.unfold` RPCs; SVG assets are served as `image/svg+xml`.
+
 ### Protocol (§12)
 
 - `surface.layers` and `object.layers` (content layers: media and gradient), `object.atlas`, track target `layer`

@@ -92,6 +92,10 @@ func (h *Handler) bytes(c echo.Context) error {
 	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 	w.Header().Set("ETag", `"`+a.SHA+`"`)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
+	if a.Mime == "image/svg+xml" {
+		// an SVG opened as a page must not run scripts on this origin
+		w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox")
+	}
 	http.ServeContent(w, c.Request(), "", time.Time{}, f)
 	return nil
 }

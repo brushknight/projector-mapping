@@ -7,7 +7,7 @@
  *   PORT=7499 node dev/mock-server.mjs  → another port (the e2e run uses 7499)
  *   MOCK_CAMERA=1                       → sends a fake phone camera feed on the `camera` channel
  *
- * Test hooks (not part of the protocol): GET /__mock/log?t=param, POST /__mock/rpc {method,args,role?},
+ * Test hooks (not part of the protocol): GET /__mock/log?t=param, POST /__mock/rpc {method,args,role?}, POST /__mock/attach {agent?},
  * POST /__mock/reset, GET /__mock/state.
  */
 import { createHash } from 'node:crypto'
@@ -100,7 +100,7 @@ function reset() {
     events: new Map(),
     calibs: new Map(),
     assets: new Map(),
-    settings: { agentMayPreview: false, agentMayGoLive: false },
+    settings: { agentMayPreview: false, agentMayGoLive: false, agentMayApply: false },
     log: [],
     camera: null,
     pairCode: 'K7Q2',
@@ -775,6 +775,11 @@ const server = createServer(async (req, res) => {
     if (path === '/__mock/reset' && req.method === 'POST') {
       reset()
       return json(res, 200, { ok: true })
+    }
+    if (path === '/__mock/attach' && req.method === 'POST') {
+      // an MCP client that connected on its own (Claude Code, Codex): the server attaches a session on its first write
+      const b = JSON.parse((await readBody(req)).toString() || '{}')
+      return json(res, 200, startAgent({ agent: b.agent ?? 'claude', prompt: '(connected over MCP)', sceneId: b.sceneId }))
     }
     if (path === '/__mock/rpc' && req.method === 'POST') {
       const b = JSON.parse((await readBody(req)).toString() || '{}')

@@ -72,7 +72,8 @@ export interface Underlay {
 export const DEFAULT_UNDERLAY: Underlay = { on: false, from: 'static', level: 0.35 }
 
 /** One stroke of the `drawing` effect (protocol §1): points in surface UV, width and size in surface px. */
-export type StrokeTool = 'pen' | 'line' | 'rect' | 'ellipse' | 'text'
+/** polygon: 3+ points, closed; circle: [centre, rim], radius measured in surface px */
+export type StrokeTool = 'pen' | 'line' | 'rect' | 'ellipse' | 'text' | 'polygon' | 'circle'
 export interface Stroke {
   tool: StrokeTool
   points: Array<[number, number]>
@@ -102,6 +103,8 @@ export interface Mesh {
 
 export interface EffectInstance {
   id: string
+  /** optional label (MCP drawing layers such as "bays" or "logo") */
+  name?: string
   effect: string
   enabled: boolean
   params: Params

@@ -50,6 +50,17 @@ type Deps struct {
 	EffectAPI string
 	// RenderTimeout bounds render.frame.
 	RenderTimeout time.Duration
+	// Port is the server's HTTP port, for the links tools print (default 7400).
+	Port int
+}
+
+// EditorURL is the editor's address on this Mac, for messages to the user.
+func (d *Deps) EditorURL() string {
+	p := d.Port
+	if p == 0 {
+		p = 7400
+	}
+	return fmt.Sprintf("http://localhost:%d", p)
 }
 
 // Principal is who opened the MCP session.
@@ -88,6 +99,13 @@ func (s *Session) AgentName() string {
 func (e *Env) AgentSession(ctx context.Context, create bool) (*agents.Session, error) {
 	e.S.mu.Lock()
 	defer e.S.mu.Unlock()
+	if e.S.agent != nil && e.S.P.SessionID == "" {
+		// a client that attached on its own starts over once its draft is applied or discarded, so it can keep
+		// working (and its look tools show the live scene until it writes again)
+		if d, err := e.D.Drafts.Get(ctx, e.S.agent.DraftID); err == nil && !d.IsOpen() {
+			e.S.agent = nil
+		}
+	}
 	if e.S.agent != nil {
 		return e.S.agent, nil
 	}
@@ -189,6 +207,14 @@ func (e *Env) NeedLive(ctx context.Context) error {
 	return nil
 }
 
+// NeedApply refuses unless the editor allows agents to apply their own drafts.
+func (e *Env) NeedApply(ctx context.Context) error {
+	if !e.Settings(ctx).AgentMayApply {
+		return app_errors.Forbidden("The editor has not allowed agents to apply drafts. Use proposal_submit so the user can apply it, or ask the user to turn on \"agent may apply\" in the editor's agent panel (agentMayApply in PATCH /api/v1/settings).")
+	}
+	return nil
+}
+
 // Handler is a tool's body.
 type Handler[In any] func(ctx context.Context, e *Env, in In) (*mcp.CallToolResult, error)
 
@@ -216,13 +242,23 @@ func (e *Env) log(ctx context.Context, tool string, in any, ok bool, d time.Dura
 		return
 	}
 	b, _ := json.Marshal(in)
-	text := string(b)
+	text := tool
 	var m map[string]any
-	if json.Unmarshal(b, &m) == nil {
-		if n, ok := m["name"].(string); ok {
-			text = n
-		} else if len(m) == 0 {
-			text = ""
+	if json.Unmarshal(b, &m) == nil && len(m) > 0 {
+		// a readable line for the agent panel: the tool, then what it acted on
+		var parts []string
+		for _, k := range []string{"name", "surface_id", "object_id", "layer_id", "layer_name", "id", "summary"} {
+			if v, ok := m[k].(string); ok && v != "" {
+				parts = append(parts, v)
+			}
+		}
+		if st, ok := m["strokes"].([]any); ok {
+			parts = append(parts, fmt.Sprintf("%d strokes", len(st)))
+		}
+		if len(parts) > 0 {
+			text = tool + " · " + strings.Join(parts, " · ")
+		} else {
+			text = tool + " " + string(b)
 		}
 	}
 	if len(text) > 120 {

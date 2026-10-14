@@ -72,17 +72,24 @@ func TestDrawingStrokes(t *testing.T) {
 	sc := h.Do("GET", "/api/v1/scenes/scn_desk", nil).Map(t)
 	left := sc["objects"].([]any)[0].(map[string]any)["surfaces"].([]any)[1].(map[string]any)
 	fx := left["effects"].([]any)[0].(map[string]any)
-	if left["id"] != "srf_left" || fx["effect"] != "drawing" || len(fx["params"].(map[string]any)["strokes"].([]any)) != 3 {
+	if left["id"] != "srf_left" || fx["effect"] != "drawing" || fx["name"] != "sketch" || len(fx["params"].(map[string]any)["strokes"].([]any)) != 5 {
 		t.Fatalf("fixture drawing %v", fx)
 	}
 	path := "/objects/0/surfaces/1/effects/0/params/strokes/-"
 	good := map[string]any{"tool": "ellipse", "points": []any{[]any{0.2, 0.2}, []any{0.6, 0.5}}, "color": "#ffcc00", "width": 5, "fill": true}
 	apitest.Expect(t, h.Do("POST", "/api/v1/scenes/scn_desk/patch", map[string]any{"base": sc["version"], "ops": []any{op("add", path, good)}}), http.StatusOK)
+	poly := map[string]any{"tool": "polygon", "points": []any{[]any{0.1, 0.1}, []any{0.3, 0.1}, []any{0.2, 0.3}}, "color": "#ffffff", "width": 0, "fill": true}
+	circle := map[string]any{"tool": "circle", "points": []any{[]any{0.5, 0.5}, []any{0.55, 0.5}}, "color": "#34c759", "width": 2}
+	for _, st := range []map[string]any{poly, circle} {
+		v := h.Do("GET", "/api/v1/scenes/scn_desk", nil).Map(t)["version"]
+		apitest.Expect(t, h.Do("POST", "/api/v1/scenes/scn_desk/patch", map[string]any{"base": v, "ops": []any{op("add", path, st)}}), http.StatusOK)
+	}
 	for name, bad := range map[string]map[string]any{
-		"tool":   {"tool": "spray", "points": []any{[]any{0.1, 0.1}, []any{0.2, 0.2}}, "color": "#ffffff", "width": 2},
-		"points": {"tool": "line", "points": []any{[]any{0.1, 0.1}}, "color": "#ffffff", "width": 2},
-		"color":  {"tool": "pen", "points": []any{[]any{0.1, 0.1}, []any{0.2, 0.2}}, "color": "red", "width": 2},
-		"range":  {"tool": "pen", "points": []any{[]any{9, 0.1}, []any{0.2, 0.2}}, "color": "#ffffff", "width": 2},
+		"polygon": {"tool": "polygon", "points": []any{[]any{0.1, 0.1}, []any{0.2, 0.2}}, "color": "#ffffff", "width": 2},
+		"tool":    {"tool": "spray", "points": []any{[]any{0.1, 0.1}, []any{0.2, 0.2}}, "color": "#ffffff", "width": 2},
+		"points":  {"tool": "line", "points": []any{[]any{0.1, 0.1}}, "color": "#ffffff", "width": 2},
+		"color":   {"tool": "pen", "points": []any{[]any{0.1, 0.1}, []any{0.2, 0.2}}, "color": "red", "width": 2},
+		"range":   {"tool": "pen", "points": []any{[]any{9, 0.1}, []any{0.2, 0.2}}, "color": "#ffffff", "width": 2},
 	} {
 		v := h.Do("GET", "/api/v1/scenes/scn_desk", nil).Map(t)["version"]
 		r := h.Do("POST", "/api/v1/scenes/scn_desk/patch", map[string]any{"base": v, "ops": []any{op("add", path, bad)}})

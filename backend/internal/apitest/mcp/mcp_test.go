@@ -72,11 +72,11 @@ func TestTools(t *testing.T) {
 		}
 	}
 	res, err := s.ListResources(context.Background(), nil)
-	if err != nil || len(res.Resources) != 4 {
+	if err != nil || len(res.Resources) != 5 {
 		t.Fatalf("resources %v %v", res, err)
 	}
 	pr, err := s.ListPrompts(context.Background(), nil)
-	if err != nil || len(pr.Prompts) != 2 {
+	if err != nil || len(pr.Prompts) != 3 {
 		t.Fatalf("prompts %v %v", pr, err)
 	}
 	rr, err := s.ReadResource(context.Background(), &mcp.ReadResourceParams{URI: "docs://effect-api"})

@@ -14,12 +14,12 @@ export const backdropShape = obj({ static: stackShape, live: stackShape, color: 
 export const sceneModeShape = lit('static', 'live', 'color', 'scenery', 'objects')
 export const underlayShape = obj({ on: bool, from: lit('static', 'live', 'color', 'scenery'), level: num })
 export const strokeShape = obj({
-  tool: lit('pen', 'line', 'rect', 'ellipse', 'text'), points: arr(tuple(num, num)), color: str, width: num,
+  tool: lit('pen', 'line', 'rect', 'ellipse', 'text', 'polygon', 'circle'), points: arr(tuple(num, num)), color: str, width: num,
   fill: optional(bool), text: optional(str), size: optional(num),
 })
 export const pointShape = obj({ id: str, x: num, y: num })
 export const meshShape = obj({ cols: int, rows: int, bezier: bool, offsets: arr(tuple(num, num)) })
-export const effectInstanceShape = obj({ id: str, effect: str, enabled: bool, params: record(any) })
+export const effectInstanceShape = obj({ id: str, name: optional(str), effect: str, enabled: bool, params: record(any) })
 const stopShape = obj({ color: str, pos: num })
 export const contentLayerShape = obj({
   id: str, kind: lit('media', 'gradient'), name: str, visible: bool, opacity: num, blend: lit('normal', 'multiply', 'screen', 'add'),

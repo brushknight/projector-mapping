@@ -36,7 +36,9 @@ export class ImageCache {
       try {
         const res = await fetch(url)
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        const bmp = await createImageBitmap(await res.blob())
+        const blob = await res.blob()
+        const svg = /svg/i.test(blob.type) || (/xml|text\/plain/i.test(blob.type) && /<svg[\s>]/i.test(await blob.slice(0, 4096).text()))
+        const bmp = svg ? await svgBitmap(blob) : await createImageBitmap(blob)
         const gl = this.gl
         const tex = gl.createTexture()!
         gl.bindTexture(gl.TEXTURE_2D, tex)
@@ -61,6 +63,43 @@ export class ImageCache {
     for (const e of this.map.values()) if (e.state === 'ok') this.gl.deleteTexture(e.img.tex)
     this.map.clear()
   }
+}
+
+/** Longest side an SVG rasterizes at, and the size of one without its own size. */
+const SVG_MAX = 2048
+const SVG_DEFAULT = 1024
+
+/**
+ * Rasterizes an SVG: createImageBitmap cannot decode SVG blobs in Chrome, so it loads through an image element and
+ * draws onto a canvas (longest side SVG_MAX, or SVG_DEFAULT square when the SVG has no size).
+ */
+export async function svgBitmap(blob: Blob): Promise<ImageBitmap> {
+  if (typeof Image === 'undefined' || typeof document === 'undefined') throw new Error('SVG needs a page to decode')
+  const url = URL.createObjectURL(blob.type === 'image/svg+xml' ? blob : new Blob([blob], { type: 'image/svg+xml' }))
+  try {
+    const img = new Image()
+    img.decoding = 'async'
+    await new Promise<void>((done, fail) => {
+      img.onload = () => done()
+      img.onerror = () => fail(new Error('The SVG could not be decoded'))
+      img.src = url
+    })
+    const { width, height } = svgSize(img.naturalWidth, img.naturalHeight)
+    const c = document.createElement('canvas')
+    c.width = width
+    c.height = height
+    c.getContext('2d')!.drawImage(img, 0, 0, width, height)
+    return await createImageBitmap(c)
+  } finally {
+    URL.revokeObjectURL(url)
+  }
+}
+
+/** The raster size of an SVG with natural size w × h. */
+export function svgSize(w: number, h: number): { width: number; height: number } {
+  if (!(w > 0) || !(h > 0)) return { width: SVG_DEFAULT, height: SVG_DEFAULT }
+  const k = SVG_MAX / Math.max(w, h)
+  return { width: Math.max(1, Math.round(w * k)), height: Math.max(1, Math.round(h * k)) }
 }
 
 /** Uploads canvases / bitmaps into textures that live as long as their key is used. */

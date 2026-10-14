@@ -30,19 +30,20 @@ func Register(s *mcp.Server, env *tools.Env) {
 // RenderTarget is who answers render.frame.
 var RenderTarget = realtime.Target{Cap: "render"}
 
-// Frame renders one frame and returns the decoded image.
-func Frame(ctx context.Context, e *tools.Env, t float64, draft bool, width int) (image.Image, string, error) {
-	sc, draftID, err := e.View(ctx)
-	if err != nil {
-		return nil, "", err
-	}
-	if !e.D.Caller.Has(RenderTarget) {
-		return nil, "", app_errors.Unavailable("No client can render right now. Ask the user to open the editor (or /out) in Chrome on this Mac; it renders frames for agents.")
-	}
-	// agents look at their mapping: render objects mode whatever is on the wall (protocol §9 render.frame)
-	args := map[string]any{"sceneId": sc.ID, "t": t, "width": width, "mode": "objects"}
-	if draft && draftID != "" {
-		args["draftId"] = draftID
+// NoClient is the error when nothing can render: it tells the user what to open.
+func NoClient(e *tools.Env) error {
+	u := e.D.EditorURL()
+	return app_errors.Unavailable("No client can render right now. Ask the user to open %s/editor (or %s/out) in Chrome on this Mac; it renders frames for agents.", u, u)
+}
+
+// HasClient tells whether a render client is connected.
+func HasClient(e *tools.Env) bool { return e.D.Caller.Has(RenderTarget) }
+
+// Call sends a render RPC (render.frame, render.face, render.unfold) to the render client and returns the image it
+// uploaded and its sha.
+func Call(ctx context.Context, e *tools.Env, method string, args map[string]any) (image.Image, string, error) {
+	if !HasClient(e) {
+		return nil, "", NoClient(e)
 	}
 	timeout := e.D.RenderTimeout
 	if timeout == 0 {
@@ -50,7 +51,7 @@ func Frame(ctx context.Context, e *tools.Env, t float64, draft bool, width int) 
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	res, err := e.D.Caller.Call(ctx, RenderTarget, "render.frame", args)
+	res, err := e.D.Caller.Call(ctx, RenderTarget, method, args)
 	if err != nil {
 		return nil, "", err
 	}
@@ -69,6 +70,20 @@ func Frame(ctx context.Context, e *tools.Env, t float64, draft bool, width int) 
 		return nil, "", app_errors.Invalid("The rendered frame is not an image: %v", err)
 	}
 	return img, r.SHA, nil
+}
+
+// Frame renders one frame and returns the decoded image.
+func Frame(ctx context.Context, e *tools.Env, t float64, draft bool, width int) (image.Image, string, error) {
+	sc, draftID, err := e.View(ctx)
+	if err != nil {
+		return nil, "", err
+	}
+	// agents look at their mapping: render objects mode whatever is on the wall (protocol §9 render.frame)
+	args := map[string]any{"sceneId": sc.ID, "t": t, "width": width, "mode": "objects"}
+	if draft && draftID != "" {
+		args["draftId"] = draftID
+	}
+	return Call(ctx, e, "render.frame", args)
 }
 
 type renderIn struct {

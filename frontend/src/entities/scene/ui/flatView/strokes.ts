@@ -88,7 +88,7 @@ export function hitStroke(strokes: Stroke[], p: Px, size: Size, tolPx: number): 
     const tol = tolPx + s.width / 2
     if (path.length === 1 && Math.hypot(p[0] - path[0][0], p[1] - path[0][1]) <= tol) return i
     for (let j = 1; j < path.length; j++) if (segDist(p, path[j - 1], path[j]) <= tol) return i
-    if (s.fill && path.length > 2 && (s.tool === 'rect' || s.tool === 'ellipse')) {
+    if (s.fill && path.length > 2 && (s.tool === 'rect' || s.tool === 'ellipse' || s.tool === 'polygon' || s.tool === 'circle')) {
       const xs = path.map((q) => q[0]), ys = path.map((q) => q[1])
       if (p[0] >= Math.min(...xs) && p[0] <= Math.max(...xs) && p[1] >= Math.min(...ys) && p[1] <= Math.max(...ys)) return i
     }

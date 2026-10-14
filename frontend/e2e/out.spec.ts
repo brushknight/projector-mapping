@@ -87,3 +87,47 @@ test('render.frame renders offscreen and uploads a PNG snapshot', async ({ page,
   expect(png.readUInt32BE(16)).toBe(320) // IHDR width
   expect(png.readUInt32BE(20)).toBe(180)
 })
+
+/** Lit pixels (r+g+b > 60) of an uploaded PNG, decoded in the page. */
+async function litFraction(page: import('@playwright/test').Page, sha: string): Promise<number> {
+  return page.evaluate(async ({ url }) => {
+    const bmp = await createImageBitmap(await (await fetch(url)).blob())
+    const c = new OffscreenCanvas(bmp.width, bmp.height)
+    const ctx = c.getContext('2d')!
+    ctx.drawImage(bmp, 0, 0)
+    const d = ctx.getImageData(0, 0, bmp.width, bmp.height).data
+    let lit = 0
+    for (let i = 0; i < d.length; i += 4) if (d[i] + d[i + 1] + d[i + 2] > 60) lit++
+    return lit / (d.length / 4)
+  }, { url: `/a/${sha}` })
+}
+
+test('render.face renders a face flat at the asked size and uploads a PNG', async ({ page, request }) => {
+  await page.goto('/out?headless=1')
+  await waitForOutput(request)
+  // the left face carries a drawing (rect border, pen line, text, polygon, circle)
+  const r = await rpc(request, 'render.face', { sceneId: 'scn_desk', surfaceId: 'srf_left', t: 0, width: 309, height: 300 })
+  expect(r.ok, JSON.stringify(r.d)).toBe(true)
+  expect(r.d.width).toBe(309)
+  expect(r.d.height).toBe(300)
+  const sha = String(r.d.sha)
+  expect(sha).toMatch(/^[0-9a-f]{64}$/)
+  const png = await (await request.get(`${API}/a/${sha}`)).body()
+  expect(png.readUInt32BE(16)).toBe(309)
+  expect(png.readUInt32BE(20)).toBe(300)
+  expect(await litFraction(page, sha)).toBeGreaterThan(0.005)
+
+  const bad = await rpc(request, 'render.face', { sceneId: 'scn_desk', surfaceId: 'srf_nope', t: 0, width: 100, height: 100 })
+  expect(bad.ok).toBe(false)
+  expect(JSON.stringify(bad.d)).toContain('srf_nope')
+})
+
+test('render.unfold renders the whole object atlas', async ({ page, request }) => {
+  await page.goto('/out?headless=1')
+  await waitForOutput(request)
+  const r = await rpc(request, 'render.unfold', { sceneId: 'scn_desk', objectId: 'obj_cube', t: 0, width: 618, height: 609 })
+  expect(r.ok, JSON.stringify(r.d)).toBe(true)
+  const png = await (await request.get(`${API}/a/${String(r.d.sha)}`)).body()
+  expect(png.readUInt32BE(16)).toBe(618)
+  expect(png.readUInt32BE(20)).toBe(609)
+})

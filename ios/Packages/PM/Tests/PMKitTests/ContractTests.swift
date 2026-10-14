@@ -48,7 +48,9 @@ import PMTestSupport
         // The drawing effect's strokes stay as JSON (array params).
         let draw = try #require(scene.objects[0].surfaces.first { $0.id == "srf_left" }?.effects.first)
         #expect(draw.effect == "drawing")
-        #expect(draw.params["strokes"]?.array?.count == 3)
+        #expect(draw.name == "sketch")
+        #expect(draw.params["strokes"]?.array?.count == 5)
+        #expect(draw.params["strokes"]?.array?[3]["tool"] == "polygon")
         #expect(draw.params["strokes"]?.array?[2]["text"] == "hello")
         #expect(draw.params["reveal"]?.double == 1)
         #expect(scene.objects.map(\.name) == ["zimacube", "desk lamp", "shelf"])

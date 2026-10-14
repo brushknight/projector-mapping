@@ -42,6 +42,9 @@ func Sniff(b []byte) string {
 			return "image/heic"
 		}
 	}
+	if IsSVG(b) {
+		return "image/svg+xml"
+	}
 	m := http.DetectContentType(b)
 	if i := bytes.IndexByte([]byte(m), ';'); i > 0 {
 		m = m[:i]
@@ -70,6 +73,9 @@ func (s *Service) Upload(ctx context.Context, data []byte, kind string) (*assets
 		return a, nil
 	}
 	a := &assets.Asset{SHA: sha, Mime: Sniff(data), Bytes: int64(len(data)), Kind: kind}
+	if a.Mime == "image/svg+xml" {
+		a.Width, a.Height = SVGSize(data)
+	}
 	// HEIC has no pure-Go decoder: it is stored as is, without size or thumbnail
 	if cfg, _, err := image.DecodeConfig(bytes.NewReader(data)); err == nil {
 		a.Width, a.Height = cfg.Width, cfg.Height

@@ -19,7 +19,7 @@ export function parseStrokes(v: unknown): Stroke[] {
     if (!raw || typeof raw !== 'object') continue
     const r = raw as Record<string, unknown>
     const tool = r.tool
-    if (tool !== 'pen' && tool !== 'line' && tool !== 'rect' && tool !== 'ellipse' && tool !== 'text') continue
+    if (tool !== 'pen' && tool !== 'line' && tool !== 'rect' && tool !== 'ellipse' && tool !== 'text' && tool !== 'polygon' && tool !== 'circle') continue
     const points = Array.isArray(r.points)
       ? (r.points as unknown[]).filter((p): p is Pt => Array.isArray(p) && p.length === 2 && Number.isFinite(p[0]) && Number.isFinite(p[1]))
       : []
@@ -37,7 +37,10 @@ export function parseStrokes(v: unknown): Stroke[] {
   return out
 }
 
-/** A stroke's path in canvas px (rect closed, ellipse as a polygon); text has no path. */
+/** Tools whose path is closed (and can be filled). */
+export const CLOSED_TOOLS = new Set<Stroke['tool']>(['rect', 'ellipse', 'polygon', 'circle'])
+
+/** A stroke's path in canvas px (rect, polygon closed, ellipse and circle as polygons); text has no path. */
 export function strokePath(s: Stroke, w: number, h: number): Pt[] {
   const p = s.points.map(([u, v]) => [u * w, v * h] as Pt)
   switch (s.tool) {
@@ -59,6 +62,21 @@ export function strokePath(s: Stroke, w: number, h: number): Pt[] {
       for (let i = 0; i <= ELLIPSE_STEPS; i++) {
         const t = (i / ELLIPSE_STEPS) * Math.PI * 2 - Math.PI / 2
         out.push([cx + rx * Math.cos(t), cy + ry * Math.sin(t)])
+      }
+      return out
+    }
+    case 'polygon': {
+      if (p.length < 2) return p
+      return [...p, p[0]]
+    }
+    case 'circle': {
+      if (p.length < 2) return []
+      const [c, rim] = p
+      const r = Math.hypot(rim[0] - c[0], rim[1] - c[1])
+      const out: Pt[] = []
+      for (let i = 0; i <= ELLIPSE_STEPS; i++) {
+        const t = (i / ELLIPSE_STEPS) * Math.PI * 2 - Math.PI / 2
+        out.push([c[0] + r * Math.cos(t), c[1] + r * Math.sin(t)])
       }
       return out
     }
@@ -149,7 +167,7 @@ export function drawStrokes(ctx: Ctx2D, strokes: Stroke[], w: number, h: number,
     }
     const path = strokePath(s, w, h)
     if (!path.length) continue
-    if (s.fill && frac >= 1 && (s.tool === 'rect' || s.tool === 'ellipse')) {
+    if (s.fill && frac >= 1 && CLOSED_TOOLS.has(s.tool)) {
       ctx.beginPath()
       path.forEach((p, j) => (j ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])))
       ctx.closePath()
@@ -167,7 +185,7 @@ export function drawStrokes(ctx: Ctx2D, strokes: Stroke[], w: number, h: number,
     }
     ctx.beginPath()
     cut.forEach((p, j) => (j ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])))
-    if (frac >= 1 && (s.tool === 'rect' || s.tool === 'ellipse')) ctx.closePath()
+    if (frac >= 1 && CLOSED_TOOLS.has(s.tool)) ctx.closePath()
     ctx.stroke()
   }
 }

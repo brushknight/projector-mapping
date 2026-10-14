@@ -6,6 +6,7 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"image"
 	"net/http"
 
@@ -18,6 +19,7 @@ import (
 	"projmap/internal/infrastructure/mcp/tools"
 	cameratools "projmap/internal/infrastructure/mcp/tools/camera"
 	catalogtools "projmap/internal/infrastructure/mcp/tools/catalog"
+	facetools "projmap/internal/infrastructure/mcp/tools/faces"
 	rendertools "projmap/internal/infrastructure/mcp/tools/render"
 	scenetools "projmap/internal/infrastructure/mcp/tools/scenes"
 	showtools "projmap/internal/infrastructure/mcp/tools/show"
@@ -69,7 +71,10 @@ func NewServer(d *tools.Deps, p tools.Principal) *gomcp.Server {
 		&gomcp.ServerOptions{
 			Instructions: "projmap drives a projector. Read with scene_get, look with output_render and camera_snapshot, write into your draft " +
 				"(surface_create, clip_add, cue_add…), check with camera_compare or alignment_error, and finish with proposal_submit. " +
-				"Coordinates are scene pixels (0,0 top left). Projector and live-show tools need the editor's agent toggles.",
+				"Coordinates are scene pixels (0,0 top left). To draw an object's real details on its faces: object_unfold_get, " +
+				"face_template_get, face_draw (points in face UV: (0,0) = the face's first point, u toward the 2nd, v toward the 4th), " +
+				"face_render to look, then proposal_submit; docs://drawing and the dress-object prompt walk through it. " +
+				"Projector, live-show and apply tools need the editor's agent toggles.",
 			InitializedHandler: func(ctx context.Context, req *gomcp.InitializedRequest) {
 				if ip := req.Session.InitializeParams(); ip != nil && ip.ClientInfo != nil {
 					sess.Client = ip.ClientInfo.Name
@@ -81,6 +86,7 @@ func NewServer(d *tools.Deps, p tools.Principal) *gomcp.Server {
 	rendertools.Register(s, env)
 	cameratools.Register(s, env)
 	showtools.Register(s, env)
+	facetools.Register(s, env)
 	registerResources(s, env)
 	registerPrompts(s)
 	return s
@@ -115,6 +121,11 @@ func registerResources(s *gomcp.Server, env *tools.Env) {
 		func(context.Context, *gomcp.ReadResourceRequest) (*gomcp.ReadResourceResult, error) {
 			return text("docs://effect-api", "text/markdown", env.D.EffectAPI), nil
 		})
+	s.AddResource(&gomcp.Resource{URI: "docs://drawing", Name: "drawing on faces", MIMEType: "text/markdown",
+		Description: "Face UV, strokes, layers and a worked example (four drive bays on a cube's right face)."},
+		func(context.Context, *gomcp.ReadResourceRequest) (*gomcp.ReadResourceResult, error) {
+			return text("docs://drawing", "text/markdown", facetools.DrawingDoc), nil
+		})
 	s.AddResource(&gomcp.Resource{URI: "docs://style-guide", Name: "house style", MIMEType: "text/plain",
 		Description: "The look projmap shows aim for."},
 		func(context.Context, *gomcp.ReadResourceRequest) (*gomcp.ReadResourceResult, error) {
@@ -123,6 +134,19 @@ func registerResources(s *gomcp.Server, env *tools.Env) {
 }
 
 func registerPrompts(s *gomcp.Server) {
+	s.AddPrompt(&gomcp.Prompt{Name: "dress-object", Title: "Dress an object as the real device",
+		Description: "Draw a real device's details (bays, vents, logo, LEDs, seams) on a mapped object's flat faces, look, compare, iterate, propose.",
+		Arguments: []*gomcp.PromptArgument{{Name: "objectId", Description: "object id or name, for example obj_cube or zimacube", Required: true},
+			{Name: "device", Description: "what the real object is, for example \"ZimaCube NAS\"", Required: true}}},
+		func(_ context.Context, req *gomcp.GetPromptRequest) (*gomcp.GetPromptResult, error) {
+			a := req.Params.Arguments
+			obj, dev := a["objectId"], a["device"]
+			if dev == "" {
+				dev = "device"
+			}
+			msg := fmt.Sprintf(facetools.Prompt, obj, dev, obj, dev)
+			return &gomcp.GetPromptResult{Description: "dress " + obj + " as " + dev, Messages: []*gomcp.PromptMessage{{Role: "user", Content: &gomcp.TextContent{Text: msg}}}}, nil
+		})
 	s.AddPrompt(&gomcp.Prompt{Name: "animate-object", Title: "Animate an object",
 		Description: "Make one mapped object come alive.",
 		Arguments: []*gomcp.PromptArgument{{Name: "object", Description: "object name or id", Required: true},

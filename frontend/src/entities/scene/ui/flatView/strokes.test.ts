@@ -62,7 +62,7 @@ describe('flat view strokes', () => {
     const sc = applyPatch(scene, drawOnClip(scene, 'srf_left', 2, 3, { track: 'trk_x', clip: 'clp_x' })!)
     const clip = sc.timeline.clips.find((c) => c.id === 'clp_x')!
     expect(clip).toMatchObject({ trackId: 'trk_x', effect: 'drawing', start: 2, end: 5 })
-    expect((clip.params.strokes as Stroke[]).length).toBe(3)
+    expect((clip.params.strokes as Stroke[]).length).toBe(5) // the fixture drawing: rect, pen, text, polygon, circle
     expect(sc.timeline.tracks.find((t) => t.id === 'trk_x')!.target).toEqual({ kind: 'surface', id: 'srf_left' })
     expect(drawingEffect(srf(sc, 'srf_left'))!.enabled).toBe(false)
     expect(drawOnClip(scene, 'srf_right', 0, 3, { track: 'a', clip: 'b' })).toBeNull()

@@ -37,6 +37,8 @@ func registerWrite(s *mcp.Server, env *tools.Env) {
 		Description: "A human-readable summary of everything your draft changes against the live scene it started from."}, draftDiff)
 	tools.Add(s, env, &mcp.Tool{Name: "proposal_submit", Title: "Submit the proposal",
 		Description: "Hands your draft to the user with a one-line summary. The editor shows apply, preview and discard. Call it when you are done."}, proposalSubmit)
+	tools.Add(s, env, &mcp.Tool{Name: "draft_apply", Title: "Apply your draft",
+		Description: "Puts your draft on the live scene (the wall shows it in objects mode). Needs the editor's \"agent may apply\" toggle (agentMayApply), which is off by default; without it, use proposal_submit and let the user apply. Your next write starts a new draft."}, draftApply)
 }
 
 // NewID is prefix_<8 hex>.
@@ -627,4 +629,32 @@ func proposalSubmit(ctx context.Context, e *tools.Env, in proposalIn) (*mcp.Call
 		e.D.Agents.Finish(ctx, a.ID, "done")
 	}
 	return tools.Text("Proposed draft %s (%d ops). The user sees it in the editor's agent panel with apply, preview and discard.", d.ID, len(d.Ops)), nil
+}
+
+type applyIn struct {
+	Summary string `json:"summary,omitempty" jsonschema:"one line for the history: what the draft does"`
+}
+
+func draftApply(ctx context.Context, e *tools.Env, in applyIn) (*mcp.CallToolResult, error) {
+	if err := e.NeedApply(ctx); err != nil {
+		return nil, err
+	}
+	id, err := e.DraftID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(in.Summary) != "" {
+		if _, err := e.D.Drafts.Propose(ctx, id, in.Summary); err != nil {
+			return nil, err
+		}
+	}
+	a, _ := e.AgentSession(ctx, false)
+	d, v, err := e.D.Drafts.Apply(ctx, id, "agent:"+e.S.AgentName())
+	if err != nil {
+		return nil, err
+	}
+	if a != nil {
+		e.D.Agents.Finish(ctx, a.ID, "done")
+	}
+	return tools.Text("Applied draft %s (%d ops): the live scene is at version %d. Your next write starts a new draft.", d.ID, len(d.Ops), v), nil
 }

@@ -18,7 +18,7 @@ import (
 // Register adds the scene tools.
 func Register(s *mcp.Server, env *tools.Env) {
 	tools.Add(s, env, &mcp.Tool{Name: "scene_get", Title: "Read the scene",
-		Description: "The scene you are working on (your draft once you have written, else the live scene): output size and orientation, every object with its surfaces and their points in scene pixels (0,0 = top left), the backdrop layers and a timeline summary. Start here."}, sceneGet)
+		Description: "The scene you are working on (your draft once you have written, else the live scene): output size and orientation, every object with its surfaces and their points in scene pixels (0,0 = top left), the backdrop layers and a timeline summary. Start here. To dress an object (draw its real details on its faces), go on with object_unfold_get, face_template_get, face_draw and face_render; docs://drawing explains face UV and strokes."}, sceneGet)
 	tools.Add(s, env, &mcp.Tool{Name: "surface_get", Title: "Read one surface",
 		Description: "One surface in detail: points, edges with lengths, area, centroid, which points it shares with other surfaces and which faces touch it, its parent and details."}, surfaceGet)
 	tools.Add(s, env, &mcp.Tool{Name: "timeline_get", Title: "Read the timeline",

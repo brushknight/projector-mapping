@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useCatalog } from '../../entities/catalog'
 import type { EffectDef } from '../../entities/effect'
 import { effectApi } from '../../entities/effect'
-import { FrameMeter, renderFrameRpc, type RenderFrameArgs } from '../../entities/output'
+import { FrameMeter, handleRenderRpcs } from '../../entities/output'
 import { PairingScreen } from '../../entities/pairing'
 import { activeSolo, ambientClock, playheadNow, useBlackout, useLiveDocs, type Show } from '../../entities/show'
 import { activeTestPattern } from '../../entities/setup'
@@ -118,7 +118,7 @@ export function OutPage() {
         await afterFrames(1)
         return { presented: true }
       }),
-      hub.handleRpc('render.frame', (args) => renderFrameRpc(args as unknown as RenderFrameArgs, ambientClock(hub))),
+      handleRenderRpcs(hub, () => ambientClock(hub)),
     ]
     return () => offs.forEach((f) => f())
   }, [hub])

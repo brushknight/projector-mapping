@@ -14,6 +14,23 @@ function mergeEvents(a: AgentEvent[], b: AgentEvent[]): AgentEvent[] {
   return [...m.values()].sort((x, y) => x.seq - y.seq)
 }
 
+/** The prompt as the chat shows it: sessions an MCP client started on its own have no prompt of their own. */
+export function promptLabel(x: Pick<AgentSession, 'agent' | 'prompt'>): string {
+  return !x.prompt || x.prompt === '(connected over MCP)' ? `${x.agent} over MCP` : x.prompt
+}
+
+/**
+ * Which session the panel shows after a list reload: the one the user picked, else the newest. A session that started
+ * after the shown one (for example Claude Code connecting over MCP) takes over unless the user picked one by hand.
+ */
+export function pickSession(list: AgentSession[], current: string | null, pinned: boolean): string | null {
+  if (!list.length) return null
+  if (current && pinned && list.some((x) => x.id === current)) return current
+  return list[0].id
+}
+
+const POLL_MS = 3000
+
 const fmtMs = (ms?: number | null) => (ms == null ? '' : ms < 1000 ? `${(ms / 1000).toFixed(1)}s` : `${(ms / 1000).toFixed(1)}s`)
 
 /**
@@ -25,6 +42,10 @@ export function AgentPanel({ hub, sceneId, onError, onNotice, previewDraftId, on
   const [agent, setAgent] = useState<AgentKind>('codex')
   const [sessions, setSessions] = useState<AgentSession[]>([])
   const [currentId, setCurrentId] = useState<string | null>(null)
+  /** true once the user picked a session in the menu; then new sessions do not take over */
+  const pinned = useRef(false)
+  /** drafts applied from this panel (the rest were applied by the agent, with "agent may apply") */
+  const appliedHere = useRef(new Set<string>())
   const [events, setEvents] = useState<AgentEvent[]>([])
   const [settings, setSettings] = useState<AgentSettings | null>(null)
   const logRef = useRef<HTMLDivElement>(null)
@@ -34,15 +55,19 @@ export function AgentPanel({ hub, sceneId, onError, onNotice, previewDraftId, on
       (list) => {
         const mine = list.filter((x) => !sceneId || x.sceneId === sceneId).sort((a, b) => b.createdAt.localeCompare(a.createdAt))
         setSessions(mine)
-        setCurrentId((cur) => cur ?? mine[0]?.id ?? null)
+        setCurrentId((cur) => pickSession(mine, cur, pinned.current))
       },
       () => {},
     )
 
   useEffect(() => {
     setCurrentId(null)
+    pinned.current = false
     setEvents([])
     void reload()
+    // sessions an MCP client starts outside the editor (Claude Code, Codex) appear on their own
+    const id = setInterval(() => void reload(), POLL_MS)
+    return () => clearInterval(id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sceneId])
 
@@ -79,7 +104,7 @@ export function AgentPanel({ hub, sceneId, onError, onNotice, previewDraftId, on
   const draft = useChannel<Draft>(hub, session?.draftId ? `draft:${session.draftId}` : null).doc
   // the session status also changes when its draft becomes a proposal
   useEffect(() => {
-    if (draft?.status === 'proposed' && session?.status === 'running') void reload()
+    if (draft?.status) void reload()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draft?.status])
 
@@ -93,6 +118,7 @@ export function AgentPanel({ hub, sceneId, onError, onNotice, previewDraftId, on
       const ss = await agentApi.start(agent, prompt, sceneId)
       setSessions((xs) => [ss, ...xs.filter((x) => x.id !== ss.id)])
       setCurrentId(ss.id)
+      pinned.current = false
       setEvents([])
     } catch (e) {
       onError(e instanceof Error ? e.message : String(e))
@@ -112,6 +138,7 @@ export function AgentPanel({ hub, sceneId, onError, onNotice, previewDraftId, on
   const lastTool = useMemo(() => [...events].reverse().find((e) => e.kind === 'tool'), [events])
   const running = session?.status === 'running'
   const proposal = draft && draft.status === 'proposed' ? draft : null
+  const applied = draft && draft.status === 'applied' ? draft : null
 
   return (
     <div className={s.panel} data-testid="agent-panel">
@@ -137,13 +164,13 @@ export function AgentPanel({ hub, sceneId, onError, onNotice, previewDraftId, on
                 {sessions.length} sessions
               </Pill>
             )}
-            items={sessions.map((x) => ({ key: x.id, label: x.prompt || x.id, meta: `${x.agent} · ${x.status}`, on: x.id === currentId, onSelect: () => setCurrentId(x.id) }))}
+            items={sessions.map((x) => ({ key: x.id, label: promptLabel(x), meta: `${x.agent} · ${x.status}`, on: x.id === currentId, onSelect: () => { pinned.current = true; setCurrentId(x.id) } }))}
           />
         </div>
       )}
       <div className={s.log} ref={logRef}>
         {!session && <EmptyState>ask {agent} to map, animate or tidy this scene. it works in a draft; you keep or discard what it proposes.</EmptyState>}
-        {session && <ChatMessage me>{session.prompt}</ChatMessage>}
+        {session && <ChatMessage me>{promptLabel(session)}</ChatMessage>}
         {session && (
           <Log>
             {events
@@ -173,7 +200,7 @@ export function AgentPanel({ hub, sceneId, onError, onNotice, previewDraftId, on
             <Cap bright>proposal</Cap>
             <span>{proposal.summary || `${proposal.ops.length} changes`}</span>
             <Row>
-              <Pill size="sm" on onClick={() => draftApi.apply(proposal.id).then(() => { onPreviewDraft(null); onNotice('Applied the proposal.') }, (e) => onError(String(e.message ?? e)))}>
+              <Pill size="sm" on onClick={() => (appliedHere.current.add(proposal.id), draftApi.apply(proposal.id)).then(() => { onPreviewDraft(null); onNotice('Applied the proposal.') }, (e) => onError(String(e.message ?? e)))}>
                 apply
               </Pill>
               <Pill size="sm" on={previewDraftId === proposal.id} onClick={() => onPreviewDraft(previewDraftId === proposal.id ? null : proposal.id)}>
@@ -184,6 +211,12 @@ export function AgentPanel({ hub, sceneId, onError, onNotice, previewDraftId, on
               </Pill>
             </Row>
           </div>
+        )}
+        {applied && (
+          <span className={s.status} data-testid="applied">
+            {appliedHere.current.has(applied.id) ? 'applied' : `applied by ${session?.agent ?? 'the agent'}`}
+            {applied.summary ? `: ${applied.summary}` : ''}
+          </span>
         )}
         {running && (
           <Pill size="sm" ghost icon="stop" iconSize={12} onClick={() => session && agentApi.cancel(session.id).then(reload, (e) => onError(String(e.message ?? e)))}>
@@ -202,6 +235,12 @@ export function AgentPanel({ hub, sceneId, onError, onNotice, previewDraftId, on
               <span>let {agent} go live</span>
               <Switch checked={settings.agentMayGoLive} onChange={(v) => setPerm({ agentMayGoLive: v })} ariaLabel="allow going live" />
             </Row>
+            {settings.agentMayApply !== undefined && (
+              <Row>
+                <span>let {agent} apply its drafts</span>
+                <Switch checked={!!settings.agentMayApply} onChange={(v) => setPerm({ agentMayApply: v })} ariaLabel="allow applying drafts" />
+              </Row>
+            )}
           </>
         )}
         <AskBox placeholder={`ask ${agent}…`} onSend={start} disabled={!sceneId} />

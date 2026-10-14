@@ -194,7 +194,9 @@ type Mesh struct {
 
 // SurfaceEffect is always-on content.
 type SurfaceEffect struct {
-	ID      string         `json:"id"`
+	ID string `json:"id"`
+	// Name labels the instance (optional): agents name their drawing layers ("bays", "logo") so several coexist.
+	Name    string         `json:"name,omitempty"`
 	Effect  string         `json:"effect"`
 	Enabled bool           `json:"enabled"`
 	Params  map[string]any `json:"params"`

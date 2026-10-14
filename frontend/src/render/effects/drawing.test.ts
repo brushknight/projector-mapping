@@ -19,6 +19,19 @@ describe('drawing effect math', () => {
     expect(pathLength(e)).toBeCloseTo(Math.PI * 100, 0)
   })
 
+  it('closes a polygon and draws a circle with its radius in surface px', () => {
+    const pg = strokePath({ tool: 'polygon', points: [[0, 0], [1, 0], [0, 1]], color: ink, width: 1 }, 10, 10)
+    expect(pg).toHaveLength(4)
+    expect(pg[3]).toEqual(pg[0])
+    expect(pathLength(pg)).toBeCloseTo(20 + Math.SQRT2 * 10)
+    // centre (0.5, 0.5), rim 0.1 to the right on a 200 x 100 face: radius 20 px, a true circle
+    const c = strokePath({ tool: 'circle', points: [[0.5, 0.5], [0.6, 0.5]], color: ink, width: 1 }, 200, 100)
+    expect(pathLength(c)).toBeCloseTo(2 * Math.PI * 20, 0)
+    const ys = c.map((q) => q[1])
+    expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(40, 0)
+    expect(parseStrokes([{ tool: 'polygon', points: [[0, 0], [1, 0], [1, 1]], color: '#ff0000', width: 2, fill: true }, { tool: 'circle', points: [[0.5, 0.5], [0.6, 0.5]], color: '#00ff00', width: 0, fill: true }]).map((x) => x.tool)).toEqual(['polygon', 'circle'])
+  })
+
   it('cuts a path at a length', () => {
     const p: Array<[number, number]> = [[0, 0], [10, 0], [10, 10]]
     expect(cutPath(p, 5)).toEqual([[0, 0], [5, 0]])

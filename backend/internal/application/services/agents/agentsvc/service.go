@@ -297,7 +297,7 @@ func (s *Service) UpdateSettings(ctx context.Context, partial json.RawMessage) (
 	}
 	var next agents.Settings
 	if err := json.Unmarshal(merged, &next); err != nil {
-		return cur, app_errors.BadRequest("agentMayPreview and agentMayGoLive must be true or false.")
+		return cur, app_errors.BadRequest("agentMayPreview, agentMayGoLive and agentMayApply must be true or false.")
 	}
 	out, _ := json.Marshal(next)
 	if err := s.kv.Put(ctx, settingsKey, out); err != nil {

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { mockLog, mockState, resetMock } from './lib'
+import { API, mockLog, mockState, resetMock } from './lib'
 
 test.beforeEach(async ({ request }) => resetMock(request))
 
@@ -80,4 +80,25 @@ test('the agent panel starts a session and shows its proposal', async ({ page })
 test('the style guide renders every shared component', async ({ page }) => {
   await page.goto('/components')
   for (const n of ['Pill', 'Segmented', 'Tools', 'FillSlider', 'Switch', 'TreeNode', 'LibTile', 'QrCode', 'StepBar', 'Icon']) await expect(page.locator(`[id="${n}"]`)).toBeVisible()
+})
+
+test('a session an MCP client starts outside the editor shows up with its proposal', async ({ page, request }) => {
+  await page.goto('/editor')
+  await page.getByRole('button', { name: 'agent', exact: true }).click()
+  await expect(page.getByTestId('agent-panel')).toBeVisible()
+  await request.post(`${API}/__mock/attach`, { data: { agent: 'claude' } })
+  await expect(page.getByTestId('agent-panel')).toContainText('claude over MCP', { timeout: 10_000 })
+  await expect(page.getByTestId('proposal')).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByRole('switch', { name: 'allow applying drafts' })).toBeVisible()
+})
+
+test('the editor answers render.face for agents', async ({ page, request }) => {
+  await page.goto('/editor')
+  let r: { ok: boolean; d: Record<string, unknown> } = { ok: false, d: {} }
+  for (let i = 0; i < 50 && !r.ok; i++) {
+    r = await (await request.post(`${API}/__mock/rpc`, { data: { method: 'render.face', args: { sceneId: 'scn_desk', surfaceId: 'srf_right', t: 0, width: 200, height: 194 }, role: 'editor', timeoutMs: 8000 } })).json()
+    if (!r.ok) await page.waitForTimeout(200)
+  }
+  expect(r.ok, JSON.stringify(r.d)).toBe(true)
+  expect(r.d).toMatchObject({ width: 200, height: 194 })
 })
