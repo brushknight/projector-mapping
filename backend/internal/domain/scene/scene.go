@@ -2,7 +2,10 @@
 // validation, drafts, history entries and presets.
 package scene
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"fmt"
+)
 
 // Scene is everything the wall shows.
 type Scene struct {
@@ -301,8 +304,72 @@ type Clip struct {
 	FadeIn  float64        `json:"fadeIn"`
 	FadeOut float64        `json:"fadeOut"`
 	Params  map[string]any `json:"params"`
-	// Hold keeps the clip's end state after its end (protocol §20); nil takes the effect's default (Holds).
-	Hold *bool `json:"hold,omitempty"`
+	// Hold keeps the clip's end state after its end (protocol §20, §21): "step" to the end of its step (the next cue),
+	// "forever" past cues, off (false on the wire) not at all; true reads as "step". nil takes the effect's default.
+	Hold *Hold `json:"hold,omitempty"`
+}
+
+// Hold is how a clip keeps its end state (protocol §21).
+type Hold string
+
+// Hold values. HoldOff is false on the wire.
+const (
+	HoldOff     Hold = "off"
+	HoldStep    Hold = "step"
+	HoldForever Hold = "forever"
+)
+
+// MarshalJSON writes off as false and the others as strings.
+func (h Hold) MarshalJSON() ([]byte, error) {
+	if h == HoldOff {
+		return []byte("false"), nil
+	}
+	return json.Marshal(string(h))
+}
+
+// UnmarshalJSON reads true ("step", documents before §21), false (off) or a string (checked by Validate).
+func (h *Hold) UnmarshalJSON(b []byte) error {
+	var v any
+	if err := json.Unmarshal(b, &v); err != nil {
+		return err
+	}
+	switch x := v.(type) {
+	case bool:
+		if x {
+			*h = HoldStep
+		} else {
+			*h = HoldOff
+		}
+	case string:
+		if x == "false" {
+			x = string(HoldOff)
+		}
+		*h = Hold(x)
+	default:
+		return fmt.Errorf("hold must be false, \"step\" or \"forever\"")
+	}
+	return nil
+}
+
+// ParseHold reads a hold from a decoded JSON value (MCP args): true, false, "step", "forever"; ok false otherwise.
+func ParseHold(v any) (Hold, bool) {
+	switch x := v.(type) {
+	case bool:
+		if x {
+			return HoldStep, true
+		}
+		return HoldOff, true
+	case string:
+		switch Hold(x) {
+		case HoldStep, HoldForever, HoldOff:
+			return Hold(x), true
+		case "false":
+			return HoldOff, true
+		case "true":
+			return HoldStep, true
+		}
+	}
+	return "", false
 }
 
 // Cue is a GO stop.

@@ -13,7 +13,7 @@ import (
 func TestCatalog(t *testing.T) {
 	h := apitest.New(t)
 	m := h.Do("GET", "/api/v1/catalog", nil).Map(t)
-	if m["version"] != float64(8) || len(m["gobos"].([]any)) < 45 || len(m["effects"].([]any)) != 12 {
+	if m["version"] != float64(9) || len(m["gobos"].([]any)) < 45 || len(m["effects"].([]any)) != 14 {
 		t.Fatalf("catalog %v", m["version"])
 	}
 	r := h.Do("GET", "/catalog/assets/scenery/flowers.jpg", nil)
@@ -68,7 +68,7 @@ func TestPlateMasks(t *testing.T) {
 
 func TestEffects(t *testing.T) {
 	h := apitest.New(t)
-	if n := len(h.Do("GET", "/api/v1/effects", nil).List(t)); n != 12 {
+	if n := len(h.Do("GET", "/api/v1/effects", nil).List(t)); n != 14 {
 		t.Fatalf("%d effects", n)
 	}
 	src := "vec4 effect(vec2 uv, float t, float progress) { return vec4(vec3(step(uv.y, progress)), 1.0); }"
@@ -81,7 +81,7 @@ func TestEffects(t *testing.T) {
 		t.Fatalf("effect %v", e)
 	}
 	apitest.Expect(t, h.Do("GET", "/api/v1/effects/"+id, nil), http.StatusOK)
-	if n := len(h.Do("GET", "/api/v1/effects", nil).List(t)); n != 13 {
+	if n := len(h.Do("GET", "/api/v1/effects", nil).List(t)); n != 15 {
 		t.Fatalf("%d effects after create", n)
 	}
 	u := h.Do("PUT", "/api/v1/effects/"+id, map[string]any{"source": "vec4 effect(vec2 uv, float t, float p) { return vec4(1.0); }"}).Map(t)

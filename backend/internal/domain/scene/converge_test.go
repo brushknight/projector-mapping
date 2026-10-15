@@ -26,9 +26,9 @@ func TestStateAtHolds(t *testing.T) {
 		Clips: []Clip{
 			{ID: "cv", TrackID: "trk", Effect: EffectConverge, Start: 0, End: 2},
 			{ID: "trace", TrackID: "trk", Effect: "trace", Start: 2, End: 4},
-			{ID: "fill", TrackID: "trk", Effect: "fill", Start: 4, End: 6, Hold: ptr(true)},
+			{ID: "fill", TrackID: "trk", Effect: "fill", Start: 4, End: 6, Hold: ptr(HoldStep)},
 			{ID: "fill2", TrackID: "trk", Effect: "fill", Start: 8, End: 9},
-			{ID: "cv2", TrackID: "trk", Effect: EffectConverge, Start: 12, End: 13, Hold: ptr(false)},
+			{ID: "cv2", TrackID: "trk", Effect: EffectConverge, Start: 12, End: 13, Hold: ptr(HoldOff)},
 			{ID: "glitch", TrackID: "trk2", Effect: "glitch", Start: 1, End: 3},
 		}}
 	s := states(tl, 1)
@@ -74,7 +74,7 @@ func TestStateAtHolds(t *testing.T) {
 			t.Fatalf("state at %v changed: %s vs %s", at, a, b)
 		}
 	}
-	if !(Clip{Effect: "reveal"}).Holds() || !(Clip{Effect: "sweep"}).Holds() || (Clip{Effect: "trace"}).Holds() || (Clip{Effect: EffectConverge, Hold: ptr(false)}).Holds() {
+	if !(Clip{Effect: "reveal"}).Holds() || !(Clip{Effect: "sweep"}).Holds() || (Clip{Effect: "trace"}).Holds() || (Clip{Effect: EffectConverge, Hold: ptr(HoldOff)}).Holds() {
 		t.Fatal("hold defaults")
 	}
 }

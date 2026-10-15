@@ -471,27 +471,38 @@ public struct Clip: Codable, Sendable, Hashable, Identifiable {
     public var fadeIn: Double
     public var fadeOut: Double
     public var params: JSONObject
-    /// (§20) keeps the end state after `end`; nil = the effect's default (`holds`).
-    public var hold: Bool?
+    /// (§20, §21) keeps the end state after `end`: `.step` to the next cue, `.forever` past cues, `.off` not at all;
+    /// nil = the effect's default (`holdMode`).
+    public var hold: ClipHold?
 
-    public init(id: String, trackId: String, effect: String, start: Double, end: Double, fadeIn: Double = 0, fadeOut: Double = 0, params: JSONObject = [:], hold: Bool? = nil) {
+    public init(id: String, trackId: String, effect: String, start: Double, end: Double, fadeIn: Double = 0, fadeOut: Double = 0, params: JSONObject = [:], hold: ClipHold? = nil) {
         self.id = id; self.trackId = trackId; self.effect = effect; self.start = start; self.end = end
         self.fadeIn = fadeIn; self.fadeOut = fadeOut; self.params = params; self.hold = hold
     }
 
-    /// (§20) the effects whose clips hold their end state when `hold` is absent.
-    public static let holdByDefault: Set<String> = ["converge", "reveal", "sweep", "motion"]
-    /// (§20) whether the clip keeps its end state after its end, until the next clip of its effect on its track.
-    public var holds: Bool { hold ?? Self.holdByDefault.contains(effect) }
+    /// (§20, §21) the effects whose clips hold their end state (to the end of their step) when `hold` is absent.
+    public static let holdByDefault: Set<String> = ["converge", "morph", "shape", "reveal", "sweep", "motion"]
+    /// (§21) how the clip keeps its end state: its own `hold`, else `.step` for the effects above, `.off` otherwise.
+    public var holdMode: ClipHold { hold ?? (Self.holdByDefault.contains(effect) ? .step : .off) }
+    /// (§20) whether the clip keeps its end state after its end at all.
+    public var holds: Bool { holdMode != .off }
     /// (§20) the converge clip: a backdrop mode's light closing onto the target's silhouette.
     public var isConverge: Bool { effect == "converge" }
+    /// (§21) the morph and shape clips: a shape turning into another, a held shape.
+    public var isMorph: Bool { effect == "morph" || effect == "shape" }
 
-    /// (§20) Whether the clip is in effect at `t`: playing, or held after its end until the next clip of its effect
-    /// on its track starts. `track` is every clip of its track.
-    public func inEffect(at t: Double, track: [Clip]) -> Bool {
+    /// (§20, §21) Whether the clip is in effect at `t`: playing, or held after its end until the next clip of its
+    /// effect on its track starts and, with a step hold, no later than the first cue after its start (`cues` are the
+    /// timeline's cue times). `track` is every clip of its track.
+    public func inEffect(at t: Double, track: [Clip], cues: [Double] = []) -> Bool {
         if t < start { return false }
         if t < end { return true }
-        guard holds else { return false }
+        switch holdMode {
+        case .off: return false
+        case .step:
+            if let stepEnd = cues.filter({ $0 > start + 1e-6 }).min(), t > stepEnd + 1e-6 { return false }
+        case .forever: break
+        }
         let i = track.firstIndex(of: self) ?? -1
         return !track.enumerated().contains { k, d in
             d != self && d.effect == effect && d.start <= t && (d.start > start || (d.start == start && k > i))
@@ -512,6 +523,25 @@ public struct Clip: Codable, Sendable, Hashable, Identifiable {
         fadeOut = c.v(.fadeOut, 0)
         params = c.v(.params, [:])
         hold = c.opt(.hold)
+    }
+}
+
+/// (§21) A clip's hold: false (off), "step" or "forever" on the wire; true (documents before §21) reads as step.
+public enum ClipHold: String, Codable, Sendable, Hashable, ExpressibleByBooleanLiteral {
+    case off, step, forever
+
+    public init(booleanLiteral value: Bool) { self = value ? .step : .off }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.singleValueContainer()
+        if let b = try? c.decode(Bool.self) { self = b ? .step : .off; return }
+        let s = try c.decode(String.self)
+        self = ClipHold(rawValue: s) ?? (s == "false" ? .off : .step)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.singleValueContainer()
+        if self == .off { try c.encode(false) } else { try c.encode(rawValue) }
     }
 }
 

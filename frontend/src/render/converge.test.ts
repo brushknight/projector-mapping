@@ -137,19 +137,24 @@ describe('converge shapes', () => {
 })
 
 describe('converge clips', () => {
-  it('play, then hold at the silhouette until the next converge on the track', () => {
+  it('play, then hold at the silhouette to the end of the step (§21), or until the next converge with forever', () => {
     const at = (t: number) => evaluateConverge(fixture, t)
     expect(at(0)).toHaveLength(1)
     expect(at(0)[0].progress).toBe(0)
     expect(at(1)[0].e).toBeCloseTo(0.5)
-    const held = at(10)
+    expect(at(3)[0]).toMatchObject({ progress: 1, held: true })
+    // the step ends at the cue at 4: held while the transport waits there, gone after GO
+    expect(at(4)).toHaveLength(1)
+    expect(at(4.01)).toEqual([])
+    const fixtureForever = { ...fixture, timeline: { ...fixture.timeline, clips: fixture.timeline.clips.map((c) => (c.id === 'clp_converge' ? { ...c, hold: 'forever' as const } : c)) } } as Scene
+    const held = evaluateConverge(fixtureForever, 10)
     expect(held).toHaveLength(1)
     expect(held[0]).toMatchObject({ progress: 1, e: 1, held: true, alpha: 1 })
     expect(held[0].params).toEqual({ from: 'current', source: 'static', ease: 'inOut', edge: 6, outline: true })
-    expect(evaluateConverge(fixture, 10, new Set(['trk_converge']))).toEqual([])
+    expect(evaluateConverge(fixtureForever, 10, new Set(['trk_converge']))).toEqual([])
     // a second converge on the track takes over; with hold false it lets go at its end
     const second: Clip = { ...fixture.timeline.clips.find((c) => c.id === 'clp_converge')!, id: 'clp_c2', start: 12, end: 13, hold: false }
-    const sc = { ...fixture, timeline: { ...fixture.timeline, clips: [...fixture.timeline.clips, second] } } as Scene
+    const sc = { ...fixtureForever, timeline: { ...fixtureForever.timeline, clips: [...fixtureForever.timeline.clips, second] } } as Scene
     expect(evaluateConverge(sc, 11).map((s) => s.clip.id)).toEqual(['clp_converge'])
     expect(evaluateConverge(sc, 12.5).map((s) => s.clip.id)).toEqual(['clp_c2'])
     expect(evaluateConverge(sc, 14)).toEqual([])

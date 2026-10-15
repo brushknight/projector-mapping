@@ -72,7 +72,7 @@ export const trackShape = obj({
   id: str, name: str,
   target: oneOf(obj({ kind: lit('surface', 'object', 'layer'), id: str }), obj({ kind: lit('all', 'sound'), id: lit(null) })),
 })
-export const clipShape = obj({ id: str, trackId: str, effect: str, start: num, end: num, fadeIn: num, fadeOut: num, params: record(any), hold: optional(bool) })
+export const clipShape = obj({ id: str, trackId: str, effect: str, start: num, end: num, fadeIn: num, fadeOut: num, params: record(any), hold: optional(oneOf(bool, lit('step', 'forever'))) })
 export const cueShape = obj({ id: str, at: num, label: str, autoFollow: bool, sound: optional(obj({ sound: str, volume: num })) })
 export const padShape = obj({
   id: str, name: str, sound: str, volume: num, color: lit('ink', 'red', 'amber', 'green', 'teal', 'blue', 'violet', 'pink'),

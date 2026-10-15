@@ -282,12 +282,14 @@ func (s *Scene) Validate(refs Refs) error {
 	t := &s.Timeline
 	c.rng("timeline.duration", t.Duration, 0.1, 24*3600)
 	tracks := map[string]bool{}
+	trackKinds := map[string]string{}
 	layerTracks := map[string]bool{}
 	motionTracks := map[string]bool{}
 	soundTracks := map[string]bool{}
 	for _, tr := range t.Tracks {
 		uniq("track", tr.ID)
 		tracks[tr.ID] = true
+		trackKinds[tr.ID] = tr.Target.Kind
 		w := "track " + tr.ID
 		if !targetKinds[tr.Target.Kind] {
 			c.fail("%s: target kind %q is not one of surface, object, all, layer, sound", w, tr.Target.Kind)
@@ -326,6 +328,10 @@ func (s *Scene) Validate(refs Refs) error {
 	for _, cl := range t.Clips {
 		uniq("clip", cl.ID)
 		w := "clip " + cl.ID
+		// (§21) hold: false, "step" or "forever" (true reads as "step")
+		if cl.Hold != nil && *cl.Hold != HoldOff && *cl.Hold != HoldStep && *cl.Hold != HoldForever {
+			c.fail("%s: hold must be false, \"step\" or \"forever\", not %q", w, string(*cl.Hold))
+		}
 		if !tracks[cl.TrackID] {
 			c.fail("%s: track %s does not exist", w, cl.TrackID)
 		}
@@ -356,6 +362,11 @@ func (s *Scene) Validate(refs Refs) error {
 			c.fail("%s: effect %q does not exist", w, cl.Effect)
 		} else if err := catalog.CheckParams(schema, cl.Params, w+" params"); err != nil {
 			c.fail("%v", err)
+		}
+		if cl.Effect == EffectMorph || cl.Effect == EffectShape {
+			if err := checkMorph(cl, trackKinds[cl.TrackID]); err != nil {
+				c.fail("%v", err)
+			}
 		}
 	}
 	for _, cu := range t.Cues {

@@ -32,6 +32,15 @@ export const BUILTINS: Record<string, Builtin> = {
     scene: true,
     source: `vec4 effect(vec2 uv, float t, float progress) { return vec4(0.0); }`,
   },
+  // (§21) a shape morphing into another, and a held shape; render/morph.ts draws them
+  morph: {
+    scene: true,
+    source: `vec4 effect(vec2 uv, float t, float progress) { return vec4(0.0); }`,
+  },
+  shape: {
+    scene: true,
+    source: `vec4 effect(vec2 uv, float t, float progress) { return vec4(0.0); }`,
+  },
   'grid-build': {
     source: `${PX}
 vec4 effect(vec2 uv, float t, float progress) {

@@ -43,7 +43,9 @@ import { BACKDROP_MODES, type BackdropMode, type BlendMode, type Clip, type Conv
 import { ContentLayerInspector, LayerList } from './content'
 import { CueInspector, SoundClipInspector, VideoLayerNote } from './sound'
 import { locateContentLayer } from '../../ops'
-import { clipHolds, LAYER_CLIP_DEFAULTS, SCENE_EFFECTS } from '../../../../render/timeline'
+import { clipHoldMode, clipHolds, LAYER_CLIP_DEFAULTS, SCENE_EFFECTS, type HoldMode } from '../../../../render/timeline'
+import { MORPH_KINDS, morphParams, shapeName, type MorphKind, type MorphShapeSpec } from '../../../../render/morph'
+import { PLATES, plateSvg } from '../../../../render/plates'
 import { convergeParams } from '../../../../render/converge'
 import { resolveAtlas } from '../../../../render'
 import s from './styles.module.css'
@@ -597,7 +599,7 @@ function ClipInspector({ scene, clipId }: { scene: Scene; clipId: string }) {
         </div>
         <Row>
           <span>effect</span>
-          <AddEffectMenu timeline label={def?.name ?? clip.effect} onPick={(d) => ed.editing.setValues([[cp('effect'), d.id], [cp('params'), d.id === 'converge' ? { source: convergeSource(scene) } : {}]], 'final')} />
+          <AddEffectMenu timeline label={def?.name ?? clip.effect} onPick={(d) => ed.editing.setValues([[cp('effect'), d.id], [cp('params'), d.id === 'converge' ? { source: convergeSource(scene) } : d.id === 'morph' ? { from: 'object', to: 'circle' } : d.id === 'shape' ? { shape: 'circle' } : {}]], 'final')} />
         </Row>
         <HoldRow clip={clip} path={cp('hold')} />
       </Section>
@@ -605,6 +607,8 @@ function ClipInspector({ scene, clipId }: { scene: Scene; clipId: string }) {
         <Cap>look</Cap>
         {clip.effect === 'converge' && def ? (
           <ConvergeLook scene={scene} clip={clip} def={def} path={(k) => cp('params', k)} />
+        ) : (clip.effect === 'morph' || clip.effect === 'shape') && def ? (
+          <MorphLook scene={scene} clip={clip} def={def} path={(k) => cp('params', k)} />
         ) : def ? (
           <ParamControls schema={def.params} values={resolveParams(def.params, clip.params as Record<string, unknown>)} onChange={(k, v, ph) => ed.editing.setValue(cp('params', k), v, ph)} />
         ) : (
@@ -615,14 +619,134 @@ function ClipInspector({ scene, clipId }: { scene: Scene; clipId: string }) {
   )
 }
 
-/** (§20) every clip may keep its end state after its end. */
+/** (§20, §21) every clip may keep its end state after its end: off, to the end of its step (the next cue), or for ever. */
 function HoldRow({ clip, path }: { clip: Clip; path: string }) {
   const ed = useEditor()
+  const mode = clipHoldMode(clip)
   return (
-    <Row>
-      <span title={`keeps the end of the clip on the wall until the next ${clip.effect} clip on this track starts`}>hold the end</span>
-      <Switch checked={clipHolds(clip)} onChange={(v) => ed.editing.setValue(path, v, 'final')} ariaLabel="hold the end" />
-    </Row>
+    <>
+      <Row>
+        <span title={`keeps the end of the clip on the wall: to the next cue (step), or until the next ${clip.effect} clip on this track starts (forever)`}>hold the end</span>
+        <Segmented<HoldMode>
+          ariaLabel="hold the end"
+          size="sm"
+          value={mode}
+          onChange={(v) => ed.editing.setValue(path, v === 'off' ? false : v, 'final')}
+          options={[
+            { value: 'off', label: 'off' },
+            { value: 'step', label: 'step' },
+            { value: 'forever', label: 'forever' },
+          ]}
+        />
+      </Row>
+      {mode === 'step' && <span className={s.dim}>holds to the next cue; the next step draws from scratch.</span>}
+    </>
+  )
+}
+
+const MORPH_KIND_LABEL: Record<MorphKind, string> = { object: 'object', circle: 'circle', frame: 'frame', rect: 'rect', plate: 'plate' }
+
+/** (§21) one end of a morph: the shape, and its size (0 = from the object). */
+function ShapePick({ label, value, prefix, path }: { label: string; value: MorphShapeSpec; prefix: '' | 'from' | 'to'; path: (k: string) => string }) {
+  const ed = useEditor()
+  const key = (k: string) => (prefix ? prefix + k[0].toUpperCase() + k.slice(1) : k)
+  const nameKey = prefix || 'shape'
+  const plate = PLATES.find((p) => p.id === value.plate)
+  const set = (k: string, v: number) => ed.editing.setValue(path(key(k)), v, 'final')
+  return (
+    <>
+      <span className={s.dim}>{label}</span>
+      <Segmented<MorphKind>
+        ariaLabel={label}
+        size="sm"
+        value={value.kind}
+        onChange={(v) => ed.editing.setValue(path(nameKey), v === 'plate' ? shapeName({ kind: 'plate', plate: value.plate ?? PLATES[0]?.id }) : v, 'final')}
+        options={MORPH_KINDS.map((k) => ({ value: k, label: MORPH_KIND_LABEL[k] }))}
+      />
+      {value.kind === 'plate' && (
+        <Menu
+          width={320}
+          trigger={({ toggle }) => (
+            <Pill size="sm" icon="chevronDown" onClick={toggle} aria-label={`${label} plate`}>
+              {plate?.name ?? 'pick a plate'}
+            </Pill>
+          )}
+        >
+          {(close) => (
+            <div className={s.plateGrid} role="listbox" aria-label="plates">
+              {PLATES.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  role="option"
+                  aria-selected={p.id === value.plate}
+                  title={p.name}
+                  className={s.plateTile}
+                  onClick={() => {
+                    ed.editing.setValue(path(nameKey), `plate:${p.id}`, 'final')
+                    close()
+                  }}
+                >
+                  <img alt={p.name} src={`data:image/svg+xml;utf8,${encodeURIComponent(plateSvg(p))}`} />
+                </button>
+              ))}
+            </div>
+          )}
+        </Menu>
+      )}
+      {value.kind === 'circle' && (
+        <div className={s.two}>
+          <NumField prefix="radius" ariaLabel={`${label} radius`} value={value.r ?? 0} digits={0} step={10} min={0} suffix="px" onCommit={(v) => set('r', v)} />
+        </div>
+      )}
+      {value.kind === 'rect' && (
+        <div className={s.two}>
+          <NumField prefix="width" ariaLabel={`${label} width`} value={value.w ?? 0} digits={0} step={10} min={0} suffix="px" onCommit={(v) => set('w', v)} />
+          <NumField prefix="height" ariaLabel={`${label} height`} value={value.h ?? 0} digits={0} step={10} min={0} suffix="px" onCommit={(v) => set('h', v)} />
+        </div>
+      )}
+      {value.kind === 'plate' && (
+        <div className={s.two}>
+          <NumField prefix="size" ariaLabel={`${label} plate size`} value={value.size ?? 0} digits={0} step={10} min={0} suffix="px" onCommit={(v) => set('size', v)} />
+        </div>
+      )}
+      {(value.kind === 'circle' || value.kind === 'rect' || value.kind === 'plate') && (
+        <div className={s.two}>
+          <NumField prefix="x" ariaLabel={`${label} centre x`} value={value.cx ?? -1} digits={0} step={10} min={-1} suffix="px" onCommit={(v) => set('cx', v)} />
+          <NumField prefix="y" ariaLabel={`${label} centre y`} value={value.cy ?? -1} digits={0} step={10} min={-1} suffix="px" onCommit={(v) => set('cy', v)} />
+        </div>
+      )}
+    </>
+  )
+}
+
+/** (§21) the morph's look: from and to shapes, the fill (colour → colour, or a backdrop's light), ease, edge, outline. */
+function MorphLook({ scene, clip, def, path }: { scene: Scene; clip: Clip; def: EffectDef; path: (k: string) => string }) {
+  const ed = useEditor()
+  const p = morphParams(scene, clip)
+  const shape = clip.effect === 'shape'
+  const skip = Object.keys(def.params).filter((k) => !['color', 'colorTo', 'ease', 'edge', 'outline'].includes(k) || (p.fill === 'light' && (k === 'color' || k === 'colorTo')))
+  return (
+    <>
+      {shape ? (
+        <ShapePick label="shape" value={p.from} prefix="" path={path} />
+      ) : (
+        <>
+          <ShapePick label="from" value={p.from} prefix="from" path={path} />
+          <ShapePick label="to" value={p.to} prefix="to" path={path} />
+        </>
+      )}
+      <span className={s.dim}>fill</span>
+      <Segmented<'color' | 'light'> ariaLabel="fill" size="sm" value={p.fill} onChange={(v) => ed.editing.setValue(path('fill'), v, 'final')} options={[{ value: 'color', label: 'colour' }, { value: 'light', label: 'light' }]} />
+      {p.fill === 'light' && (
+        <Segmented<BackdropMode> ariaLabel="light from" size="sm" value={p.source} onChange={(v) => ed.editing.setValue(path('source'), v, 'final')} options={BACKDROP_MODES.map((m) => ({ value: m, label: m }))} />
+      )}
+      <ParamControls schema={def.params} skip={skip} values={resolveParams(def.params, { ...(clip.params as Record<string, unknown>), colorTo: p.colorTo })} onChange={(k, v, ph) => ed.editing.setValue(path(k), v, ph)} />
+      <span className={s.dim}>
+        {shape ? `holds a ${p.from.kind}` : `turns the ${p.from.kind === 'plate' ? 'plate' : p.from.kind} into the ${p.to.kind === 'plate' ? 'plate' : p.to.kind}`}
+        {p.fill === 'color' && p.colorTo !== p.color ? ', changing colour' : ''}. sizes at 0 and centres at -1 follow the object. space plays it here.
+      </span>
+    </>
   )
 }
 

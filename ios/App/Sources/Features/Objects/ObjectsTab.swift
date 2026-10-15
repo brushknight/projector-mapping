@@ -231,7 +231,8 @@ struct ObjectsTab: View {
         guard o.visible else { return "off" }
         let c = clips(of: o, scene: scene)
         let all = scene?.timeline.clips ?? []
-        if c.contains(where: { x in x.inEffect(at: t, track: all.filter { $0.trackId == x.trackId }) }) { return "lit" }
+        let cues = (scene?.timeline.cues ?? []).map(\.at)
+        if c.contains(where: { x in x.inEffect(at: t, track: all.filter { $0.trackId == x.trackId }, cues: cues) }) { return "lit" }
         if c.contains(where: { $0.start > t }) { return "waiting" }
         return "off"
     }

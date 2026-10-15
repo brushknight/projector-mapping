@@ -11,6 +11,8 @@ const ICONS: Record<string, string> = {
   highlight: 'highlight',
   spin: 'spin',
   converge: 'converge',
+  morph: 'converge',
+  shape: 'quad',
 }
 
 export function effectIcon(id: string, kind?: string): string {

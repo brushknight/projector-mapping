@@ -88,6 +88,10 @@ function EffectsTab({ onTab }: { onTab: (t: LibraryTab) => void }) {
       ed.toast('Drag converge onto an object track: the light on air closes onto the object over the clip.')
       return
     }
+    if (def.id === 'morph' || def.id === 'shape') {
+      ed.toast(def.id === 'morph' ? 'Drag morph onto an object track: the object turns into a circle (or another shape) over the clip.' : 'Drag shape onto an object track: it holds a shape and can change its colour over the clip.')
+      return
+    }
     const sid = ed.sel.surfaceId
     if (!sid) {
       ed.toast('Select a surface first, or drag the effect onto a timeline track.')
@@ -98,7 +102,7 @@ function EffectsTab({ onTab }: { onTab: (t: LibraryTab) => void }) {
   return (
     <div className={s.grid}>
       {ed.effects.map((def) => (
-        <LibTile key={def.id} icon={effectIcon(def.id, def.kind)} label={def.name} dragData={`effect:${def.id}`} onClick={() => add(def)} title={def.id === 'converge' ? 'converge: drag onto an object track; the light on air closes onto the object' : `${def.name}: click to add to the selected surface, drag onto a track`} />
+        <LibTile key={def.id} icon={effectIcon(def.id, def.kind)} label={def.name} dragData={`effect:${def.id}`} onClick={() => add(def)} title={def.id === 'converge' ? 'converge: drag onto an object track; the light on air closes onto the object' : def.id === 'morph' ? 'morph: drag onto an object track; one shape turns into another' : def.id === 'shape' ? 'shape: drag onto an object track; holds a shape, changing colour' : `${def.name}: click to add to the selected surface, drag onto a track`} />
       ))}
       <LibTile
         icon="gobo"

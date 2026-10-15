@@ -28,7 +28,12 @@ func registerWrite(s *mcp.Server, env *tools.Env) {
 		Description: "Moves a surface's points by dx, dy scene pixels (all of them, or only point_id). Shared points move every face that uses them. Use after alignment_error or camera_compare to fix small misalignments."}, surfaceNudge)
 	tools.Add(s, env, &mcp.Tool{Name: "clip_add", Title: "Add a clip",
 		Description: "Places an effect on the timeline for a target (surface, object or all) from start to end seconds. Reuses the track of that target or makes one. Params follow the effect's schema (effects_list). " +
-			"For a sound effect pass sound (a library sha or name from sound_list), optional offset (seconds into the file) and volume (0..1): the clip goes on the scene's first sound track (made when there is none) and plays from start to end."}, clipAdd)
+			"For a sound effect pass sound (a library sha or name from sound_list), optional offset (seconds into the file) and volume (0..1): the clip goes on the scene's first sound track (made when there is none) and plays from start to end. " +
+			"Morph (§21, on an object, surface or all target): one shape turns into another over the clip; params from and to are object (the silhouette), circle, frame, rect or plate:<plate id>, " +
+			"placed with fromCx/fromCy/fromR/fromW/fromH/fromSize and toCx/... in scene px (absent: the object's centre, a circle 0.6 x its bounding radius, the object's box, a plate as wide as the object); " +
+			"fill color (color, colorTo animate in linear light) or light (source: a backdrop mode); ease, edge (soft px), outline. Example: {effect: morph, params: {from: object, to: circle, color: #ffffff}}; " +
+			"a hold with a colour change: {from: circle, to: circle, color: #ffffff, colorTo: #ff3b30}; back: {from: circle, to: object}. Shape: {shape, cx, cy, r, w, h, size, fill, color, colorTo} holds one shape. " +
+			"hold: \"step\" (default for morph, shape, converge, reveal, sweep, motion) keeps the end state only until the next cue, so each cue starts from scratch; \"forever\" carries it on; false ends at the clip's end."}, clipAdd)
 	tools.Add(s, env, &mcp.Tool{Name: "clip_update", Title: "Change a clip",
 		Description: "Changes a clip's effect, timing, fades, hold or params (params merge into the existing ones)."}, clipUpdate)
 	tools.Add(s, env, &mcp.Tool{Name: "clip_remove", Title: "Remove a clip", Description: "Removes a clip from the timeline."}, clipRemove)
@@ -292,7 +297,7 @@ type clipAddIn struct {
 	Sound   string         `json:"sound,omitempty" jsonschema:"for a sound clip: a library sound sha or name (sound_list)"`
 	Offset  *float64       `json:"offset,omitempty" jsonschema:"for a sound clip: seconds into the file where the clip starts, default 0"`
 	Volume  *float64       `json:"volume,omitempty" jsonschema:"for a sound clip: 0..1, default 1"`
-	Hold    *bool          `json:"hold,omitempty" jsonschema:"keep the clip's end state after its end until the next clip of that effect on the track; default true for converge, reveal and sweep, false otherwise"`
+	Hold    any            `json:"hold,omitempty" jsonschema:"keep the clip's end state after its end: \"step\" until the next cue (the default for converge, morph, shape, reveal, sweep and motion), \"forever\" past cues until the next clip of that effect on the track, false not at all"`
 }
 
 func resolveTarget(sc *scene.Scene, t TargetIn) (scene.Target, string, error) {
@@ -348,6 +353,10 @@ func clipAdd(ctx context.Context, e *tools.Env, in clipAddIn) (*mcp.CallToolResu
 		}
 	}
 	fi, fo := 0.2, 0.2
+	// (§20, §21) shapes start and end exactly where they are
+	if in.Effect == scene.EffectMorph || in.Effect == scene.EffectShape || in.Effect == scene.EffectConverge {
+		fi, fo = 0, 0
+	}
 	if in.FadeIn != nil {
 		fi = *in.FadeIn
 	}
@@ -360,7 +369,14 @@ func clipAdd(ctx context.Context, e *tools.Env, in clipAddIn) (*mcp.CallToolResu
 	if in.Params == nil {
 		in.Params = map[string]any{}
 	}
-	cl := scene.Clip{ID: NewID("clp"), TrackID: track, Effect: in.Effect, Start: in.Start, End: in.End, FadeIn: fi, FadeOut: fo, Params: in.Params, Hold: in.Hold}
+	cl := scene.Clip{ID: NewID("clp"), TrackID: track, Effect: in.Effect, Start: in.Start, End: in.End, FadeIn: fi, FadeOut: fo, Params: in.Params}
+	if in.Hold != nil {
+		h, ok := scene.ParseHold(in.Hold)
+		if !ok {
+			return nil, app_errors.Invalid("hold must be false, \"step\" or \"forever\"")
+		}
+		cl.Hold = &h
+	}
 	ops = append(ops, docpatch.Add("/timeline/clips/-", cl))
 	if in.End > sc.Timeline.Duration {
 		ops = append(ops, docpatch.Replace("/timeline/duration", math.Ceil(in.End)))
@@ -449,7 +465,7 @@ type clipUpdateIn struct {
 	FadeIn  *float64       `json:"fade_in,omitempty"`
 	FadeOut *float64       `json:"fade_out,omitempty"`
 	Params  map[string]any `json:"params,omitempty" jsonschema:"merged into the clip's params"`
-	Hold    *bool          `json:"hold,omitempty" jsonschema:"keep the end state after the clip's end"`
+	Hold    any            `json:"hold,omitempty" jsonschema:"false, \"step\" (until the next cue) or \"forever\""`
 }
 
 func clipIndex(sc *scene.Scene, id string) (int, error) {
@@ -490,7 +506,11 @@ func clipUpdate(ctx context.Context, e *tools.Env, in clipUpdateIn) (*mcp.CallTo
 		cl.Params[k] = v
 	}
 	if in.Hold != nil {
-		cl.Hold = in.Hold
+		h, ok := scene.ParseHold(in.Hold)
+		if !ok {
+			return nil, app_errors.Invalid("hold must be false, \"step\" or \"forever\"")
+		}
+		cl.Hold = &h
 	}
 	ops := []docpatch.Op{docpatch.Replace(fmt.Sprintf("/timeline/clips/%d", i), cl)}
 	if cl.End > sc.Timeline.Duration {

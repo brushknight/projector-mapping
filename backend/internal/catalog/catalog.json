@@ -1,5 +1,5 @@
 {
-  "version": 8,
+  "version": 9,
   "paramSchemaNote": "each param: {type: number|integer|boolean|color|enum|string|strokes, min?, max?, step?, default, label?, unit?, options?}; strokes is an array of drawing strokes (protocol §1, effect drawing); an attachment's params validate against goboParams merged with its gobo's own params; a generator layer or colour layer validates against its colorGenerators params",
   "light": {
     "params": {
@@ -5308,6 +5308,291 @@
           "type": "boolean",
           "default": false,
           "label": "outline at the end"
+        }
+      }
+    },
+    {
+      "id": "morph",
+      "name": "morph",
+      "group": "transform",
+      "kind": "builtin",
+      "origin": "builtin",
+      "params": {
+        "from": {
+          "type": "string",
+          "default": "object",
+          "label": "from"
+        },
+        "to": {
+          "type": "string",
+          "default": "circle",
+          "label": "to"
+        },
+        "fill": {
+          "type": "enum",
+          "options": [
+            "color",
+            "light"
+          ],
+          "default": "color",
+          "label": "fill"
+        },
+        "color": {
+          "type": "color",
+          "default": "#ffffff",
+          "label": "colour"
+        },
+        "colorTo": {
+          "type": "color",
+          "default": "#ffffff",
+          "label": "colour at the end"
+        },
+        "source": {
+          "type": "enum",
+          "options": [
+            "static",
+            "live",
+            "color",
+            "scenery"
+          ],
+          "default": "static",
+          "label": "light from"
+        },
+        "ease": {
+          "type": "enum",
+          "options": [
+            "inOut",
+            "in",
+            "out",
+            "linear"
+          ],
+          "default": "inOut",
+          "label": "ease"
+        },
+        "edge": {
+          "type": "number",
+          "min": 0,
+          "max": 200,
+          "default": 2,
+          "label": "soft edge",
+          "unit": "px"
+        },
+        "outline": {
+          "type": "boolean",
+          "default": false,
+          "label": "outline"
+        },
+        "fromCx": {
+          "type": "number",
+          "min": -1,
+          "max": 20000,
+          "default": -1,
+          "label": "from centre x",
+          "unit": "px"
+        },
+        "fromCy": {
+          "type": "number",
+          "min": -1,
+          "max": 20000,
+          "default": -1,
+          "label": "from centre y",
+          "unit": "px"
+        },
+        "fromR": {
+          "type": "number",
+          "min": 0,
+          "max": 20000,
+          "default": 0,
+          "label": "from radius",
+          "unit": "px"
+        },
+        "fromW": {
+          "type": "number",
+          "min": 0,
+          "max": 20000,
+          "default": 0,
+          "label": "from width",
+          "unit": "px"
+        },
+        "fromH": {
+          "type": "number",
+          "min": 0,
+          "max": 20000,
+          "default": 0,
+          "label": "from height",
+          "unit": "px"
+        },
+        "fromSize": {
+          "type": "number",
+          "min": 0,
+          "max": 20000,
+          "default": 0,
+          "label": "from plate size",
+          "unit": "px"
+        },
+        "toCx": {
+          "type": "number",
+          "min": -1,
+          "max": 20000,
+          "default": -1,
+          "label": "to centre x",
+          "unit": "px"
+        },
+        "toCy": {
+          "type": "number",
+          "min": -1,
+          "max": 20000,
+          "default": -1,
+          "label": "to centre y",
+          "unit": "px"
+        },
+        "toR": {
+          "type": "number",
+          "min": 0,
+          "max": 20000,
+          "default": 0,
+          "label": "to radius",
+          "unit": "px"
+        },
+        "toW": {
+          "type": "number",
+          "min": 0,
+          "max": 20000,
+          "default": 0,
+          "label": "to width",
+          "unit": "px"
+        },
+        "toH": {
+          "type": "number",
+          "min": 0,
+          "max": 20000,
+          "default": 0,
+          "label": "to height",
+          "unit": "px"
+        },
+        "toSize": {
+          "type": "number",
+          "min": 0,
+          "max": 20000,
+          "default": 0,
+          "label": "to plate size",
+          "unit": "px"
+        }
+      }
+    },
+    {
+      "id": "shape",
+      "name": "shape",
+      "group": "transform",
+      "kind": "builtin",
+      "origin": "builtin",
+      "params": {
+        "shape": {
+          "type": "string",
+          "default": "circle",
+          "label": "shape"
+        },
+        "fill": {
+          "type": "enum",
+          "options": [
+            "color",
+            "light"
+          ],
+          "default": "color",
+          "label": "fill"
+        },
+        "color": {
+          "type": "color",
+          "default": "#ffffff",
+          "label": "colour"
+        },
+        "colorTo": {
+          "type": "color",
+          "default": "#ffffff",
+          "label": "colour at the end"
+        },
+        "source": {
+          "type": "enum",
+          "options": [
+            "static",
+            "live",
+            "color",
+            "scenery"
+          ],
+          "default": "static",
+          "label": "light from"
+        },
+        "ease": {
+          "type": "enum",
+          "options": [
+            "inOut",
+            "in",
+            "out",
+            "linear"
+          ],
+          "default": "inOut",
+          "label": "ease"
+        },
+        "edge": {
+          "type": "number",
+          "min": 0,
+          "max": 200,
+          "default": 2,
+          "label": "soft edge",
+          "unit": "px"
+        },
+        "outline": {
+          "type": "boolean",
+          "default": false,
+          "label": "outline"
+        },
+        "cx": {
+          "type": "number",
+          "min": -1,
+          "max": 20000,
+          "default": -1,
+          "label": "centre x",
+          "unit": "px"
+        },
+        "cy": {
+          "type": "number",
+          "min": -1,
+          "max": 20000,
+          "default": -1,
+          "label": "centre y",
+          "unit": "px"
+        },
+        "r": {
+          "type": "number",
+          "min": 0,
+          "max": 20000,
+          "default": 0,
+          "label": "radius",
+          "unit": "px"
+        },
+        "w": {
+          "type": "number",
+          "min": 0,
+          "max": 20000,
+          "default": 0,
+          "label": "width",
+          "unit": "px"
+        },
+        "h": {
+          "type": "number",
+          "min": 0,
+          "max": 20000,
+          "default": 0,
+          "label": "height",
+          "unit": "px"
+        },
+        "size": {
+          "type": "number",
+          "min": 0,
+          "max": 20000,
+          "default": 0,
+          "label": "plate size",
+          "unit": "px"
         }
       }
     }

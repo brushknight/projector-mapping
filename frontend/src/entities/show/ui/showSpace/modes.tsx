@@ -18,7 +18,7 @@ import { useVideoUpload } from '../../../video/ui/videoUpload'
 import { useVideos, videoThumbUrl } from '../../../video/ui/useVideos'
 import { youtubeRef, type Video } from '../../../video/types'
 import { playheadNow } from '../../live'
-import { clipPhase } from '../../../../render/timeline'
+import { clipPhase, stepBounds } from '../../../../render/timeline'
 import { showAudio } from '../../types'
 import { useShow } from './context'
 import { AccentCard } from './accent'
@@ -526,7 +526,7 @@ function objectClips(scene: NonNullable<ReturnType<typeof useShow>['scene']>, o:
 function objectState(scene: NonNullable<ReturnType<typeof useShow>['scene']>, o: SceneObject, t: number): 'lit' | 'waiting' | 'off' {
   if (!o.visible) return 'off'
   const c = objectClips(scene, o)
-  if (c.some((x) => clipPhase(x, scene.timeline.clips.filter((y) => y.trackId === x.trackId), t))) return 'lit'
+  if (c.some((x) => clipPhase(x, scene.timeline.clips.filter((y) => y.trackId === x.trackId), t, stepBounds(scene)))) return 'lit'
   if (c.some((x) => x.start > t)) return 'waiting'
   return 'off'
 }

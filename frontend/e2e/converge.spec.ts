@@ -71,8 +71,9 @@ test('the light closes onto the cube: outside lit at the start and dark at the e
   // half way the wall left of the cube is already closing in; the cube stays lit
   await seek(request, 1)
   await expect.poll(() => lum(page, ...INSIDE)).toBeGreaterThan(120)
-  // at the end the light sits on the silhouette alone, and holds there after the clip (hold)
-  for (const t of [2, 5]) {
+  // at the end the light sits on the silhouette alone, and holds there after the clip to the end of its step (the cue
+  // at 4, §21)
+  for (const t of [2, 3.5]) {
     await seek(request, t)
     await expect.poll(() => lum(page, ...OUTSIDE)).toBeLessThan(6)
     await expect.poll(() => lum(page, ...INSIDE)).toBeGreaterThan(120)

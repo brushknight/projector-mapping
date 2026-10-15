@@ -74,6 +74,7 @@ export async function litSamples(page: Page, selector: string, step = 97): Promi
  */
 export async function withoutConverge(request: APIRequestContext) {
   const sc = await (await request.get(`${API}/api/v1/scenes/scn_desk`)).json()
-  const clips = sc.timeline.clips.filter((c: { effect: string }) => c.effect !== 'converge')
+  // (§21) the fixture's morph (14.5 s) goes too: these checks look at the faces alone
+  const clips = sc.timeline.clips.filter((c: { effect: string }) => c.effect !== 'converge' && c.effect !== 'morph')
   await request.post(`${API}/api/v1/scenes/scn_desk/patch`, { data: { base: sc.version, ops: [{ op: 'replace', path: '/timeline/clips', value: clips }] } })
 }

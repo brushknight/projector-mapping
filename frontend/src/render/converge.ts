@@ -19,7 +19,7 @@ import type { Vec2 } from './math/homography'
 import { sampleMotion } from './motion'
 import { plateDef, plateField, plateKey, plateShapes, type PlateDef } from './plates'
 import { PLATE_SCALE } from './shaders/light'
-import { clipState, evaluateLayerClips } from './timeline'
+import { clipState, evaluateLayerClips, stepBounds } from './timeline'
 
 export const CONVERGE = 'converge'
 /** the shader's limits: silhouette vertices and loops */
@@ -73,12 +73,13 @@ export interface ConvergeState {
 /** The converge clips in effect at t (playing, or held after their end, §20), in track order. Pure. */
 export function evaluateConverge(scene: Scene, t: number, mutedTracks?: ReadonlySet<string>): ConvergeState[] {
   const out: ConvergeState[] = []
+  const bounds = stepBounds(scene)
   for (const track of scene.timeline.tracks) {
     if (mutedTracks?.has(track.id) || track.target.kind === 'layer' || track.target.kind === 'sound') continue
     const clips = scene.timeline.clips.filter((c) => c.trackId === track.id)
     for (const clip of clips) {
       if (clip.effect !== CONVERGE) continue
-      const st = clipState(clip, clips, t)
+      const st = clipState(clip, clips, t, bounds)
       if (!st) continue
       const params = convergeParams(scene, clip)
       out.push({ clip, track, params, progress: st.progress, e: convergeEase(params.ease, st.progress), alpha: st.alpha, held: !!st.held })

@@ -138,7 +138,7 @@ describe('contract fixtures', () => {
     expect(scene.intro?.converge).toBe(true)
     expect(scene.backdrop.static.attachments?.[0].motion?.preset).toBe('sun-lr')
     const cat = read('catalog.json')
-    expect(cat.version).toBe(8)
+    expect(cat.version).toBe(9)
     expect(cat.gobos.length).toBeGreaterThanOrEqual(45)
     // (catalog 6) every attachment is a metal plate with the reference photo it follows; (catalog 8) no metal thumbnail
     for (const g of cat.gobos) {
@@ -156,12 +156,18 @@ describe('contract fixtures', () => {
   it('carries the §20 converge clip, hold and show.converge', () => {
     const scene = read('fixtures/scene.json') as Scene
     const clip = scene.timeline.clips.find((c) => c.effect === 'converge')!
-    expect(clip).toMatchObject({ start: 0, end: 2, hold: true, params: { from: 'current', source: 'static', ease: 'inOut', edge: 6, outline: true } })
+    expect(clip).toMatchObject({ start: 0, end: 2, hold: 'step', params: { from: 'current', source: 'static', ease: 'inOut', edge: 6, outline: true } })
     expect(scene.timeline.tracks.find((t) => t.id === clip.trackId)?.target).toEqual({ kind: 'object', id: 'obj_cube' })
     expect(sceneShape({ ...scene, timeline: { ...scene.timeline, clips: [{ ...clip, hold: 'yes' }] } }, '')).not.toHaveLength(0)
     const cat = read('catalog.json')
     const fx = cat.effects.find((e: { id: string }) => e.id === 'converge')
     expect(Object.keys(fx.params)).toEqual(['from', 'source', 'ease', 'edge', 'outline'])
+    // (§21) the morph clip, its string hold, and the morph and shape effects
+    const morph = scene.timeline.clips.find((c) => c.effect === 'morph')!
+    expect(morph).toMatchObject({ hold: 'forever', params: { from: 'object', to: 'circle', toR: 240, color: '#ffffff', colorTo: '#ff3b30' } })
+    expect(sceneShape({ ...scene, timeline: { ...scene.timeline, clips: [{ ...morph, hold: true }] } }, '')).toHaveLength(0)
+    expect(sceneShape({ ...scene, timeline: { ...scene.timeline, clips: [{ ...morph, hold: 'always' }] } }, '')).not.toHaveLength(0)
+    for (const id of ['morph', 'shape']) expect(cat.effects.find((e: { id: string }) => e.id === id)?.params.fill.options).toEqual(['color', 'light'])
     const msgs = read('fixtures/ws-messages.json') as Array<{ t: string; d?: { name?: string; args?: Record<string, unknown> } }>
     expect(msgs.find((m) => m.t === 'cmd' && m.d?.name === 'show.converge')?.d?.args).toEqual({ sceneId: 'scn_desk', source: 'static', duration: 2, objectId: 'obj_cube' })
   })

@@ -85,7 +85,7 @@ import PMTestSupport
     @Test func convergeClipAndHold() throws {
         let scene = try JSONDecoder().decode(Scene.self, from: Fixtures.data("scene"))
         let clip = try #require(scene.timeline.clips.first { $0.isConverge })
-        #expect(clip.hold == true && clip.holds && clip.start == 0 && clip.end == 2)
+        #expect(clip.hold == .step && clip.holds && clip.start == 0 && clip.end == 2)
         #expect(clip.params["source"] == "static" && clip.params["from"] == "current" && clip.params["outline"] == true)
         let track = try #require(scene.timeline.tracks.first { $0.id == clip.trackId })
         #expect(track.target == TrackTarget(kind: "object", id: "obj_cube"))
@@ -100,6 +100,15 @@ import PMTestSupport
         #expect(grid.inEffect(at: 1, track: [grid]) && !grid.inEffect(at: 5, track: [grid]))
         let next = Clip(id: "c2", trackId: clip.trackId, effect: "converge", start: 6, end: 7, hold: false)
         #expect(!clip.inEffect(at: 6.5, track: own + [next]) && next.inEffect(at: 6.5, track: own + [next]) && !next.inEffect(at: 8, track: own + [next]))
+        // (§21) a step hold ends at the cue after its start (4 in the fixture); forever outlives it
+        let cueTimes = scene.timeline.cues.map(\.at)
+        #expect(clip.inEffect(at: 4, track: own, cues: cueTimes) && !clip.inEffect(at: 4.5, track: own, cues: cueTimes))
+        let morph = try #require(scene.timeline.clips.first { $0.isMorph })
+        #expect(morph.hold == .forever && morph.params["to"] == "circle" && morph.params["colorTo"] == "#ff3b30")
+        #expect(morph.inEffect(at: 19, track: [morph], cues: cueTimes))
+        let legacy = try JSONDecoder().decode(Clip.self, from: Data(#"{"id":"c","trackId":"t","effect":"fill","start":0,"end":1,"params":{},"hold":true}"#.utf8))
+        #expect(legacy.hold == .step)
+        #expect(String(data: try JSONEncoder().encode(Clip(id: "c", trackId: "t", effect: "fill", start: 0, end: 1, hold: .off)), encoding: .utf8)?.contains(#""hold":false"#) == true)
         let again = try JSONDecoder().decode(Clip.self, from: JSONEncoder().encode(clip))
         #expect(again == clip)
         let plain = String(data: try JSONEncoder().encode(grid), encoding: .utf8) ?? ""
@@ -252,7 +261,7 @@ import PMTestSupport
 
     @Test func catalogKeepsParamOrder() throws {
         let cat = try Catalog.decode(Data(contentsOf: Fixtures.catalogURL))
-        #expect(cat.version == 8)
+        #expect(cat.version == 9)
         // (§20 "Step 0") the opening step and the transport step decode
         let sc = try JSONDecoder().decode(Scene.self, from: Fixtures.data("scene"))
         #expect(sc.intro?.source.mode == "live" && sc.intro?.converge == true && sc.intro?.on == false && sc.intro?.transitionMs == 600)

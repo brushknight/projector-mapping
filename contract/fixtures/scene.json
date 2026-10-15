@@ -1270,7 +1270,28 @@
      "edge": 6,
      "outline": true
     },
-    "hold": true
+    "hold": "step"
+   },
+   {
+    "id": "clp_morph",
+    "trackId": "trk_converge",
+    "effect": "morph",
+    "start": 14.5,
+    "end": 15.5,
+    "fadeIn": 0,
+    "fadeOut": 0,
+    "params": {
+     "from": "object",
+     "to": "circle",
+     "toR": 240,
+     "fill": "color",
+     "color": "#ffffff",
+     "colorTo": "#ff3b30",
+     "ease": "inOut",
+     "edge": 2,
+     "outline": false
+    },
+    "hold": "forever"
    }
   ],
   "cues": [

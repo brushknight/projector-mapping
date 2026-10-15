@@ -336,10 +336,11 @@ export interface Clip {
   fadeOut: number
   params: Params
   /**
-   * (§20) keeps the clip's end state after its end, until the next clip with the same effect on its track starts.
-   * Absent = the effect's default: true for converge, reveal, sweep and motion, false otherwise.
+   * (§20, §21) keeps the clip's end state after its end, until the next clip with the same effect on its track starts:
+   * "step" only to the next cue, "forever" past cues, false not at all (true reads as "step"). Absent = the effect's
+   * default: "step" for converge, morph, shape, reveal, sweep and motion, false otherwise.
    */
-  hold?: boolean | null
+  hold?: boolean | 'step' | 'forever' | null
 }
 
 /** (§20) the converge clip's params: the light of a backdrop mode closing onto the target's silhouette */

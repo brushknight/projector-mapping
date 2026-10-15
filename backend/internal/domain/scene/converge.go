@@ -21,16 +21,37 @@ var (
 // DefaultConvergeSeconds is the length of the clip show.converge inserts.
 const DefaultConvergeSeconds = 2.0
 
-// holdByDefault are the effects whose clips keep their end state after `end` when `hold` is absent: the converge and
-// the layer clips (reveal, sweep, motion), which always held (protocol §12, §15).
-var holdByDefault = map[string]bool{EffectConverge: true, "reveal": true, "sweep": true, "motion": true}
+// holdByDefault are the effects whose clips keep their end state (to the end of their step) when `hold` is absent:
+// the converge, morph and shape, and the layer clips (reveal, sweep, motion) (protocol §12, §15, §20, §21).
+var holdByDefault = map[string]bool{EffectConverge: true, EffectMorph: true, EffectShape: true, "reveal": true, "sweep": true, "motion": true}
 
-// Holds tells whether the clip keeps its end state after its end: its own `hold`, else the effect's default.
-func (c Clip) Holds() bool {
+// HoldMode is how the clip keeps its end state: its own `hold`, else the effect's default (step or off).
+func (c Clip) HoldMode() Hold {
 	if c.Hold != nil {
-		return *c.Hold
+		switch *c.Hold {
+		case HoldStep, HoldForever:
+			return *c.Hold
+		}
+		return HoldOff
 	}
-	return holdByDefault[c.Effect]
+	if holdByDefault[c.Effect] {
+		return HoldStep
+	}
+	return HoldOff
+}
+
+// Holds tells whether the clip keeps its end state after its end at all (step or forever).
+func (c Clip) Holds() bool { return c.HoldMode() != HoldOff }
+
+// StepEnd is where the step a clip starts in ends: the first cue after its start (+Inf when none) (protocol §21).
+func (tl *Timeline) StepEnd(start float64) float64 {
+	end := math.Inf(1)
+	for _, cu := range tl.Cues {
+		if cu.At > start+1e-6 && cu.At < end {
+			end = cu.At
+		}
+	}
+	return end
 }
 
 // ClipState is a clip in effect at a time: playing (start <= t < end) or held (after its end).
@@ -43,8 +64,9 @@ type ClipState struct {
 }
 
 // StateAt is every clip in effect at t, in track order then start (protocol §20): the clips that play at t and the
-// held clips whose end has passed, until the next clip with the same effect on the same track starts. It depends on
-// the document and t only, so a seek, back or GO lands on the same state as playing there.
+// held clips whose end has passed, until the next clip with the same effect on the same track starts and, with hold
+// "step" (§21), no later than the cue that ends the clip's step (still in effect at that cue). It depends on the
+// document and t only, so a seek, back or GO lands on the same state as playing there.
 func (tl *Timeline) StateAt(t float64) []ClipState {
 	order := map[string]int{}
 	for i, tr := range tl.Tracks {
@@ -67,7 +89,8 @@ func (tl *Timeline) StateAt(t float64) []ClipState {
 			out = append(out, ClipState{ClipID: c.ID, TrackID: c.TrackID, Effect: c.Effect, Progress: progress(c, t)})
 			continue
 		}
-		if !c.Holds() {
+		mode := c.HoldMode()
+		if mode == HoldOff || (mode == HoldStep && t > tl.StepEnd(c.Start)+1e-6) {
 			continue
 		}
 		// a later clip of the same effect on the same track that has started takes over

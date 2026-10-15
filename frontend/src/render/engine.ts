@@ -21,6 +21,8 @@ import { atlasAffines, resolveAtlas, type Affine } from './atlas'
 import { accentObjects, objectAccentOf, silhouette, silhouetteFaces } from './accent'
 import { convergeLoops, convergeStart, evaluateConverge, farDistance, CONVERGE_MAX_LOOPS, CONVERGE_MAX_VERTS, type ConvergeState } from './converge'
 import { CONVERGE_FS } from './shaders/converge'
+import { MORPH_FS } from './shaders/morph'
+import { evaluateMorph, morphColor, morphShapes, plateSdf, scenePlates, type MorphShape, type MorphState, type PlateSdf } from './morph'
 import { CONTENT_FS, MAX_STOPS } from './shaders/content'
 import { BUILTINS } from './effects/builtins'
 import { makeDrawingCanvas, parseStrokes, strokesKey } from './effects/drawing'
@@ -177,6 +179,9 @@ export class Renderer {
   private convergeProg: GLProgram
   private convergePts = new Float32Array(CONVERGE_MAX_VERTS * 2)
   private convergeEnds = new Float32Array(CONVERGE_MAX_LOOPS)
+  private morphProg: GLProgram
+  /** (§21) plate distance field textures, per plate id */
+  private sdfTex = new Map<string, { sdf: PlateSdf; tex: WebGLTexture }>()
   private videos: VideoCache
   private gridCanvases = new Map<string, OffscreenCanvas | HTMLCanvasElement>()
   /** (plates) mask textures of metal plates, rasterized once per plate */
@@ -235,6 +240,7 @@ export class Renderer {
     this.colorProg = createProgram(gl, FULLSCREEN_VS, COLOR_FS)
     this.lightProg = createProgram(gl, FULLSCREEN_VS, LIGHT_FS)
     this.convergeProg = createProgram(gl, FULLSCREEN_VS, CONVERGE_FS)
+    this.morphProg = createProgram(gl, FULLSCREEN_VS, MORPH_FS)
     this.images = new ImageCache(gl)
     this.images.onLoad = () => this.onInvalidate?.()
     this.videos = new VideoCache(gl)
@@ -320,6 +326,9 @@ export class Renderer {
     const keep = new Set<string>()
     const dynKeep = new Set<string>()
     if (input.scene && plan?.objects && !input.hideMapping && !input.layerOnly) this.renderMapping(input, input.scene, scene, keep, dynKeep)
+    // (§21) morph and shape clips: over the mapped content, then their outlines
+    const morphs = input.scene && plan?.objects && !solo && !input.layerOnly && !input.hideMapping ? evaluateMorph(input.scene, input.t, input.mutedTracks) : []
+    if (morphs.length) this.renderMorph(input, input.scene!, scene, morphs)
     if (converges.length) this.renderConvergeOutline(input, input.scene!, scene, converges)
     // (§20 "Step 0") GO without converge: the opening look crossfades into the mapping over the first transitionMs
     if (fade.look && plan?.objects && !solo && !input.layerOnly && !input.hideBackdrop) this.renderIntroFade(input, fade.look, fade.alpha, scene)
@@ -507,7 +516,9 @@ export class Renderer {
     this.js.dispose()
     this.mesh.dispose()
     for (const p of this.effectProgs.values()) if ('prog' in p) gl.deleteProgram(p.prog.prog)
-    for (const p of [this.layerProg, this.downProg, this.upProg, this.blitProg, this.warpProg, this.finalProg, this.contentProg, this.maskProg, this.colorProg, this.lightProg, this.convergeProg]) gl.deleteProgram(p.prog)
+    for (const p of [this.layerProg, this.downProg, this.upProg, this.blitProg, this.warpProg, this.finalProg, this.contentProg, this.maskProg, this.colorProg, this.lightProg, this.convergeProg, this.morphProg]) gl.deleteProgram(p.prog)
+    for (const t of this.sdfTex.values()) gl.deleteTexture(t.tex)
+    this.sdfTex.clear()
     gl.deleteTexture(this.blackTex)
     gl.deleteTexture(this.opaqueBlack)
     if (loseContext) gl.getExtension('WEBGL_lose_context')?.loseContext()
@@ -969,8 +980,8 @@ export class Renderer {
       if (lp && !out.some((o) => o.which === look)) out.push(lp)
     }
     if (p.objects && !input.layerOnly) {
-      for (const c of evaluateConverge(scene, input.t, input.mutedTracks)) {
-        const src = c.params.source
+      const srcs = [...evaluateConverge(scene, input.t, input.mutedTracks).map((c) => c.params.source), ...evaluateMorph(scene, input.t, input.mutedTracks).filter((m) => m.params.fill === 'light').map((m) => m.params.source)]
+      for (const src of srcs) {
         if ((src === 'static' || src === 'live') && !out.some((o) => o.which === src)) {
           const lp = lightPlan(scene, src)
           if (lp) out.push(lp)
@@ -1808,6 +1819,123 @@ export class Renderer {
       const loops = convergeLoops(scene, st.track).map((l) => [...l, l[0]])
       this.strokeSilhouette(loops, style, target, sx, sy, k)
     }
+    this.setBlend('none')
+  }
+
+  // ── morph (§21) ────────────────────────────────────────────────────────────
+
+  /** (§21) A plate field as a filterable float texture (built once per plate; rebuilt when its mask replaces the vector draft). */
+  private sdfTexture(sdf: PlateSdf | null, plate: string): WebGLTexture | null {
+    if (!sdf) return null
+    const gl = this.gl
+    const have = this.sdfTex.get(plate)
+    if (have && have.sdf === sdf) return have.tex
+    const tex = have?.tex ?? gl.createTexture()!
+    gl.bindTexture(gl.TEXTURE_2D, tex)
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4)
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R16F, sdf.size, sdf.size, 0, gl.RED, gl.FLOAT, sdf.data)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+    this.sdfTex.set(plate, { sdf, tex })
+    return tex
+  }
+
+  /** (§21) The kind code and uniforms of a resolved morph shape. */
+  private morphShapeUniforms(sh: MorphShape): { kind: number; v: [number, number, number, number]; tex: WebGLTexture | null } {
+    switch (sh.kind) {
+      case 'frame':
+        return { kind: 0, v: [0, 0, 0, 0], tex: null }
+      case 'circle':
+        return { kind: 1, v: [sh.cx, sh.cy, sh.r, 0], tex: null }
+      case 'loops':
+        return { kind: 2, v: [0, 0, 0, 0], tex: null }
+      case 'rect':
+        return { kind: 3, v: [sh.cx, sh.cy, sh.hw, sh.hh], tex: null }
+      case 'plate': {
+        const tex = this.sdfTexture(sh.sdf, sh.plate)
+        return tex ? { kind: 4, v: [sh.cx, sh.cy, sh.half, 0], tex } : { kind: 9, v: [0, 0, 0, 0], tex: null }
+      }
+    }
+  }
+
+  /**
+   * (§21) Draws each morph or shape clip in effect over the mapped content: the shape morphing from its `from` to its
+   * `to` with signed distance fields (MORPH_FS), filled with its colour (color → colorTo in linear light) or its
+   * source backdrop, then (with `outline`) the moving shape's outline in the accent's line style.
+   */
+  private renderMorph(input: RenderInput, scene: Scene, target: Target, states: MorphState[]) {
+    const gl = this.gl
+    const frame = sceneSizeOf(input.setup)
+    // build every plate field the scene's morphs use before they play (cached), so none is built mid-show
+    for (const id of scenePlates(scene)) plateSdf(id)
+    const sources = new Map<BackdropMode, Target>()
+    const style = objectAccentOf(scene).outline
+    const line = hexToRgb(style.color, [1, 1, 1])
+    for (const pass of [0, 1]) {
+      for (const st of states) {
+        if (st.alpha <= 0) continue
+        if (pass === 1 && !st.params.outline) continue
+        let src: Target | null = null
+        if (pass === 0 && st.params.fill === 'light') {
+          const mode = st.params.source
+          src = sources.get(mode) ?? null
+          if (!src) {
+            src = this.pool.get(`morph:${mode}`, target.width, target.height)
+            bindTarget(gl, src)
+            gl.clearColor(0, 0, 0, 1)
+            gl.clear(gl.COLOR_BUFFER_BIT)
+            const was = this.seeThrough
+            this.seeThrough = false
+            this.renderBackdrop(input, onAirPlan(scene, mode).layers, 1, src, mode === 'static' || mode === 'live' ? lightPlan(scene, mode) : null)
+            this.seeThrough = was
+            sources.set(mode, src)
+          }
+        }
+        const { a, b, loops } = morphShapes(scene, st.track, st.params, frame)
+        const ua = this.morphShapeUniforms(a)
+        const ub = this.morphShapeUniforms(b)
+        this.convergePts.fill(0)
+        this.convergeEnds.fill(0)
+        let n = 0
+        loops.forEach((l, i) => {
+          for (const [x, y] of l) {
+            this.convergePts[n * 2] = x
+            this.convergePts[n * 2 + 1] = y
+            n++
+          }
+          this.convergeEnds[i] = n
+        })
+        bindTarget(gl, target)
+        this.setBlend('over')
+        const p = this.morphProg.use()
+        p.tex('u_src', 0, src ? src.tex : this.blackTex)
+        p.tex('u_sdfA', 1, ua.tex ?? this.blackTex)
+        p.tex('u_sdfB', 2, ub.tex ?? this.blackTex)
+        p.f2('u_frame', frame.width, frame.height)
+        p.i1('u_kindA', ua.kind)
+        p.i1('u_kindB', ub.kind)
+        p.f4('u_shA', ...ua.v)
+        p.f4('u_shB', ...ub.v)
+        p.v2('u_pts', this.convergePts)
+        p.v1('u_loopEnd', this.convergeEnds)
+        p.i1('u_loops', loops.length)
+        p.f1('u_far', farDistance(frame))
+        p.f1('u_e', st.e)
+        p.f1('u_edge', st.params.edge)
+        p.f1('u_aa', frame.width / Math.max(1, target.width))
+        p.f1('u_alpha', st.alpha)
+        p.i1('u_fill', st.params.fill === 'light' ? 0 : 1)
+        const c = morphColor(st.params, st.e)
+        p.f3('u_color', c[0], c[1], c[2])
+        p.i1('u_pass', pass)
+        p.f1('u_lineW', Math.max(1, Math.min(64, style.width || 3)))
+        p.f3('u_lineColor', line[0], line[1], line[2])
+        this.drawFullscreen()
+      }
+    }
+    gl.activeTexture(gl.TEXTURE0)
     this.setBlend('none')
   }
 
