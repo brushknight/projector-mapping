@@ -118,7 +118,7 @@ final class AppModel {
         } else if let c = credentials {
             hub.start(server: c.server, token: c.token)
             // Screenshots against a real server: the scene picker and its preview open too.
-            if debugScreen == .scenes || debugScreen == .scenepreview { DemoData.prepare(self, screen: debugScreen) }
+            if debugScreen == .scenes || debugScreen == .scenepreview || debugScreen == .addlayer { DemoData.prepare(self, screen: debugScreen) }
         }
         CameraBridge.install(self)
         applyKeepAwake()
@@ -344,9 +344,17 @@ final class AppModel {
 
     func lastPreset(_ mode: String) -> String? { UserDefaults.standard.string(forKey: "preset.\(mode)") }
 
+    /// Applies a preset. Connected, the server applies it (`POST /presets/{id}/apply`: only what the preset defines,
+    /// §16); offline, in the demo or for a preset the server has not stored yet, the stack is patched locally.
     func apply(_ preset: Preset) {
-        guard let backdrop = try? JSONValue(encoding: preset.backdrop) else { return }
-        edit(.applyPreset(mode: preset.mode, backdrop: backdrop))
+        if !demo, hub.isLive, let api, let sceneId, !preset.id.hasPrefix("tmp_") {
+            Task {
+                do { try await api.applyPreset(preset.id, sceneId: sceneId) } catch { flash(error.localizedDescription) }
+            }
+        } else {
+            guard let backdrop = try? JSONValue(encoding: preset.backdrop) else { return }
+            edit(.applyPreset(mode: preset.mode, backdrop: backdrop))
+        }
         if let t = AppTab(rawValue: preset.mode) { tab = t }
         UserDefaults.standard.set(preset.id, forKey: "preset.\(preset.mode)")
         presetsVersion += 1

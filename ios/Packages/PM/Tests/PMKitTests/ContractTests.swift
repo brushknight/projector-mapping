@@ -54,7 +54,7 @@ import PMTestSupport
         #expect(scene.underlay == Underlay(on: false, from: "static", level: 0.35))
         let light = try #require(scene.light("static"))
         #expect(light.color.kelvin == 3200 && light.focus == 0.38 && light.intensity == 0.8 && light.colorLayer == nil)
-        #expect(light.fringe == 0.2 && light.vignette == 0.3 && light.haze == 0 && light.slide == .zero && light.motion == nil)
+        #expect(light.fringe == 0.2 && light.vignette == 0.3 && light.backgroundFocus == 1 && light.slide == .zero && light.motion == nil)
         // Values straight from the fixture (it is still being tuned): every field decodes as written.
         let att = scene.attachments("static")[0]
         let raw = try #require(try Fixtures.json("scene").value(at: "/backdrop/static/attachments/0"))
@@ -223,13 +223,14 @@ import PMTestSupport
 
     @Test func catalogKeepsParamOrder() throws {
         let cat = try Catalog.decode(Data(contentsOf: Fixtures.catalogURL))
-        #expect(cat.version == 5)
+        #expect(cat.version == 6)
         #expect(cat.videoParams.items.map(\.key) == ["blur", "brightness", "warmth", "drift", "start", "end", "audio", "volume"])
         #expect(cat.videoParams["blur"]?.default == 0.2)
-        #expect(cat.videoDefaults["audio"] == false && cat.videoDefaults["brightness"] == 0.8)
+        #expect(cat.videoDefaults["audio"] == false && cat.videoDefaults["brightness"] == 0.9)
+        #expect(cat.videoParams["audio"]?.label == "sound" && cat.photoParams["brightness"]?.default == 0.9)
         let drawing = try #require(cat.effects.first { $0.id == "drawing" })
         #expect(drawing.params["strokes"]?["type"] == "strokes")
-        #expect(cat.gobos.count == 76)
+        #expect(cat.gobos.count >= 45 && cat.gobos.allSatisfy { $0.id.hasPrefix("plate-") && $0.metalThumb != nil && $0.source != nil })
         #expect(cat.procedural("tree-sway")?.params.items.map(\.key) == ["wind", "gust", "focus", "seed"])
         #expect(cat.photoParams.items.map(\.key) == ["blur", "brightness", "warmth", "drift"])
         #expect(cat.gradientParams.items.map(\.key) == ["angle", "drift", "grain", "brightness"])
@@ -345,15 +346,15 @@ import PMTestSupport
     @Test func pickingAnAttachmentReplacesTheListAndAddingStacksMasks() throws {
         var scene = try Fixtures.json("scene")
         let cat = try Catalog.decode(Data(contentsOf: Fixtures.catalogURL))
-        let blinds = try #require(cat.gobo("blinds"))
+        let blinds = try #require(cat.gobo("plate-slat-blinds"))
         let a = try JSONValue(encoding: cat.newAttachment(blinds, id: "att_aaaaaaaa"))
         let ops = try #require(SceneIntent.replaceAttachments(mode: "static", attachments: [a]).ops(on: scene))
         #expect(ops == [.replace("/backdrop/static/attachments", [a])])
         scene = try scene.applying(ops)
         var picked = try scene.decode(Scene.self)
-        #expect(picked.attachments("static").map(\.gobo) == ["blinds"])
+        #expect(picked.attachments("static").map(\.gobo) == ["plate-slat-blinds"])
         #expect(picked.light("static")?.focus == 0.38)  // the light stays
-        let b = try JSONValue(encoding: cat.newAttachment(try #require(cat.gobo("tree")), id: "att_bbbbbbbb"))
+        let b = try JSONValue(encoding: cat.newAttachment(try #require(cat.gobo("plate-foliage-breakup")), id: "att_bbbbbbbb"))
         scene = try scene.applying(try #require(SceneIntent.addAttachment(mode: "static", attachment: b).ops(on: scene)))
         picked = try scene.decode(Scene.self)
         #expect(picked.attachments("static").map(\.id) == ["att_aaaaaaaa", "att_bbbbbbbb"])
@@ -368,7 +369,7 @@ import PMTestSupport
 
     @Test func newAttachmentTakesCatalogDefaults() throws {
         let cat = try Catalog.decode(Data(contentsOf: Fixtures.catalogURL))
-        let item = try #require(cat.gobo("window-4"))
+        let item = try #require(cat.gobo("plate-arched-window"))
         let a = cat.newAttachment(item)
         #expect(a.id.hasPrefix("att_") && a.id.count == 12)
         #expect(a.rotation == item.attachment.rotation && a.scale == item.attachment.scale && a.opacity == 1 && a.visible && a.motion == nil)
@@ -376,9 +377,11 @@ import PMTestSupport
         var expected = Catalog.defaults(item.params)
         for (k, v) in Catalog.defaults(cat.goboParams) { expected[k] = v }
         for (k, v) in item.defaults { expected[k] = v }
-        #expect(a.params == expected)
-        #expect(Set(a.params.keys) == ["cols", "rows", "mullion", "throw", "skew", "depth"] && a.params["cols"] == 2)
-        #expect(cat.shapeParams("window-4").map(\.key) == ["cols", "rows", "mullion", "throw", "skew", "depth"])
+        // (§16) a window preset keeps its geometry out of a new attachment: the preset's defaults apply
+        for k in cat.windowKeys(item.id) { expected[k] = nil }
+        #expect(a.params == expected && a.params["arch"] == nil && a.params["field"] == "round")
+        #expect(item.params["arch"]?.default == true)
+        #expect(cat.shapeParams("plate-arched-window").map(\.key).suffix(3) == ["throw", "skew", "depth"])
     }
 
     @Test func lightFieldsAndMissingLights() throws {
@@ -421,7 +424,7 @@ import PMTestSupport
         #expect(ops == [.replace("/backdrop/static", backdrop), .replace("/mode", "static")])
         let next = try scene.applying(ops).decode(Scene.self)
         #expect(next.mode == "static")
-        #expect(next.attachments("static").map(\.gobo) == ["window-4"])
+        #expect(next.attachments("static").map(\.gobo) == ["plate-grid-window"])
         #expect(next.light("static")?.colorLayer == ColorLayer(kind: "generator", ref: "kelvin-cycle", params: ["fromKelvin": 2700, "toKelvin": 4300, "minutes": 20]))
         #expect(backdrop["light"]?["motion"] == .null && backdrop["layers"] == [])
     }

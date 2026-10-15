@@ -17,7 +17,17 @@ struct AutoMapFlow: View {
     @State private var selected: Set<String> = ["zimacube"]
     @State private var prompt = ""
     @State private var promptEdited = false
-    @State private var agent = "codex"
+    @State private var agent = "claude"
+    @State private var agents: [AgentAvailability] = []
+    @State private var preflight: Preflight?
+    @State private var preflightError: String?
+    @State private var failure: String?
+    @State private var failedResult: CalibrationResult?
+    @State private var roi: CGRect?
+    @State private var editingROI = false
+    @State private var lightCheck: LightCheck?
+    @State private var checkingLight = false
+    @State private var showTips = false
     @State private var session: AgentSession?
     @State private var agentStart = Date()
     @State private var showHelp = false
@@ -43,12 +53,13 @@ struct AutoMapFlow: View {
         }
         .preferredColorScheme(.dark)
         .task { await startCamera() }
+        .task(id: step) { await whileOnStep(step) }
+        .task(id: calibrationId) { await watchCalibration() }
         .onDisappear {
             motion.stop()
-            model.camera.onFrame = nil
+            CameraBridge.stopStreaming(model)
             model.camera.onLight = nil
             model.camera.stop()
-            CameraBridge.streaming = false
         }
         .onAppear { prepareDemo() }
         .onChange(of: result) { _, _ in if !promptEdited { prompt = defaultPrompt() } }
@@ -57,10 +68,19 @@ struct AutoMapFlow: View {
         .onChange(of: calibrationProgress?.step) { _, s in
             if s == "done" { Task { await finishCalibration() } }
             if s == "failed" {
-                model.flash(calibrationProgress?.message.isEmpty == false ? calibrationProgress!.message : "Calibration failed. Dim the room and try again.")
-                Task { await model.camera.lock(false) }
-                model.autoMapStep = 0
+                // the failure stays on screen (step 2) with what the camera saw; nothing jumps back silently
+                let m = calibrationProgress?.message ?? ""
+                failure = m.isEmpty ? "Calibration failed. Dim the room and try again." : m
+                Task {
+                    await model.camera.lock(false)
+                    if let id = calibrationId { failedResult = try? await model.hub.calibrationResult(id) }
+                }
             }
+        }
+        .alert("make the projector stand out", isPresented: $showTips) {
+            Button("ok", role: .cancel) {}
+        } message: {
+            Text("turn off the ceiling lights and lamps, close the blinds, dim or turn away monitors that light the area, and set the projector to its brightest mode. then try again.")
         }
         .alert("auto map", isPresented: $showHelp) {
             Button("ok", role: .cancel) {}
@@ -94,31 +114,113 @@ struct AutoMapFlow: View {
 
     // MARK: 1 · set the phone up
 
+    var liveCamera: Bool { !model.demo && cameraRunning }
+
+    /// The projected area the phone sees while the output shows the aiming image.
+    var aimShapes: [PreviewShape] {
+        var out: [PreviewShape] = []
+        if let l = light, l.quad.count == 4 { out.append(PreviewShape(points: l.quad, style: l.projectorInFrame ? .fill : .dashed)) }
+        if let r = roi { out.append(PreviewShape(points: [r.origin, CGPoint(x: r.maxX, y: r.minY), CGPoint(x: r.maxX, y: r.maxY), CGPoint(x: r.minX, y: r.maxY)], style: .solid)) }
+        return out
+    }
+
+    var roiRect: ROIRect? { roi.map { ROIRect(x: $0.minX, y: $0.minY, w: $0.width, h: $0.height) } }
+
     var setupStep: some View {
         let steady = model.demo || motion.steady
         let inFrame = model.demo || (light?.projectorInFrame ?? false)
         let dim = !model.demo && (light?.dim ?? false)
+        let pf = preflight
+        let ready = model.demo || (pf?.ready ?? false)
         return Group {
             title("auto map")
-            lead("put the phone on a stand next to the projector so it sees the whole scene. it stays there while mapping.")
-            Viewfinder(grid: true) {
-                GlassPill { OnAirDot(); Text("streaming to \(model.serverName)") }
+            lead("put the phone on a stand next to the projector so it sees the whole projection. it stays there while mapping.")
+            Viewfinder(grid: !editingROI, shapes: aimShapes, editingROI: editingROI, onROI: { r in roi = r; editingROI = false; Task { try? await model.api?.aim(true, cameraRoi: roiRect) } }) {
+                GlassPill {
+                    if model.demo || pf?.camera.ok == true { OnAirDot() }
+                    Text(streamLabel)
+                }
             } topTrailing: {
-                GlassPill { Text("720p · 8 fps") }
+                GlassPill { Text(pf?.aiming == true ? "projector white" : "720p · 8 fps") }
             } bottomLeading: {
                 GlassPill { Icon(.level, size: 14); Text("level \(String(format: "%.1f", abs(model.demo ? 0.4 : motion.level)))°") }
             } bottomTrailing: {
                 GlassPill { Text("1× wide") }
             } overlay: { _ in EmptyView() }
+            if let failure {
+                Card(spacing: 6) {
+                    Text("calibration stopped").font(.pm(15)).tracking(0.2).foregroundStyle(Palette.ink)
+                    Text(failure).font(.pm(12.5)).tracking(0.2).foregroundStyle(Palette.dim).lineSpacing(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            if !model.demo { preflightCard }
+            if !model.demo {
+                HStack(spacing: 8) {
+                    Button { editingROI.toggle() } label: {
+                        Pill(on: editingROI || roi != nil) { Icon(.pencil, size: 14); Text(editingROI ? "drag over the object" : (roi == nil ? "mark the object" : "object marked")) }
+                    }
+                    .buttonStyle(.plain)
+                    if roi != nil {
+                        Button { roi = nil; Task { try? await model.api?.aim(true) } } label: { Pill { Text("whole view") } }
+                            .buttonStyle(.plain)
+                    }
+                    Spacer(minLength: 0)
+                    Button { Task { await runLightCheck() } } label: { Pill { Text(checkingLight ? "checking…" : "check the light") } }
+                        .buttonStyle(.plain)
+                        .disabled(checkingLight || preflight?.output.ok != true)
+                }
+            }
             Card(spacing: 2) {
-                CheckRow("phone is steady", meta: "no movement for 3 s", done: steady)
-                CheckRow("projector light is in frame", meta: inFrame ? "found a bright 16:9 area" : "point the phone at the projected light", done: inFrame)
+                if !model.demo, let lc = lightCheck ?? preflight?.light {
+                    CheckRow("projector visible: \(lc.level)", meta: lc.message, done: lc.level == "strong")
+                }
+                CheckRow("projector light is in frame", meta: inFrameMeta, done: inFrame)
+                CheckRow("phone is steady", meta: steady ? "holding still" : String(format: "moving %.1f° · you can start, it checks again at the end", motion.drift), done: steady)
                 CheckRow("room is dim", meta: "brighter rooms make calibration slower", done: dim)
             }
-            WideButton("start auto map", icon: .wand, iconSize: 20, on: true, height: 60, font: .pm(17)) { Task { await startCalibration() } }
-                .disabled(busy)
+            WideButton("start auto map", icon: .wand, iconSize: 20, on: ready, height: 60, font: .pm(17)) { Task { await startCalibration() } }
+                .disabled(busy || !ready)
+                .opacity(ready ? 1 : 0.5)
+            if !ready, let reason = pf?.reason, !reason.isEmpty {
+                Text(reason).font(.pm(12.5)).tracking(0.2).foregroundStyle(Palette.dim).padding(.horizontal, 4)
+            }
             WideButton("just take a photo for the laptop", icon: .camera) { Task { await takePhoto() } }
                 .disabled(busy)
+        }
+    }
+
+    var streamLabel: String {
+        if model.demo { return "streaming to \(model.serverName)" }
+        guard let c = preflight?.camera else { return "connecting to \(model.serverName)" }
+        return c.ok ? "streaming · \(String(format: "%.0f", c.fps)) fps" : "not reaching \(model.serverName)"
+    }
+
+    var inFrameMeta: String {
+        guard let l = light, !model.demo else { return model.demo ? "found the projected area" : "waiting for the camera" }
+        if preflight?.output.ok == false { return "open the projector output first: it lights up white for aiming" }
+        if l.projectorInFrame {
+            return l.touchesEdge ? "part of the projection is out of view: turn or move the phone back" : "found the projected area (\(Int(l.bright * 100))% of the view)"
+        }
+        return l.quad.isEmpty ? "point the phone at the white projected area" : "the projected area is too small: move the phone closer"
+    }
+
+    /// Live checks from the server: output, camera preview, server.
+    var preflightCard: some View {
+        Card(spacing: 2) {
+            if let err = preflightError {
+                CheckRow("server", meta: err, done: false)
+            } else if let pf = preflight {
+                CheckRow("projector output", meta: pf.output.ok ? pf.output.detail : pf.output.fix, done: pf.output.ok)
+                if !pf.output.warning.isEmpty {
+                    Text(pf.output.warning).font(.pm(12)).tracking(0.2).foregroundStyle(Palette.dim).padding(.leading, 36)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                CheckRow("camera preview on the server", meta: pf.camera.ok ? pf.camera.detail : (pf.camera.fix.isEmpty ? pf.camera.detail : "\(pf.camera.detail). \(pf.camera.fix)"), done: pf.camera.ok)
+                CheckRow("server", meta: "\(model.serverName) answers", done: true)
+            } else {
+                CheckRow("server", meta: "checking \(model.serverName)…", done: false)
+            }
         }
     }
 
@@ -126,12 +228,70 @@ struct AutoMapFlow: View {
 
     var calibrationProgress: CalibrationProgress? { calibrationId.flatMap { model.hub.calibration[$0] } }
 
-    var calibratingStep: some View {
+    @ViewBuilder var calibratingStep: some View {
+        if calibrationProgress?.step == "failed" || failedResult?.status == "failed" { failedView } else { runningView }
+    }
+
+    /// While calibrating, also read the calibration itself every 3 s: after a server restart the progress channel is
+    /// gone (the server marks the pass "interrupted"), and the phone must not wait forever.
+    func watchCalibration() async {
+        guard !model.demo, let api = model.api else { return }
+        while !Task.isCancelled, step == 1, let id = calibrationId {
+            try? await Task.sleep(for: .seconds(3))
+            guard step == 1, calibrationId == id, calibrationProgress?.step != "failed", calibrationProgress?.step != "done",
+                  let r = try? await api.calibration(id) else { continue }
+            if r.status == "failed" {
+                failure = r.message.isEmpty ? "Calibration failed." : r.message
+                failedResult = r
+                await model.camera.lock(false)
+            } else if r.status == "done" {
+                await finishCalibration()
+            }
+        }
+    }
+
+    /// A failed calibration stays on screen: the server's reason, what the camera saw of the projector, and the ways on.
+    var failedView: some View {
+        Group {
+            title("calibration stopped")
+            lead(failure ?? calibrationProgress?.message ?? "the calibration failed.")
+            if let sha = failedResult?.diffAsset, let api = model.api {
+                VStack(alignment: .leading, spacing: 6) {
+                    AsyncImage(url: api.assetURL(sha: sha)) { img in img.resizable().scaledToFit() } placeholder: { Color.black.aspectRatio(4 / 3, contentMode: .fit) }
+                        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    Text("what the camera saw of the projector: bright = the projector lights it").font(.pm(12)).tracking(0.2).foregroundStyle(Palette.dim).padding(.horizontal, 4)
+                }
+            }
+            if let c = failedResult?.quality?.contrast {
+                Text("projector \(Int(c.brighterPct.rounded()))% brighter than the room, over \(Int((c.lit * 100).rounded()))% of the view")
+                    .font(.pm(12.5)).tracking(0.2).foregroundStyle(Palette.dim).padding(.horizontal, 4)
+            }
+            WideButton("try again", icon: .wand, on: true) {
+                Task {
+                    // light the projector white again so the camera meters on it before the new pass
+                    try? await model.api?.aim(true, cameraRoi: roiRect)
+                    try? await Task.sleep(for: .milliseconds(600))
+                    await startCalibration()
+                }
+            }
+                .disabled(busy)
+            HStack(spacing: 10) {
+                WideButton("darker room tips", icon: .help) { showTips = true }
+                WideButton("mark the object", icon: .pencil) {
+                    editingROI = true
+                    model.autoMapStep = 0
+                }
+            }
+            WideButton("back to setup") { model.autoMapStep = 0 }
+        }
+    }
+
+    var runningView: some View {
         let p = calibrationProgress ?? CalibrationProgress(step: "patterns", done: 0, total: 22, message: "gray code")
         // Backend steps: white, black, x0…, y0…, decode, done | failed (protocol §9); the demo uses patterns,
         // matching, surfaces, done.
         let matching = p.step == "decode" || p.step == "matching"
-        let patternsDone = matching || ["surfaces", "done", "failed"].contains(p.step)
+        let patternsDone = matching || ["verify", "surfaces", "done", "failed"].contains(p.step)
         let left = estimateLeft(p)
         return Group {
             title("calibrating")
@@ -148,8 +308,14 @@ struct AutoMapFlow: View {
                 Stripes(bit: p.done % 11).opacity(patternsDone ? 0 : 0.55).blendMode(.screen)
             }
             ProgressLine(p.fraction)
+            if !p.message.isEmpty && !model.demo {
+                Text(p.message).font(.pm(12.5)).tracking(0.2).foregroundStyle(Palette.dim).padding(.horizontal, 4)
+            }
             Card(spacing: 2) {
-                CheckRow("projecting patterns", meta: "\(p.done) of \(p.total) · gray code", done: p.done > 0)
+                CheckRow("projecting patterns", meta: "\(p.done) of \(p.total) · gray code", done: patternsDone)
+                if !model.demo {
+                    CheckRow("checking the phone did not move", meta: p.step == "verify" ? "now" : (matching || p.step == "done" ? "done" : "at the end"), done: matching || p.step == "done")
+                }
                 CheckRow("matching camera ↔ projector pixels", meta: patternsDone ? (matching ? "now" : "done") : "next", done: p.step == "surfaces" || p.step == "done")
                 CheckRow("finding surfaces", meta: "edges, planes, corners", done: p.step == "done")
             }
@@ -168,19 +334,39 @@ struct AutoMapFlow: View {
 
     var candidates: [CalibrationResult.Candidate] { result?.objects ?? [] }
 
+    /// Candidate outlines in camera space for the live preview (selected solid, others dashed).
+    var candidateShapes: [PreviewShape] {
+        guard liveCamera else { return [] }
+        return candidates.compactMap { c in
+            let pts = c.outline.compactMap { $0.count >= 2 ? CGPoint(x: $0[0], y: $0[1]) : nil }
+            return pts.count >= 3 ? PreviewShape(points: pts, style: selected.contains(c.id) ? .solid : .dashed) : nil
+        }
+    }
+
+    var qualityLine: String {
+        guard let q = result?.quality else { return "camera matched" }
+        if let r = q.roi { return "sharp area mapped \(Int((r.sharp * 100).rounded()))% · \(String(format: "%.1f", r.errorPx > 0 ? r.errorPx : q.errorPx)) px" }
+        return "\(Int((q.coverage * 100).rounded()))% seen · \(String(format: "%.1f", q.errorPx)) px"
+    }
+
     var chooseStep: some View {
         Group {
             title("what to map?")
-            Viewfinder(grid: false) {
+            Viewfinder(grid: false, shapes: candidateShapes) {
                 GlassPill { Text("\(candidates.count) object\(candidates.count == 1 ? "" : "s") found") }
             } topTrailing: {
                 GlassPill { Text("tap to select") }
             } bottomLeading: {
                 EmptyView()
             } bottomTrailing: {
-                GlassPill { Text("camera matched · \(String(format: "%.1f", result?.quality?.errorPx ?? 0.6)) px") }
+                GlassPill { Text(model.demo ? "camera matched · \(String(format: "%.1f", result?.quality?.errorPx ?? 0.6)) px" : qualityLine) }
             } overlay: { size in
-                CandidateOverlay(candidates: candidates, selected: selected, size: size) { toggle($0) }
+                if !liveCamera { CandidateOverlay(candidates: candidates, selected: selected, size: size) { toggle($0) } }
+            }
+            if !model.demo, let r = result {
+                Text(candidates.isEmpty ? "\(r.message). no flat surfaces found: draw them on the laptop, or ask the agent to find them." : r.message)
+                    .font(.pm(12.5)).tracking(0.2).foregroundStyle(Palette.dim).padding(.horizontal, 4)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             ScrollView(.horizontal) {
                 HStack(spacing: 8) {
@@ -209,11 +395,13 @@ struct AutoMapFlow: View {
                     .focused($promptFocused)
                     .onChange(of: prompt) { _, _ in if promptFocused { promptEdited = true } }
                 HStack(spacing: 8) {
-                    ForEach(["codex", "claude"], id: \.self) { a in
-                        Button { agent = a } label: {
-                            Pill(on: agent == a, height: 34) { Text(a) }
+                    ForEach(["claude", "codex"], id: \.self) { a in
+                        let why = unavailable(a)
+                        Button { if let why { model.flash(why) } else { agent = a } } label: {
+                            Pill(on: agent == a, height: 34) { Text(why == nil ? a : "\(a) · not installed") }
                         }
                         .buttonStyle(.plain)
+                        .opacity(why == nil ? 1 : 0.45)
                     }
                     Spacer()
                     IconPill(.mic, size: 18, diameter: 40, label: "type or dictate") { promptFocused = true }
@@ -227,6 +415,19 @@ struct AutoMapFlow: View {
                 .font(.pm(12)).tracking(0.2).foregroundStyle(Palette.dim).lineSpacing(4.3).padding(.horizontal, 4)
         }
         .onAppear { if prompt.isEmpty { prompt = defaultPrompt() } }
+        .task { await loadAgents() }
+    }
+
+    /// Why an agent can't run on the server's Mac (nil when it can, or when the server has not said).
+    func unavailable(_ a: String) -> String? {
+        guard !model.demo, let x = agents.first(where: { $0.agent == a }), !x.available else { return nil }
+        return x.reason.isEmpty ? "\(a) is not installed on \(model.serverName)." : x.reason
+    }
+
+    func loadAgents() async {
+        guard !model.demo, let api = model.api, let list = try? await api.agentsAvailable() else { return }
+        agents = list
+        if unavailable(agent) != nil, let ok = list.first(where: { $0.available }) { agent = ok.agent }
     }
 
     func toggle(_ id: String) {
@@ -251,8 +452,8 @@ struct AutoMapFlow: View {
         let passes = max(1, events.filter { ($0.tool ?? "").hasPrefix("project_outline") }.count)
         let done = agentStatus == "done"
         return Group {
-            title(done ? "\(agent) is done" : "\(agent) is mapping")
-            Viewfinder(grid: false) {
+            title(done ? "\(agent) is done" : (agentStatus == "failed" ? "\(agent) stopped" : "\(agent) is mapping"))
+            Viewfinder(grid: false, shapes: candidateShapes.filter { $0.style == .solid }) {
                 GlassPill { OnAirDot(); Text("outline projected") }
             } topTrailing: {
                 GlassPill { Text("pass \(passes)") }
@@ -261,7 +462,7 @@ struct AutoMapFlow: View {
             } bottomTrailing: {
                 GlassPill { Text("error \(String(format: "%.1f", errorPx(events))) px") }
             } overlay: { size in
-                CubeOutline(candidate: candidates.first { selected.contains($0.id) } ?? candidates.first, size: size)
+                if !liveCamera { CubeOutline(candidate: candidates.first { selected.contains($0.id) } ?? candidates.first, size: size) }
             }
             Card {
                 TimelineView(.periodic(from: .now, by: 1)) { ctx in
@@ -326,6 +527,39 @@ struct AutoMapFlow: View {
         }
     }
 
+    /// While the setup step is open: poll the pre-flight every second and keep the aiming image on the projector
+    /// (renewed every 5 s; the server takes it down 15 s after the last renewal). Leaving the step takes it down.
+    func whileOnStep(_ s: Int) async {
+        guard s == 0, !model.demo, let api = model.api else { return }
+        let aimer = Task { @MainActor in
+            while !Task.isCancelled {
+                if preflight?.output.ok ?? true { try? await api.aim(true, cameraRoi: roiRect) }
+                try? await Task.sleep(for: .seconds(5))
+            }
+        }
+        while !Task.isCancelled {
+            do {
+                preflight = try await api.preflight()
+                preflightError = nil
+            } catch is CancellationError {
+                break
+            } catch {
+                preflightError = "can't reach \(model.serverName): \(error.localizedDescription) Check the Mac is awake and on the same Wi-Fi."
+            }
+            try? await Task.sleep(for: .seconds(1))
+        }
+        aimer.cancel()
+        // the calibration (step 1) drives the output itself; the server ignores this while it runs
+        Task { try? await api.aim(false) }
+    }
+
+    func runLightCheck() async {
+        guard let api = model.api else { return }
+        checkingLight = true
+        defer { checkingLight = false }
+        do { lightCheck = try await api.lightCheck() } catch { model.flash(error.localizedDescription) }
+    }
+
     func startCamera() async {
         motion.start()
         guard !model.demo else { return }
@@ -344,19 +578,31 @@ struct AutoMapFlow: View {
         guard let setupId = model.active.setup?.id ?? (model.demo ? "set_desk" : nil) else { model.flash("No projector setup is active."); return }
         busy = true
         defer { busy = false }
+        failure = nil
+        failedResult = nil
         do {
-            await model.camera.lock(true)
-            calibrationId = try await model.hub.startCalibration(setupId: setupId)
+            // the projector shows white for aiming now: meter on the object (or the projected area), then lock
+            let q = light?.quad ?? []
+            let point = roi.map { CGPoint(x: $0.midX, y: $0.midY) }
+                ?? (q.count == 4 ? CGPoint(x: q.map(\.x).reduce(0, +) / 4, y: q.map(\.y).reduce(0, +) / 4) : nil)
+            if model.demo { await model.camera.lock(true) } else { await model.camera.meterAndLock(at: point) }
+            calibrationId = try await model.hub.startCalibration(setupId: setupId, cameraRoi: roiRect)
             calibrationStart = Date()
             model.autoMapStep = 1
         } catch {
+            await model.camera.lock(false)
+            failure = error.localizedDescription
             model.flash(error.localizedDescription)
         }
     }
 
     func finishCalibration() async {
         guard let id = calibrationId else { return }
-        result = try? await model.hub.calibrationResult(id)
+        do {
+            result = try await model.hub.calibrationResult(id)
+        } catch {
+            model.flash("Calibrated, but the candidates did not load: \(error.localizedDescription)")
+        }
         if let first = result?.objects.first, !(result?.objects.contains { selected.contains($0.id) } ?? false) { selected = [first.id] }
         await model.camera.lock(false)
         model.autoMapStep = 2
@@ -404,6 +650,9 @@ struct AutoMapFlow: View {
 /// `.vf`: the camera view (370×278, radius 28) with glass labels in the corners and an overlay drawn in view space.
 struct Viewfinder<TL: View, TR: View, BL: View, BR: View, Overlay: View>: View {
     var grid: Bool
+    var shapes: [PreviewShape] = []
+    var editingROI = false
+    var onROI: ((CGRect) -> Void)?
     var topLeading: TL
     var topTrailing: TR
     var bottomLeading: BL
@@ -411,9 +660,12 @@ struct Viewfinder<TL: View, TR: View, BL: View, BR: View, Overlay: View>: View {
     var overlay: (CGSize) -> Overlay
     @Environment(AppModel.self) private var model
 
-    init(grid: Bool, @ViewBuilder topLeading: () -> TL, @ViewBuilder topTrailing: () -> TR, @ViewBuilder bottomLeading: () -> BL,
+    init(grid: Bool, shapes: [PreviewShape] = [], editingROI: Bool = false, onROI: ((CGRect) -> Void)? = nil, @ViewBuilder topLeading: () -> TL, @ViewBuilder topTrailing: () -> TR, @ViewBuilder bottomLeading: () -> BL,
          @ViewBuilder bottomTrailing: () -> BR, @ViewBuilder overlay: @escaping (CGSize) -> Overlay) {
         self.grid = grid
+        self.shapes = shapes
+        self.editingROI = editingROI
+        self.onROI = onROI
         self.topLeading = topLeading(); self.topTrailing = topTrailing()
         self.bottomLeading = bottomLeading(); self.bottomTrailing = bottomTrailing()
         self.overlay = overlay
@@ -426,7 +678,7 @@ struct Viewfinder<TL: View, TR: View, BL: View, BR: View, Overlay: View>: View {
                 GeometryReader { g in
                     ZStack {
                         if !model.demo && CameraController.authorized {
-                            CameraPreview(session: model.camera.session)
+                            CameraPreview(session: model.camera.session, shapes: shapes, editingROI: editingROI, onROI: onROI.map { f in { r in f(r) } })
                         } else {
                             DeskSceneArt()
                         }

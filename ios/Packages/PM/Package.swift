@@ -26,5 +26,6 @@ let package = Package(
         .testTarget(name: "PMKitTests", dependencies: ["PMKit", "PMTestSupport"]),
         .testTarget(name: "PMStoreTests", dependencies: ["PMStore", "PMTestSupport"]),
         .testTarget(name: "PMLiveTests", dependencies: ["PMLive", "PMStore", "PMTestSupport"]),
+        .testTarget(name: "PMCameraTests", dependencies: ["PMCamera"]),
     ]
 )

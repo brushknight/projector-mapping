@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, useState, type DragEvent, type PointerEvent } from 'react'
 import { Icon, Menu, Pill, Waveform } from '../../../../shared/components'
+import { pressed } from '../../../../shared/lib/pointer'
 import { cx } from '../../../../shared/lib/cx'
 import { newId } from '../../../../shared/lib/ids'
 import { useRaf } from '../../../../shared/lib/useRaf'
@@ -151,6 +152,7 @@ export function Timeline() {
 
   const onClipMove = (e: PointerEvent) => {
     if (!drag) return
+    if (!pressed(e)) return
     const dt = (e.clientX - drag.x0) / pps
     if (!drag.moved && Math.abs(e.clientX - drag.x0) < 3 && Math.abs(e.clientY - drag.y0) < 3) return
     drag.moved = true
@@ -182,6 +184,7 @@ export function Timeline() {
   }
   const onScrubMove = (e: PointerEvent) => {
     if (scrub === null) return
+    if (!pressed(e)) return
     setScrub(scrubAt(e.clientX))
     seek(scrubAt(e.clientX))
   }
@@ -242,6 +245,7 @@ export function Timeline() {
   }
   const onRulerMove = (e: PointerEvent) => {
     if (scrub === null) return
+    if (!pressed(e)) return
     setScrub(timeAt(e.clientX))
     seek(timeAt(e.clientX))
   }

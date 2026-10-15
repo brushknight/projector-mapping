@@ -38,7 +38,14 @@ func (m *Map) Encode() ([]byte, error) { return vision.EncodePNG(m.M) }
 
 func (Vision) Bits(n int) int { return vision.Bits(n) }
 
-func (Vision) Decode(f cameraport.Frames, projW, projH int) (cameraport.Map, camera.Quality, error) {
+func (m *Map) Confidence() ([]byte, error) { return vision.EncodeConfidencePNG(m.M) }
+
+func (m *Map) Confident(u, v float64) (bool, camera.Pt, bool) {
+	ok, p, near := m.M.Confident(u, v)
+	return ok, camera.Pt{X: p.X, Y: p.Y}, near
+}
+
+func (Vision) Decode(f cameraport.Frames, projW, projH int, roi cameraport.DecodeROI) (cameraport.Map, camera.Quality, error) {
 	vf := vision.Frames{White: f.White, Black: f.Black}
 	for _, p := range f.X {
 		vf.X = append(vf.X, [2]image.Image{p[0], p[1]})
@@ -46,11 +53,23 @@ func (Vision) Decode(f cameraport.Frames, projW, projH int) (cameraport.Map, cam
 	for _, p := range f.Y {
 		vf.Y = append(vf.Y, [2]image.Image{p[0], p[1]})
 	}
-	m, q, err := vision.Decode(vf, projW, projH, vision.DecodeOptions{})
+	m, q, err := vision.Decode(vf, projW, projH, vision.DecodeOptions{CamROI: roi.CamROI, ProjROI: roi.ProjROI})
+	c := contrast(q.Contrast)
 	if err != nil {
-		return nil, camera.Quality{}, err
+		return nil, camera.Quality{Contrast: &c}, err
 	}
-	return wrap(m), camera.Quality{Coverage: q.Coverage, ErrorPx: q.ErrorPx}, nil
+	return wrap(m), camera.Quality{Coverage: q.Coverage, ErrorPx: q.ErrorPx, Sharp: q.Sharp, Contrast: &c,
+		ROI: &camera.ROIQuality{Mapped: q.ROI.Mapped, Sharp: q.ROI.Sharp, ErrorPx: q.ROI.ErrorPx}}, nil
+}
+
+func contrast(c vision.Contrast) camera.Contrast {
+	return camera.Contrast{Lit: c.Lit, Median: c.Median, Peak: c.Peak, Room: c.Room, Noise: c.Noise, Threshold: c.Threshold,
+		BrighterPct: c.BrighterPct()}
+}
+
+func (Vision) Contrast(white, black []float32, w, h int) camera.Contrast {
+	c, _, _ := vision.MeasureContrast(white, black, w, h, 0)
+	return contrast(c)
 }
 
 func (Vision) Load(b []byte) (cameraport.Map, error) {

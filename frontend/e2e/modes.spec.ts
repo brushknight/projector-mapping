@@ -105,7 +105,7 @@ test('applying a preset switches to its mode', async ({ request }) => {
   expect(sc.mode).toBe('static')
   // (§15) a static preset brings its light and attachments
   expect(sc.backdrop.static.layers).toEqual([])
-  expect(sc.backdrop.static.attachments.map((a: { gobo: string }) => a.gobo)).toEqual(['window-4'])
+  expect(sc.backdrop.static.attachments.map((a: { gobo: string }) => a.gobo)).toEqual(['plate-grid-window'])
   expect(sc.backdrop.static.light.colorLayer.ref).toBe('kelvin-cycle')
   expect(sc.backdrop.live.layers).toHaveLength(1)
 })

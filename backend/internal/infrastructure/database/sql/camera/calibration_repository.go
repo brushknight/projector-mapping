@@ -43,3 +43,18 @@ func (r *Repository) Save(ctx context.Context, c *camera.Calibration) error {
 	b, _ := json.Marshal(c)
 	return r.db.WithContext(ctx).Save(&CalibrationModel{ID: c.ID, SetupID: c.SetupID, Doc: string(b), CreatedAt: c.CreatedAt}).Error
 }
+
+func (r *Repository) Running(ctx context.Context) ([]*camera.Calibration, error) {
+	var rows []CalibrationModel
+	if err := r.db.WithContext(ctx).Where("doc LIKE ?", `%"status":"running"%`).Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	var out []*camera.Calibration
+	for _, m := range rows {
+		var c camera.Calibration
+		if json.Unmarshal([]byte(m.Doc), &c) == nil && c.Status == camera.CalRunning {
+			out = append(out, &c)
+		}
+	}
+	return out, nil
+}

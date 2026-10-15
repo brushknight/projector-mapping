@@ -39,6 +39,8 @@ final class ThumbCache {
             var req = URLRequest(url: url, cachePolicy: .returnCacheDataElseLoad, timeoutInterval: 10)
             req.setValue("image/png", forHTTPHeaderField: "Accept")
             guard let (data, resp) = try? await URLSession.shared.data(for: req), let http = resp as? HTTPURLResponse else { return nil }
+            // a 404 must not stick in URLCache: a strip or thumbnail rendered later (or a newer server) is found next time
+            if http.statusCode != 200 { URLCache.shared.removeCachedResponse(for: req) }
             if http.statusCode == 404 { self.missing.insert(k); return nil }
             guard http.statusCode == 200, let img = UIImage(data: data) else { return nil }
             try? data.write(to: file, options: .atomic)
@@ -85,25 +87,27 @@ struct CatalogThumb<Fallback: View>: View {
     }
 }
 
-/// The native art of a gobo id: the eight drawn shapes, and the closest one for the newer catalog ids.
+/// The native art of a gobo id: the eight drawn shapes, and the closest one for the plates (catalog 6) and older ids.
 enum GoboFallback {
     static func art(_ id: String, category: String) -> String {
         let drawn: Set<String> = ["window", "blinds", "arch", "lattice", "dots", "spot", "palm", "tree"]
         if drawn.contains(id) { return id }
         switch id {
-        case "gothic", "porthole": return "arch"
-        case "moroccan", "honeycomb", "grid": return "lattice"
-        case "stars", "water", "leaves-light": return "dots"
+        case let i where i.contains("blind") || i.contains("lines") || i.contains("louvre") || i.contains("slit"): return "blinds"
+        case let i where i.contains("arched") || i.contains("palace") || i == "gothic" || i == "porthole": return "arch"
+        case let i where i.contains("grid-iii") || i.contains("diamond") || i.contains("maze") || i == "moroccan" || i == "honeycomb" || i == "grid": return "lattice"
+        case let i where i.contains("circle"): return "spot"
+        case let i where i.contains("dots") || i.contains("star") || i.contains("bubbles") || i == "water" || i == "leaves-light": return "dots"
+        case let i where i.contains("jungle") || i.contains("fern") || i == "palm": return "palm"
         case "bamboo", "branch", "ivy", "leaves-dense": return "tree"
-        case "palm": return "palm"
         default: break
         }
         switch category {
-        case "plates": return "spot"
         case "windows": return "window"
         case "blinds": return "blinds"
         case "nature": return "tree"
-        case "spots": return "spot"
+        case "sky": return "dots"
+        case "beams", "spots", "plates": return "spot"
         default: return "lattice"
         }
     }

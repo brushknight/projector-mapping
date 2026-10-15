@@ -150,7 +150,8 @@ func (s *Service) List(ctx context.Context) ([]scene.Summary, error) {
 }
 
 // UpgradeStored rewrites every stored scene that is not in the current format (protocol §1 "Upgrade of older
-// documents", protocol §15 "Upgrade": gobo layers become attachments, scenes get a kind) and fills the list's kind
+// documents", protocol §15 "Upgrade": gobo layers become attachments, scenes get a kind; protocol §16 "Migration":
+// removed attachments move to their plates and brightness scales once, each move logged) and fills the list's kind
 // and mode columns; it reports how many it changed. It runs once on start, before any scene is opened.
 func (s *Service) UpgradeStored(ctx context.Context) (int, error) {
 	list, err := s.repo.List(ctx)
@@ -163,7 +164,7 @@ func (s *Service) UpgradeStored(ctx context.Context) (int, error) {
 		if err != nil {
 			return n, err
 		}
-		next, changed, err := scene.Upgrade(doc)
+		next, notes, changed, err := scene.UpgradeNotes(doc)
 		if err != nil {
 			s.log.Warn("scene upgrade failed", "scene", sum.ID, "err", err)
 			continue
@@ -180,7 +181,11 @@ func (s *Service) UpgradeStored(ctx context.Context) (int, error) {
 			return n, err
 		}
 		if changed {
-			s.log.Info("upgraded scene to the light model", "scene", sum.ID, "kind", sc.Kind, "mode", sc.Mode)
+			s.log.Info("upgraded scene", "scene", sum.ID, "kind", sc.Kind, "mode", sc.Mode)
+		}
+		// (protocol §16) every attachment that moved to a plate, and the brightness scaling, gets its own line
+		for _, note := range notes {
+			s.log.Info("upgraded scene to the plate library", "scene", sum.ID, "change", note)
 		}
 		n++
 	}

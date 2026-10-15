@@ -13,7 +13,9 @@ describe('show ops: picks', () => {
     const att = { id: 'att_new', gobo: 'blinds', name: 'blinds', visible: true, opacity: 1, rotation: 0, offsetX: 0, offsetY: 0, scale: 1.4, params: {}, motion: null }
     const s = applyPatch({ ...scene, mode: 'live' }, ops.pickAttachment({ ...scene, mode: 'live' }, 'static', att))
     expect(s.mode).toBe('static')
-    expect(s.backdrop.static.attachments).toEqual([att])
+    // (§16) the pick takes the place of the attachment it replaces and keeps the light
+    const old = scene.backdrop.static.attachments![0]
+    expect(s.backdrop.static.attachments).toEqual([{ ...att, id: old.id, rotation: old.rotation, scale: old.scale, offsetX: old.offsetX, offsetY: old.offsetY, opacity: old.opacity, visible: old.visible, motion: old.motion }])
     expect(s.backdrop.static.light).toEqual(scene.backdrop.static.light)
     expect(s.backdrop.static.layers).toEqual([])
   })
@@ -25,7 +27,7 @@ describe('show ops: picks', () => {
     const l = s.backdrop.scenery.layers
     expect(l).toHaveLength(1)
     expect(l[0]).toMatchObject({ id: 'lay_flowers', kind: 'video', ref: 'youtube:aqz-KE-bpKQ' })
-    expect(l[0].params).toMatchObject({ blur: 0.74, brightness: 0.66, warmth: 0, drift: 0.1, start: 3, end: 0, audio: false })
+    expect(l[0].params).toMatchObject({ blur: 0.74, brightness: 0.92, warmth: 0, drift: 0.1, start: 3, end: 0, audio: false })
   })
 
   it('a gradient pick keeps the id only', () => {

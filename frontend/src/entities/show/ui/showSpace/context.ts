@@ -1,5 +1,6 @@
 import { createContext, useContext } from 'react'
 import type { Hub } from '../../../../shared/lib/ws'
+import type { StaticTry } from '../../../catalog/staticTry'
 import type { Catalog } from '../../../catalog/types'
 import type { EffectDef } from '../../../effect/types'
 import type { SceneEditing } from '../../../scene/editing'
@@ -35,6 +36,12 @@ export interface ShowState {
   /** the selected live layer */
   liveLayer: string | null
   setLiveLayer: (id: string | null) => void
+  /** (§16) the live layer being tried in the hero (a procedural id), not on air; null = the hero shows the wall */
+  trying: string | null
+  setTrying: (id: string | null) => void
+  /** (§16) the attachment or background layer being tried in the static hero, not on air */
+  staticTry: StaticTry | null
+  setStaticTry: (t: StaticTry | null) => void
   /** scenery category open in the picker */
   presetMode: BackdropMode
 }

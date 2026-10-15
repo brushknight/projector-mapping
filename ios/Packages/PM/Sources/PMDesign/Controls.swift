@@ -243,6 +243,8 @@ public struct FillSlider: View {
                         let next = min(1, max(0, (start ?? value) + p.translation.width / max(1, g.size.width)))
                         local = next
                         onChange(next)
+                    case .tap:
+                        break
                     case .ended, .cancelled:
                         let last = local
                         start = nil
@@ -302,18 +304,17 @@ public struct StripSlider: View {
             .contentShape(Rectangle())
             .opacity(enabled ? 1 : 0.5)
             // A sideways drag moves the knob to the finger; a tap jumps there. Vertical swipes scroll the page.
+            // A tap only counts when the page was still (the lock gives `.tap`): catching a scroll never moves it.
             .horizontalPan(enabled: enabled) { p in
                 switch p.phase {
                 case .began, .changed:
                     dragging = true
                     onChange(min(1, max(0, p.location.x / max(1, g.size.width))))
+                case .tap:
+                    onChange(min(1, max(0, p.location.x / max(1, g.size.width))))
                 case .ended, .cancelled:
                     dragging = false
                 }
-            }
-            .onTapGesture(coordinateSpace: .local) { loc in
-                guard enabled else { return }
-                onChange(min(1, max(0, loc.x / max(1, g.size.width))))
             }
         }
         .frame(height: 40)

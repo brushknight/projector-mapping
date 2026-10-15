@@ -59,7 +59,7 @@ func (p *Presets) Create(ctx context.Context, name, mode, sceneID string) (*scen
 	if !scene.PresetModes[mode] {
 		return nil, app_errors.BadRequest("mode must be static, live, color or scenery.")
 	}
-	pr := &scene.Preset{ID: services.NewID("pre"), Name: name, Mode: mode, Backdrop: *sc.Backdrop.Stack(mode), CreatedAt: time.Now().UTC()}
+	pr := &scene.Preset{ID: services.NewID("pre"), Name: name, Mode: mode, Backdrop: *sc.Backdrop.Stack(mode), CreatedAt: time.Now().UTC(), Format: scene.FormatVersion}
 	if err := p.Save(ctx, pr); err != nil {
 		return nil, err
 	}
@@ -94,8 +94,9 @@ func (p *Presets) Apply(ctx context.Context, id, sceneID, by string) (int64, err
 	return p.scenes.commitRebase(ctx, sceneID, ApplyPresetOps(pr, sc), by)
 }
 
-// UpgradeStored rewrites the stored static and live presets from before the light model (protocol §15, Upgrade)
-// and reports how many it changed.
+// UpgradeStored rewrites the stored presets from before the light model (protocol §15, Upgrade) and the plate
+// library (protocol §16, Migration: removed attachments move to their plates, brightness × 1.4 once), logs every
+// move, and reports how many it changed.
 func (p *Presets) UpgradeStored(ctx context.Context) (int, error) {
 	list, err := p.repo.List(ctx)
 	if err != nil {
@@ -103,7 +104,11 @@ func (p *Presets) UpgradeStored(ctx context.Context) (int, error) {
 	}
 	n := 0
 	for i := range list {
-		if !list[i].Upgrade() {
+		changed, notes := list[i].UpgradeNotes()
+		for _, note := range notes {
+			p.scenes.log.Info("upgraded preset to the plate library", "preset", list[i].ID, "change", note)
+		}
+		if !changed {
 			continue
 		}
 		if err := p.repo.Save(ctx, &list[i]); err != nil {

@@ -24,7 +24,10 @@ import (
 // Register adds the backdrop tools.
 func Register(s *mcp.Server, env *tools.Env) {
 	tools.Add(s, env, &mcp.Tool{Name: "catalog_get", Title: "Read the catalog",
-		Description: "What you can put on the wall, compact: gobos (attachments: windows, blinds, leaves, patterns, spots, with their params), " +
+		Description: "What you can put on the wall, compact: gobos (attachments: metal plates in windows, nature, sky, patterns and beams; " +
+			"each follows a reference photo (source); window presets have family window, their preset geometry in window, and take the " +
+			"windowParams: sashes, cols, rows, gap, width, height, frame, mullion, arch, archHeight, spokes, hub, round, taper, taperY, " +
+			"slant, slantY, diamond, diamonds, jewels, slats, slatWidth, vertical), " +
 			"procedural layers (tree sway, clouds, rain…), gradients, colorGenerators (animated colour), scenery photos, the video and sound " +
 			"libraries, motionPresets (sun-lr, drift…) and sceneTemplates. Pass section to get one of them. Read it before you pick ids."}, catalogGet)
 	tools.Add(s, env, &mcp.Tool{Name: "scene_list", Title: "List the scenes",
@@ -32,7 +35,7 @@ func Register(s *mcp.Server, env *tools.Env) {
 			"Also says whether your backdrop writes go live (the editor's \"agents edit live\" switch) or into your draft."}, sceneList)
 	tools.Add(s, env, &mcp.Tool{Name: "scene_create", Title: "Create a scene",
 		Description: "Creates a scene of a kind (static, live, color, scenery or mapping) from a template (sceneTemplates in catalog_get; " +
-			"default: the kind's first template, for example static-window: a 4-pane window at 3200 K with the sun pass ready but off). " +
+			"default: the kind's first template, for example static-window: the 6-pane grid window plate at 3200 K with the sun pass ready but off). " +
 			"It does not go on the wall: scene_activate does that."}, sceneCreate)
 	tools.Add(s, env, &mcp.Tool{Name: "scene_activate", Title: "Put a scene on the wall",
 		Description: "Puts a scene (id or name) on the wall; its kind's mode goes on air. Needs the editor's \"agents edit live\" switch or " +
@@ -41,13 +44,15 @@ func Register(s *mcp.Server, env *tools.Env) {
 		Description: "Sets the scene's mode: static (light through attachments), live (animated layers), color (gradients), scenery (photo or " +
 			"video) or objects (mapped objects and the timeline). Live on the wall with \"agents edit live\", else in your draft."}, modeSet)
 	tools.Add(s, env, &mcp.Tool{Name: "light_set", Title: "Change the light",
-		Description: "Changes the stack light of static (default) or live: intensity, focus (1 sharp, 0 soft), colour as kelvin+tint (CCT) or " +
+		Description: "Changes the stack light of static (default) or live: intensity, focus (the attachments: 1 sharp, 0 soft), backgroundFocus (the background or live layers under them), colour as kelvin+tint (CCT) or " +
 			"hue+sat (HSI), fx (none, candle, fire, lightning, paparazzi, tv, breathe, strobe, police) with fxSpeed, a colorLayer " +
-			"({kind: gradient|generator, ref, params?}, or {kind: none} to clear), lens fringe, vignette and haze, and the frame slide " +
+			"({kind: gradient|generator, ref, params?}, or {kind: none} to clear), lens fringe and vignette, and the frame slide " +
 			"(slideX, slideY in frame fractions -1..1). Only the fields you pass change. Live on the wall with \"agents edit live\", else in your draft."}, lightSet)
 	tools.Add(s, env, &mcp.Tool{Name: "attachment_add", Title: "Add an attachment",
-		Description: "Adds a gobo (catalog_get gobos) in front of the light of static (default) or live, with the catalog's scale, rotation " +
-			"and params (yours override them; params include throw 0..1, skew -1..1, depth 0..1 and the gobo's own: panes, slats…). " +
+		Description: "Adds a gobo (a metal plate from catalog_get gobos) in front of the light of static (default) or live, with the " +
+			"catalog's scale, rotation and params (yours override them; params include throw 0..1, skew -1..1, depth 0..1, field " +
+			"round|fill|stretch|tile, and for a window preset its geometry: cols, rows, sashes, gap, width, height, frame, mullion, arch, " +
+			"archHeight, spokes, hub, round, taper, taperY, slant, slantY, diamond, diamonds, jewels, slats, slatWidth, vertical). " +
 			"motion takes a motionPresets id (sun-lr, sun-rl, drift, sway, rise, set). More attachments block more light. Returns its id."}, attachmentAdd)
 	tools.Add(s, env, &mcp.Tool{Name: "attachment_update", Title: "Change an attachment",
 		Description: "Changes an attachment by id: gobo, name, visible, opacity (how much light it blocks), rotation (degrees), offsetX/offsetY " +
@@ -55,12 +60,11 @@ func Register(s *mcp.Server, env *tools.Env) {
 	tools.Add(s, env, &mcp.Tool{Name: "attachment_remove", Title: "Remove an attachment", Description: "Removes an attachment by id."}, attachmentRemove)
 	tools.Add(s, env, &mcp.Tool{Name: "gobo_set", Title: "Pick one gobo",
 		Description: "The quick pick: replaces every attachment of static (default) or live with one of this gobo (catalog defaults, your " +
-			"params on top). It keeps the light, and the old attachment's id and motion."}, goboSet)
+			"params on top). It keeps the light, and the old attachment's id, placement, opacity and motion."}, goboSet)
 	tools.Add(s, env, &mcp.Tool{Name: "backdrop_set", Title: "Set the backdrop layers",
-		Description: "Replaces the layers of live, color or scenery. Each layer: {kind: procedural|gradient|generator|photo|video|solid, ref, " +
+		Description: "Replaces the layers of static (its background under the attachments: solid, gradient, generator or procedural), live, color or scenery. Each layer: {kind: procedural|gradient|generator|photo|video|solid, ref, " +
 			"name?, visible?, opacity?, blend?: normal|multiply|screen|add, params?}; ids are made, catalog defaults filled in. In live, " +
-			"multiply layers (tree sway, clouds) cast shadows into the light; gobos go in attachments (attachment_add). The static stack " +
-			"has no layers: use gobo_set or attachment_add."}, backdropSet)
+			"multiply layers (tree sway, clouds) cast shadows into the light; gobos go in attachments (attachment_add)."}, backdropSet)
 	tools.Add(s, env, &mcp.Tool{Name: "motion_set", Title: "Move the light or an attachment",
 		Description: "Sets the motion of the light (target light), an attachment (its id) or a photo or video layer (its id): a preset from " +
 			"motionPresets (sun-lr: the sun passes left to right…) and/or from, via, to (frame fractions -2..2), duration (seconds per pass), " +
@@ -243,17 +247,51 @@ func catalogGet(ctx context.Context, e *tools.Env, in catalogIn) (*mcp.CallToolR
 	build := map[string]func() (any, error){
 		"gobos": func() (any, error) {
 			out := []map[string]any{}
+			// (protocol §16) the window params once, not on every window preset
+			windowKeys := map[string]bool{}
+			for _, g := range c.WindowParamGroups {
+				for _, k := range g.Params {
+					windowKeys[k] = true
+				}
+			}
+			var windowParams catalog.Schema
 			for _, it := range c.Gobos {
 				g := c.Gobo(it.ID)
+				own := g.Params
 				item := map[string]any{"id": g.ID, "name": g.Name, "category": g.Category, "description": g.Description,
-					"params": compactSchema(g.Params), "defaults": g.Defaults, "scale": g.Attachment.Scale, "rotation": g.Attachment.Rotation, "focus": g.Focus}
+					"defaults": g.Defaults, "scale": g.Attachment.Scale, "rotation": g.Attachment.Rotation, "focus": g.Focus}
+				if g.Family == "window" {
+					own = catalog.Schema{}
+					preset := map[string]any{}
+					if windowParams == nil {
+						windowParams = catalog.Schema{}
+					}
+					for k, p := range g.Params {
+						if !windowKeys[k] {
+							own[k] = p
+							continue
+						}
+						preset[k] = p.Default
+						if _, ok := windowParams[k]; !ok {
+							wp := p
+							wp.Default = nil
+							windowParams[k] = wp
+						}
+					}
+					item["family"], item["window"] = g.Family, preset
+				}
+				item["params"] = compactSchema(own)
 				if g.Source != "" {
 					item["source"] = g.Source
 				}
 				out = append(out, item)
 			}
-			return map[string]any{"items": out, "goboParams": compactSchema(c.GoboParams), "light": compactSchema(c.StackLight.Params),
-				"attachment": compactSchema(c.StackLight.AttachmentParams), "kelvin": c.StackLight.Kelvin}, nil
+			res := map[string]any{"items": out, "goboParams": compactSchema(c.GoboParams), "light": compactSchema(c.StackLight.Params),
+				"attachment": compactSchema(c.StackLight.AttachmentParams), "kelvin": c.StackLight.Kelvin, "categories": c.GoboCategories}
+			if windowParams != nil {
+				res["windowParams"], res["windowParamGroups"] = compactSchema(windowParams), c.WindowParamGroups
+			}
+			return res, nil
 		},
 		"procedural": func() (any, error) {
 			out := []map[string]any{}

@@ -79,6 +79,7 @@ type Hub struct {
 	camStatAt time.Time
 	camStatM  []byte
 	camDevice string
+	camTimes  []time.Time // arrival times of the last preview frames
 
 	telMu     sync.RWMutex
 	telemetry map[string]*devices.Telemetry
@@ -781,6 +782,25 @@ func (h *Hub) command(ctx context.Context, c *conn, m realtime.Message) {
 		}
 		h.sendTo(c, realtime.Message{T: "ack", Re: m.ID, D: realtime.Data(ack)})
 		return
+	case cmd.Name == "calibration.aim":
+		var a struct {
+			On        bool         `json:"on"`
+			CameraROI *camera.Rect `json:"cameraRoi"`
+		}
+		_ = json.Unmarshal(cmd.Args, &a)
+		if h.svc.Calibrations == nil {
+			err = app_errors.Unavailable("Calibration is not available.")
+			break
+		}
+		// the output answers after 3 frames; don't hold the reader
+		go func() {
+			if err := h.svc.Calibrations.Aim(context.Background(), a.On, a.CameraROI); err != nil {
+				h.sendTo(c, errMsg(m.ID, err))
+				return
+			}
+			h.sendTo(c, realtime.Message{T: "ack", Re: m.ID, D: realtime.Data(map[string]bool{"on": a.On})})
+		}()
+		return
 	case cmd.Name == "camera.capture":
 		if h.svc.Camera == nil || !h.Has(realtime.Target{Cap: "camera"}) {
 			h.sendTo(c, realtime.Message{T: "error", Re: m.ID, D: realtime.Data(map[string]string{"code": "no_phone",
@@ -845,14 +865,25 @@ func (h *Hub) camera(c *conn, m realtime.Message) {
 		}
 		if json.Unmarshal(m.D, &f) == nil {
 			if raw, err := base64.StdEncoding.DecodeString(f.JPEG); err == nil {
-				h.camFrame = &cameraport.Frame{Seq: f.Seq, Width: f.Width, Height: f.Height, JPEG: raw, At: time.Now()}
+				now := time.Now()
+				h.camFrame = &cameraport.Frame{Seq: f.Seq, Width: f.Width, Height: f.Height, JPEG: raw, At: now}
 				h.camFrameM = b
+				h.camTimes = append(h.camTimes, now)
+				if len(h.camTimes) > 64 {
+					h.camTimes = append(h.camTimes[:0], h.camTimes[len(h.camTimes)-64:]...)
+				}
+			} else {
+				h.log.Warn("camera frame is not base64", "err", err)
 			}
+		} else {
+			h.log.Warn("camera frame is malformed")
 		}
 	} else {
 		var st camera.Status
-		if json.Unmarshal(m.D, &st) == nil {
+		if err := json.Unmarshal(m.D, &st); err == nil {
 			h.camStat, h.camStatAt, h.camStatM = &st, time.Now(), b
+		} else {
+			h.log.Warn("camera status is malformed", "err", err)
 		}
 	}
 	h.camMu.Unlock()
@@ -1021,6 +1052,46 @@ func (h *Hub) Status() (camera.Status, time.Time, bool) {
 		return camera.Status{}, time.Time{}, false
 	}
 	return *h.camStat, h.camStatAt, true
+}
+
+// FrameRate implements camera.Feed: frames received in the last 2 s, per second.
+func (h *Hub) FrameRate() float64 {
+	h.camMu.RLock()
+	defer h.camMu.RUnlock()
+	cut := time.Now().Add(-2 * time.Second)
+	n := 0
+	var first time.Time
+	for _, t := range h.camTimes {
+		if t.After(cut) {
+			if n == 0 {
+				first = t
+			}
+			n++
+		}
+	}
+	if n < 2 {
+		return 0
+	}
+	span := time.Since(first).Seconds()
+	if span < 0.5 {
+		span = 0.5
+	}
+	return float64(n-1) / span
+}
+
+// ProjectorOutput implements camera.Feed.
+func (h *Hub) ProjectorOutput() (cameraport.Output, bool) {
+	c := h.pick(realtime.Target{Role: string(devices.RoleOutput)})
+	if c == nil {
+		return cameraport.Output{}, false
+	}
+	o := cameraport.Output{DeviceID: c.dev.ID, Name: c.dev.Name}
+	h.telMu.RLock()
+	if t, ok := h.telemetry[c.dev.ID]; ok && t != nil {
+		o.Width, o.Height, o.FPS = t.Width, t.Height, t.FPS
+	}
+	h.telMu.RUnlock()
+	return o, true
 }
 
 // CameraDevice implements camera.Feed.

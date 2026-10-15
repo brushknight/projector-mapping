@@ -22,22 +22,23 @@ type ColorLayerIn struct {
 }
 
 type lightIn struct {
-	Stack      string        `json:"stack,omitempty" jsonschema:"static or live; default live when the scene is in live mode, else static"`
-	Intensity  *float64      `json:"intensity,omitempty" jsonschema:"0..1"`
-	Focus      *float64      `json:"focus,omitempty" jsonschema:"0..1: 1 is sharp, 0 fully soft"`
-	Kelvin     *float64      `json:"kelvin,omitempty" jsonschema:"colour temperature 1000..12000 (CCT): 2700 warm tungsten, 3200 golden, 5600 daylight, 6500 cool"`
-	Tint       *float64      `json:"tint,omitempty" jsonschema:"-1..1, negative green, positive magenta"`
-	Hue        *float64      `json:"hue,omitempty" jsonschema:"0..360 (HSI)"`
-	Sat        *float64      `json:"sat,omitempty" jsonschema:"0..1 (HSI)"`
-	ColorMode  string        `json:"colorMode,omitempty" jsonschema:"cct or hsi; kelvin or tint imply cct, hue or sat imply hsi"`
-	FX         string        `json:"fx,omitempty" jsonschema:"none, candle, fire, lightning, paparazzi, tv, breathe, strobe or police"`
-	FXSpeed    *float64      `json:"fxSpeed,omitempty" jsonschema:"0..1"`
-	ColorLayer *ColorLayerIn `json:"colorLayer,omitempty" jsonschema:"colours the light: {kind: gradient|generator, ref, params?}; {kind: none} clears it"`
-	Fringe     *float64      `json:"fringe,omitempty" jsonschema:"0..1 chromatic edge of the lens"`
-	Vignette   *float64      `json:"vignette,omitempty" jsonschema:"0..1 falloff towards the corners"`
-	Haze       *float64      `json:"haze,omitempty" jsonschema:"0..1 dust and haze in the beam"`
-	SlideX     *float64      `json:"slideX,omitempty" jsonschema:"frame slide -1..1 of the width: 0.25 moves the whole picture a quarter to the right"`
-	SlideY     *float64      `json:"slideY,omitempty" jsonschema:"frame slide -1..1 of the height, down"`
+	Stack     string   `json:"stack,omitempty" jsonschema:"static or live; default live when the scene is in live mode, else static"`
+	Intensity *float64 `json:"intensity,omitempty" jsonschema:"0..1"`
+	Focus     *float64 `json:"focus,omitempty" jsonschema:"attachment focus 0..1: 1 is sharp (the default), 0 fully soft"`
+	// BackgroundFocus blurs the background (static) or the live layers (live), protocol §16.
+	BackgroundFocus *float64      `json:"backgroundFocus,omitempty" jsonschema:"background focus 0..1: the colour, background layers (static) or live layers (live) under the attachments; 1 is sharp"`
+	Kelvin          *float64      `json:"kelvin,omitempty" jsonschema:"colour temperature 1000..12000 (CCT): 2700 warm tungsten, 3200 golden, 5600 daylight, 6500 cool"`
+	Tint            *float64      `json:"tint,omitempty" jsonschema:"-1..1, negative green, positive magenta"`
+	Hue             *float64      `json:"hue,omitempty" jsonschema:"0..360 (HSI)"`
+	Sat             *float64      `json:"sat,omitempty" jsonschema:"0..1 (HSI)"`
+	ColorMode       string        `json:"colorMode,omitempty" jsonschema:"cct or hsi; kelvin or tint imply cct, hue or sat imply hsi"`
+	FX              string        `json:"fx,omitempty" jsonschema:"none, candle, fire, lightning, paparazzi, tv, breathe, strobe or police"`
+	FXSpeed         *float64      `json:"fxSpeed,omitempty" jsonschema:"0..1"`
+	ColorLayer      *ColorLayerIn `json:"colorLayer,omitempty" jsonschema:"colours the light: {kind: gradient|generator, ref, params?}; {kind: none} clears it"`
+	Fringe          *float64      `json:"fringe,omitempty" jsonschema:"0..1 chromatic edge of the lens"`
+	Vignette        *float64      `json:"vignette,omitempty" jsonschema:"0..1 falloff towards the corners"`
+	SlideX          *float64      `json:"slideX,omitempty" jsonschema:"frame slide -1..1 of the width: 0.25 moves the whole picture a quarter to the right"`
+	SlideY          *float64      `json:"slideY,omitempty" jsonschema:"frame slide -1..1 of the height, down"`
 }
 
 func setF(dst *float64, v *float64) {
@@ -87,6 +88,7 @@ func lightSet(ctx context.Context, e *tools.Env, in lightIn) (*mcp.CallToolResul
 	}
 	setF(&l.Intensity, in.Intensity)
 	setF(&l.Focus, in.Focus)
+	setF(&l.BackgroundFocus, in.BackgroundFocus)
 	if in.Kelvin != nil || in.Tint != nil {
 		l.Color.Mode = "cct"
 	}
@@ -111,7 +113,6 @@ func lightSet(ctx context.Context, e *tools.Env, in lightIn) (*mcp.CallToolResul
 	}
 	setF(&l.Fringe, in.Fringe)
 	setF(&l.Vignette, in.Vignette)
-	setF(&l.Haze, in.Haze)
 	setF(&l.Slide.X, in.SlideX)
 	setF(&l.Slide.Y, in.SlideY)
 	if err := w.write(ctx, []docpatch.Op{docpatch.Replace("/backdrop/"+mode+"/light", l)}); err != nil {
@@ -124,13 +125,13 @@ func lightSet(ctx context.Context, e *tools.Env, in lightIn) (*mcp.CallToolResul
 	if l.ColorLayer != nil {
 		col = l.ColorLayer.Kind + " " + l.ColorLayer.Ref
 	}
-	return tools.Text("The %s light is intensity %.2f, focus %.2f, %s, fx %s, slide (%.2f, %.2f), %s.", mode, l.Intensity, l.Focus, col,
+	return tools.Text("The %s light is intensity %.2f, attachment focus %.2f, background focus %.2f, %s, fx %s, slide (%.2f, %.2f), %s.", mode, l.Intensity, l.Focus, l.BackgroundFocus, col,
 		l.FX.Kind, l.Slide.X, l.Slide.Y, w.where(mode)), nil
 }
 
 type attachmentIn struct {
 	Stack    string         `json:"stack,omitempty" jsonschema:"static or live; default live when the scene is in live mode, else static"`
-	Gobo     string         `json:"gobo" jsonschema:"a gobos id from catalog_get (window-4, blinds, leaves-light, dots…)"`
+	Gobo     string         `json:"gobo" jsonschema:"a gobos id from catalog_get (plate-grid-window, plate-blinds, plate-moon-and-stars, plate-dots…)"`
 	Params   map[string]any `json:"params,omitempty" jsonschema:"the gobo's params (catalog_get gobos) plus throw 0..1, skew -1..1, depth 0..1; missing ones take the catalog defaults"`
 	Rotation *float64       `json:"rotation,omitempty" jsonschema:"degrees -360..360; default the gobo's"`
 	OffsetX  *float64       `json:"offsetX,omitempty" jsonschema:"-2..2 frame widths from the centre"`
@@ -310,8 +311,10 @@ func goboSet(ctx context.Context, e *tools.Env, in goboIn) (*mcp.CallToolResult,
 		return nil, err
 	}
 	if len(st.Attachments) > 0 {
-		// a pick keeps the place: the old attachment's id (timeline tracks follow it) and its motion
-		a.ID, a.Motion = st.Attachments[0].ID, st.Attachments[0].Motion
+		// a pick keeps the place (protocol §16): the old attachment's id (timeline tracks follow it), its placement,
+		// opacity and motion; only the plate and its own params change
+		o := st.Attachments[0]
+		a.ID, a.Motion, a.Rotation, a.OffsetX, a.OffsetY, a.Scale, a.Opacity, a.Visible = o.ID, o.Motion, o.Rotation, o.OffsetX, o.OffsetY, o.Scale, o.Opacity, o.Visible
 	}
 	ops := append(lightOps(mode, st), docpatch.Replace("/backdrop/"+mode+"/attachments", []scene.Attachment{a}))
 	if err := w.write(ctx, ops); err != nil {
@@ -333,17 +336,15 @@ type LayerIn struct {
 }
 
 type backdropIn struct {
-	Mode   string    `json:"mode" jsonschema:"live, color or scenery"`
+	Mode   string    `json:"mode" jsonschema:"static (background layers under the attachments: solid, gradient, generator or procedural), live, color or scenery"`
 	Layers []LayerIn `json:"layers" jsonschema:"bottom to top"`
 }
 
 func backdropSet(ctx context.Context, e *tools.Env, in backdropIn) (*mcp.CallToolResult, error) {
 	switch in.Mode {
-	case scene.ModeLive, scene.ModeColor, scene.ModeScenery:
-	case scene.ModeStatic:
-		return nil, app_errors.BadRequest("The static stack has no layers: it is one light through attachments. Use gobo_set or attachment_add, and light_set.")
+	case scene.ModeStatic, scene.ModeLive, scene.ModeColor, scene.ModeScenery:
 	default:
-		return nil, app_errors.BadRequest("mode must be live, color or scenery.")
+		return nil, app_errors.BadRequest("mode must be static, live, color or scenery.")
 	}
 	w, err := open(ctx, e, "")
 	if err != nil {
@@ -354,6 +355,9 @@ func backdropSet(ctx context.Context, e *tools.Env, in backdropIn) (*mcp.CallToo
 	for i, li := range in.Layers {
 		if li.Kind == "gobo" {
 			return nil, app_errors.BadRequest("Layer %d is a gobo: gobos are attachments in front of the light. Use attachment_add {stack: %s, gobo: %q}.", i, in.Mode, li.Ref)
+		}
+		if in.Mode == scene.ModeStatic && !scene.StaticLayerKinds[li.Kind] {
+			return nil, app_errors.BadRequest("Layer %d: the static stack takes background layers under the attachments: solid, gradient, generator or procedural, not %s.", i, li.Kind)
 		}
 		l, err := scene.NewLayer(cat(e), li.Kind, li.Ref)
 		if err != nil {

@@ -92,7 +92,7 @@ public struct LightCatalog: Decodable, Sendable, Hashable {
     enum CodingKeys: String, CodingKey { case params, fx, cctPresets }
 }
 
-/// A catalog gobo (an attachment's shape, protocol §15 catalog v4).
+/// A catalog gobo (an attachment's shape, protocol §15 catalog v4; since catalog 6 every gobo is a metal plate, §16).
 public struct GoboItem: Decodable, Sendable, Hashable, Identifiable {
     public struct Start: Decodable, Sendable, Hashable {
         public var scale: Double
@@ -109,8 +109,11 @@ public struct GoboItem: Decodable, Sendable, Hashable, Identifiable {
     public var id: String
     public var name: String
     public var description: String
-    /// `windows` | `blinds` | `nature` | `patterns` | `spots` | `plates` (v3 catalogs say other things; see `browseCategory`).
+    /// Catalog 6: `windows` | `nature` | `sky` | `patterns` | `beams` (older catalogs say other things; see `browseCategory`).
     public var category: String
+    /// (catalog 6, §16) `window` for a parametric window preset: its params hold the window geometry, the preset values
+    /// as defaults. Nil for every other plate.
+    public var family: String?
     /// Relative to `/catalog/assets/`, e.g. `thumbs/window-4.png`.
     public var thumb: String?
     /// (catalog 5, plates) the metal plate itself, e.g. `thumbs/plate-sunburst-metal.png`.
@@ -135,17 +138,21 @@ public struct GoboItem: Decodable, Sendable, Hashable, Identifiable {
         thumb = c.opt(.thumb)
         metalThumb = c.opt(.metalThumb)
         source = c.opt(.source)
+        family = c.opt(.family)
         params = c.v(.params, ParamList())
         attachment = c.v(.attachment, Start())
         focus = c.opt(.focus)
         defaults = c.v(.defaults, [:])
     }
 
-    enum CodingKeys: String, CodingKey { case id, name, description, category, thumb, metalThumb, source, params, attachment, focus, defaults }
+    enum CodingKeys: String, CodingKey { case id, name, description, category, thumb, metalThumb, source, family, params, attachment, focus, defaults }
 
-    /// The browser category: the v4 one, or a guess for a v3 catalog.
+    /// (§16) A parametric window preset.
+    public var isWindow: Bool { family == "window" }
+
+    /// The browser category: the catalog's own, or a guess for a v3 catalog.
     public var browseCategory: String {
-        if GoboCategory.known.contains(category) { return category }
+        if GoboCategory.known.contains(category) || GoboCategory.v6.contains(category) { return category }
         switch id {
         case let i where i.contains("blind") || i.contains("shutters"): return "blinds"
         case let i where i.contains("window") || i == "arch": return "windows"
@@ -158,6 +165,8 @@ public struct GoboItem: Decodable, Sendable, Hashable, Identifiable {
 
 public struct GoboCategory: Decodable, Sendable, Hashable, Identifiable {
     public static let known = ["windows", "blinds", "nature", "patterns", "spots", "plates"]
+    /// Catalog 6 (§16): every gobo is a plate, grouped like this.
+    public static let v6 = ["windows", "nature", "sky", "patterns", "beams"]
     public var id: String
     public var name: String
     public init(id: String, name: String) { self.id = id; self.name = name }
@@ -167,6 +176,21 @@ public struct GoboCategory: Decodable, Sendable, Hashable, Identifiable {
         name = c.v(.name, "")
     }
     enum CodingKeys: String, CodingKey { case id, name }
+}
+
+/// (catalog 6, §16) One group of a parametric window's geometry params, in display order.
+public struct WindowParamGroup: Decodable, Sendable, Hashable, Identifiable {
+    public var id: String
+    public var name: String
+    public var params: [String]
+    public init(id: String, name: String, params: [String]) { self.id = id; self.name = name; self.params = params }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = c.v(.id, "")
+        name = c.v(.name, c.v(.id, ""))
+        params = c.v(.params, [])
+    }
+    enum CodingKeys: String, CodingKey { case id, name, params }
 }
 
 /// `stackLight`: ranges for the light and attachment controls.
@@ -273,6 +297,11 @@ public struct ProceduralItem: Decodable, Sendable, Hashable, Identifiable {
     public var params: ParamList
     /// Relative to `/catalog/assets/` (catalog v4).
     public var thumb: String?
+    /// (catalog 6, §16) a vertical JPEG strip of `animFrames` frames (192 × 108 each) that loops, relative to
+    /// `/catalog/assets/`, e.g. `thumbs/tree-sway-anim.jpg`. Nil until rendered.
+    public var animThumb: String?
+    public var animFrames: Int?
+    public var animFps: Double?
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -282,9 +311,15 @@ public struct ProceduralItem: Decodable, Sendable, Hashable, Identifiable {
         animated = c.v(.animated, false)
         params = c.v(.params, ParamList())
         thumb = c.opt(.thumb)
+        animThumb = c.opt(.animThumb)
+        animFrames = c.opt(.animFrames)
+        animFps = c.opt(.animFps)
     }
 
-    enum CodingKeys: String, CodingKey { case id, name, category, animated, params, thumb }
+    enum CodingKeys: String, CodingKey { case id, name, category, animated, params, thumb, animThumb, animFrames, animFps }
+
+    /// (§16) Shadow layers (nature, weather, texture) block light like an attachment: they join the mask (multiply).
+    public var isShadow: Bool { ["nature", "weather", "texture"].contains(category) }
 
     /// The params' defaults as a layer `params` object.
     public var defaults: JSONObject {
@@ -359,6 +394,8 @@ public struct Catalog: Decodable, Sendable, Hashable {
     public var motionLoops: [String]
     public var sceneKinds: [SceneKindItem]
     public var sceneTemplates: [SceneTemplate]
+    /// Catalog 6 (§16): the window geometry groups (empty in older catalogs).
+    public var windowParamGroups: [WindowParamGroup]
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -383,11 +420,13 @@ public struct Catalog: Decodable, Sendable, Hashable {
         let kinds: [SceneKindItem] = c.v(.sceneKinds, [])
         sceneKinds = kinds.isEmpty ? SceneKind.all.map { SceneKindItem(id: $0, name: $0, mode: SceneKind.mode($0)) } : kinds
         sceneTemplates = c.v(.sceneTemplates, [])
+        windowParamGroups = c.v(.windowParamGroups, [])
     }
 
     enum CodingKeys: String, CodingKey {
         case version, light, gobos, procedural, gradients, gradientParams, scenery, photoParams, videoParams, effects
         case stackLight, goboParams, goboCategories, colorGenerators, motionPresets, motionEasings, motionLoops, sceneKinds, sceneTemplates
+        case windowParamGroups
     }
 
     public static let empty = try! Catalog.decode(Data("{}".utf8))
@@ -422,6 +461,36 @@ public struct Catalog: Decodable, Sendable, Hashable {
         return String(path.dropFirst(7).dropLast(4))
     }
 
+    /// (catalog 6) The animated strip of a procedural layer: its path under `/catalog/assets/`, frames and fps, or nil.
+    public func animStrip(_ id: String) -> (path: String, frames: Int, fps: Double)? {
+        guard let p = procedural(id), let path = p.animThumb, let n = p.animFrames, n > 0 else { return nil }
+        return (path, n, p.animFps ?? 12)
+    }
+
+    /// (§16) A window preset's geometry params, grouped as `windowParamGroups` says (params that no group names go last in
+    /// a group of their own). Empty for any other gobo.
+    public func windowGroups(_ gobo: String) -> [(group: WindowParamGroup, params: [NamedParam])] {
+        guard let item = self.gobo(gobo), item.isWindow else { return [] }
+        var used = Set<String>(["field"])
+        var out: [(group: WindowParamGroup, params: [NamedParam])] = []
+        for g in windowParamGroups {
+            let ps = g.params.compactMap { k in item.params[k].map { NamedParam(key: k, spec: $0) } }
+            ps.forEach { used.insert($0.key) }
+            if !ps.isEmpty { out.append((g, ps)) }
+        }
+        let rest = item.params.items.filter { !used.contains($0.key) }
+        if !rest.isEmpty { out.append((WindowParamGroup(id: "more", name: "more", params: rest.map(\.key)), rest)) }
+        return out
+    }
+
+    /// (§16) The window geometry keys of a gobo: the keys `windowParamGroups` lists (every own param but `field` in a
+    /// catalog without groups). "Reset to preset" removes them; any of them in an attachment's params is a change.
+    public func windowKeys(_ gobo: String) -> [String] {
+        guard let item = self.gobo(gobo), item.isWindow else { return [] }
+        let grouped = Set(windowParamGroups.flatMap(\.params))
+        return item.params.items.map(\.key).filter { grouped.isEmpty ? $0 != "field" : grouped.contains($0) }
+    }
+
     /// (catalog 5) The thumbnail id of a plate's metal picture (the plate itself), nil for other gobos.
     public func metalThumbId(_ id: String) -> String? {
         guard let path = gobo(id)?.metalThumb, path.hasPrefix("thumbs/"), path.hasSuffix(".png") else { return nil }
@@ -430,8 +499,10 @@ public struct Catalog: Decodable, Sendable, Hashable {
 
     /// The params an attachment of `item` starts with: the gobo's own defaults, then `goboParams` defaults overridden
     /// by the item's `defaults` (§15).
+    /// A window preset (§16) keeps its geometry out: missing window keys take the preset through the catalog defaults.
     public func attachmentParams(_ item: GoboItem) -> JSONObject {
         var o = Self.defaults(item.params)
+        if item.isWindow { for k in windowKeys(item.id) { o[k] = nil } }
         for (k, v) in Self.defaults(goboParams) { o[k] = v }
         for (k, v) in item.defaults { o[k] = v }
         return o
@@ -464,7 +535,7 @@ public struct Catalog: Decodable, Sendable, Hashable {
 
     /// Video defaults (§14) when an older catalog has no `videoParams`.
     public var videoDefaults: JSONObject {
-        var o: JSONObject = ["blur": 0.2, "brightness": 0.8, "warmth": 0, "drift": 0, "start": 0, "end": 0, "audio": false, "volume": 1]
+        var o: JSONObject = ["blur": 0.2, "brightness": 0.9, "warmth": 0, "drift": 0, "start": 0, "end": 0, "audio": false, "volume": 1]
         for (k, v) in Self.defaults(videoParams) { o[k] = v }
         return o
     }

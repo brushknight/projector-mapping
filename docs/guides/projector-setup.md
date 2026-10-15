@@ -20,11 +20,36 @@ state (a few KB per change), never video. Anything that runs Chrome and has an H
    projmap open --out --display 2
    ```
 
-   This starts a separate Chrome instance (its own profile in the data folder, `chrome-out/`) in kiosk mode at the
-   top left of display 2, with autoplay allowed and translation off. Display 1 is the main display; if you have more
-   screens, the numbers follow macOS's order. If the display is not found it opens on the main one and says so.
+   This starts a separate Chrome instance (its own profile in the data folder, `chrome-out/`) as an app window with
+   no address bar, autoplay allowed and translation off, then moves it onto display 2 and puts the page in full
+   screen there by itself (no click, no Chrome bars, through Chrome's DevTools on a loopback port of that profile).
+   Display 1 is the main display; if you have more screens, the numbers follow macOS's order. If the display is not
+   found it opens on the main one and says so.
 
-3. To leave kiosk mode, focus the window and press ⌘Q.
+   Chrome ignores window positions on a display that sits left of or above the main one, so projmap moves the window
+   with the Accessibility API. The first time, macOS asks to let projmap (or your terminal, for `projmap open`)
+   control the computer: allow it in System Settings → Privacy & Security → Accessibility. projmap then checks the
+   window landed on the display and that `/out` measures exactly that display's pixels (full screen), retries twice,
+   and says where the window went or what it measured if it still did not.
+
+   Or, from the editor on this Mac: **put on projector** (in the Show preview's top bar, and in Set up next to
+   "open viewer") lists the displays attached to the Mac with their resolutions. Pick one and the server opens the
+   same full-screen window there. It works only from the Mac that runs projmap, since it starts Chrome on it.
+
+3. To close the output, focus its window and press ⌘Q (Esc only leaves full screen).
+
+"Open viewer" stays for a windowed preview on your own screen. A Chrome pop-up window keeps its address bar even in
+macOS full screen; only the browser's own full screen hides it, so `/view` and `/out` take it like this:
+
+| on `/view` and `/out` | does |
+| --- | --- |
+| the first click anywhere | goes full screen (on `/out` the same click also enables sound) |
+| double-click, or F | switches full screen on or off |
+| Esc | leaves full screen |
+| 2 s without moving the mouse | hides the cursor (and the viewer's bar) |
+
+Until the page is full screen, a "click for full screen" hint shows for 3 s: in the middle on `/view`, as a small
+note in the corner on `/out`. `?headless=1` hides it.
 
 Tips:
 

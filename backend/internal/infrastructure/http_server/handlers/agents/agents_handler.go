@@ -24,6 +24,7 @@ func (h *Handler) RegisterRoutes(api *echo.Group) {
 	api.GET("/agents/sessions/:id", h.get)
 	api.GET("/agents/sessions/:id/events", h.events)
 	api.POST("/agents/sessions/:id/cancel", h.cancel, middleware.Control)
+	api.GET("/agents/available", h.available)
 	api.GET("/settings", h.settings)
 	api.PATCH("/settings", h.patchSettings, middleware.Editor)
 }
@@ -70,6 +71,10 @@ func (h *Handler) cancel(c echo.Context) error {
 		return err
 	}
 	return c.JSON(http.StatusOK, s)
+}
+
+func (h *Handler) available(c echo.Context) error {
+	return c.JSON(http.StatusOK, h.svc.Available(c.Request().Context()))
 }
 
 func (h *Handler) settings(c echo.Context) error {

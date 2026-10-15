@@ -10,6 +10,7 @@ import (
 	"image"
 	_ "image/jpeg" // still decoders
 	_ "image/png"
+	"math"
 	"sync"
 	"time"
 
@@ -24,6 +25,9 @@ import (
 	"projmap/internal/domain/assets"
 	"projmap/internal/domain/camera"
 )
+
+// CalibrationStillWidth asks the phone to shrink calibration stills before uploading them.
+const CalibrationStillWidth = 1600
 
 // CaptureTimeout bounds one still.
 var CaptureTimeout = 20 * time.Second
@@ -53,16 +57,25 @@ func NewCamera(feed cameraport.Feed, caller realtime.Caller, as assetssvc.AssetS
 // CameraTarget is who answers camera.capture.
 var CameraTarget = realtime.Target{Cap: "camera"}
 
+// StreamingWindow is how recent the last preview frame must be for the feed to count as streaming.
+var StreamingWindow = 2500 * time.Millisecond
+
+// Status reports the feed as the server sees it: streaming and fps come from the frames that actually arrived (the
+// phone's camera.status only adds steady and level), so a phone that says "streaming" while its frames do not reach
+// the server shows as not streaming.
 func (c *Camera) Status(context.Context) camera.FeedStatus {
 	st := camera.FeedStatus{Connected: c.caller.Has(CameraTarget), Device: c.feed.CameraDevice()}
 	if s, at, ok := c.feed.Status(); ok && time.Since(at) < 5*time.Second {
-		st.Streaming, st.FPS, st.Width, st.Height, st.Steady, st.Level = s.Streaming, s.FPS, s.Width, s.Height, s.Steady, s.Level
+		st.Steady, st.Level = s.Steady, s.Level
 	}
 	st.LastFrameMs = -1
 	if f, ok := c.feed.LatestFrame(); ok {
-		st.LastFrameMs = time.Since(f.At).Milliseconds()
-		if st.Width == 0 {
-			st.Width, st.Height = f.Width, f.Height
+		age := time.Since(f.At)
+		st.LastFrameMs = age.Milliseconds()
+		st.Width, st.Height = f.Width, f.Height
+		if age < StreamingWindow {
+			st.Streaming = true
+			st.FPS = math.Round(c.feed.FrameRate()*10) / 10
 		}
 	}
 	return st
@@ -97,7 +110,11 @@ func (c *Camera) Capture(ctx context.Context, kind string) (*assets.Asset, error
 	defer cancel()
 	rpcErr := make(chan error, 1)
 	go func() {
-		res, err := c.caller.Call(ctx, CameraTarget, "camera.capture", map[string]any{"requestId": id, "lock": true})
+		args := map[string]any{"requestId": id, "lock": true, "purpose": kind}
+		if kind == "calibration" {
+			args["maxWidth"] = CalibrationStillWidth // the decoder works at MaxStillWidth; a 12–48 MP still only slows the upload
+		}
+		res, err := c.caller.Call(ctx, CameraTarget, "camera.capture", args)
 		if err != nil {
 			rpcErr <- err
 			return

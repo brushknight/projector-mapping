@@ -15,6 +15,15 @@ func NewAttachment(cat *catalog.Catalog, gobo string, params map[string]any) (At
 		return Attachment{}, fmt.Errorf("gobo %q is not in the catalog", gobo)
 	}
 	p := cat.GoboDefaults(gobo)
+	// (protocol §16) a window preset's geometry stays out: missing params take the preset, so "reset to preset" is
+	// removing them
+	if g.Family == "window" {
+		for _, grp := range cat.WindowParamGroups {
+			for _, k := range grp.Params {
+				delete(p, k)
+			}
+		}
+	}
 	for k, v := range params {
 		p[k] = v
 	}
@@ -59,6 +68,10 @@ func NewLayer(cat *catalog.Catalog, kind, ref string) (Layer, error) {
 	case "procedural":
 		it = cat.ProceduralItem(ref)
 		l.Light = DefaultLight()
+		// (§16) shadows (tree sway, clouds, rain…) are masks over the light, like attachments
+		if it != nil && it.Blend != "" {
+			l.Blend = it.Blend
+		}
 	case "gobo":
 		l.Light = DefaultLight()
 		if g := cat.Gobo(ref); g != nil {
@@ -84,11 +97,15 @@ func findItem(items []catalog.Item, id string) *catalog.Item {
 	return nil
 }
 
+// TemplateWindow is the window the static-window and live-window-tree templates put in front of the light (catalog 6:
+// the 6-pane grid window preset, two sashes of 2 × 4 panes).
+const TemplateWindow = "plate-grid-window"
+
 // FromTemplate builds a new scene from a catalog scene template (protocol §15, Scene kinds):
 //
-//   - static-window: the static light at 3200 K, intensity 0.85, focus 0.68, one window-4 attachment with the sun-lr
+//   - static-window: the static light at 3200 K, intensity 0.85, both focus rings sharp, one plate-grid-window attachment with the sun-lr
 //     motion present but off, parked mid-path (phase 0.5).
-//   - live-window-tree: the live light at 3200 K with a window-4 attachment and a tree-sway layer (multiply).
+//   - live-window-tree: the live light at 3200 K with a plate-grid-window attachment and a tree-sway layer (multiply).
 //   - color-ember: one ember gradient layer. scenery-flowers: one flowers photo layer.
 //   - mapping-empty: mode objects, no objects.
 func FromTemplate(cat *catalog.Catalog, template, id, setupID, name string) (Scene, error) {
@@ -104,7 +121,12 @@ func FromTemplate(cat *catalog.Catalog, template, id, setupID, name string) (Sce
 		l.Color.Kelvin = 3200
 		return &l
 	}
-	window := func() (Attachment, error) { return NewAttachment(cat, "window-4", nil) }
+	// the window a little low-sun stretched and larger than the plate's default, as the old 4-pane window was
+	window := func() (Attachment, error) {
+		a, err := NewAttachment(cat, TemplateWindow, map[string]any{"throw": 0.25})
+		a.Scale = 1.25
+		return a, err
+	}
 	switch tpl.ID {
 	case "static-window":
 		a, err := window()
@@ -117,7 +139,7 @@ func FromTemplate(cat *catalog.Catalog, template, id, setupID, name string) (Sce
 			a.Motion = m
 		}
 		l := warm()
-		l.Intensity, l.Focus = 0.85, 0.68
+		l.Intensity = 0.85
 		s.Backdrop.Static.Light, s.Backdrop.Static.Attachments = l, []Attachment{a}
 	case "live-window-tree":
 		a, err := window()
@@ -130,9 +152,6 @@ func FromTemplate(cat *catalog.Catalog, template, id, setupID, name string) (Sce
 		}
 		tree.Blend, tree.Opacity = "multiply", 0.88
 		l := warm()
-		if g := cat.Gobo("window-4"); g != nil && g.Focus > 0 {
-			l.Focus = g.Focus
-		}
 		s.Backdrop.Live = LayerStack{Layers: []Layer{tree}, Light: l, Attachments: []Attachment{a}}
 	case "color-ember":
 		l, err := NewLayer(cat, "gradient", "ember")

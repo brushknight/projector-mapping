@@ -1,6 +1,6 @@
 import { useSearch } from '@tanstack/react-router'
-import { useEffect, useRef, useState } from 'react'
-import { useCatalog } from '../../entities/catalog'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { parseTry, useCatalog, withTrialLayer } from '../../entities/catalog'
 import { effectApi, type EffectDef } from '../../entities/effect'
 import { activeTestPattern, sceneSize } from '../../entities/setup'
 import { ambientClock, playheadNow, useBlackout, useLiveDocs, activeSolo } from '../../entities/show'
@@ -16,18 +16,21 @@ import s from './styles.module.css'
  * The chrome-less preview for the iPhone's WKWebView (protocol §6): the active scene (hero) or one backdrop layer
  * (mode=layer&layer=<id>), read only, at most 30 fps, rendered at `w` px wide (default 640). The hero draws the scene's
  * on-air mode and the active test pattern exactly like /out, and a YouTube video layer in a player behind the canvas
- * (§14). It never plays sound (no cap `audio`).
+ * (§14). It never plays sound (no cap `audio`). (§16) `try=<procedural id>` draws the scene in live mode with that
+ * live layer on top (the live gallery's "try"), locally: nothing goes on air.
  */
 export function PreviewPage() {
-  const { token, w, mode, layer, scene: sceneParam } = useSearch({ from: '/preview' })
+  const { token, w, mode, layer, scene: sceneParam, try: tryParam } = useSearch({ from: '/preview' })
   const [hub] = useState(() => {
     if (token) setAuthToken(token)
     return new Hub({ role: 'remote', name: 'preview', token: token ?? null })
   })
   useOwnHub(() => hub)
   // (§15) scene=<id> follows that scene (its own mode) without putting it on air: the quick and long-press previews
-  const { show, scene, setup } = useLiveDocs(hub, sceneParam ?? null)
+  const { show, scene: liveScene, setup } = useLiveDocs(hub, sceneParam ?? null)
   const catalog = useCatalog(hub.welcome?.catalogVersion)
+  const trying = parseTry(tryParam)
+  const scene = useMemo(() => (liveScene && trying && catalog ? withTrialLayer(liveScene, catalog, trying) : liveScene), [liveScene, trying, catalog])
   const [effects, setEffects] = useState<EffectDef[]>([])
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const renderer = useRef<Renderer | null>(null)
@@ -67,12 +70,12 @@ export function PreviewPage() {
       t: playheadNow(hub, show),
       clock: ambientClock(hub),
       now: hub.serverNow(),
-      blackout: layerMode || sceneParam ? 0 : blackout.step(performance.now()),
+      blackout: layerMode || sceneParam || trying ? 0 : blackout.step(performance.now()),
       layerOnly: layerMode ? layer ?? null : null,
       hideMapping: layerMode,
       // the hero shows exactly what /out shows, test pattern included (expired patterns draw nothing)
-      testPattern: layerMode || sceneParam ? 'off' : activeTestPattern(setup, hub.serverNow()),
-      solo: layerMode || sceneParam ? null : activeSolo(show, hub.serverNow()),
+      testPattern: layerMode || sceneParam || trying ? 'off' : activeTestPattern(setup, hub.serverNow()),
+      solo: layerMode || sceneParam || trying ? null : activeSolo(show, hub.serverNow()),
     })
     if (!announced.current) {
       announced.current = true

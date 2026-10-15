@@ -1,5 +1,6 @@
 /**
- * Draws a metal gobo plate (not part of the app): /dev/plate-harness.html?plate=<id>&w=384&h=216&view=metal|mask.
+ * Draws a metal gobo plate (not part of the app): /dev/plate-harness.html?plate=<id>&w=384&h=216&view=metal|mask
+ * (&params=<json> for a parametric window's geometry).
  * `metal` is the plate itself, a grey disc with its cut-outs (the catalog's metal thumbnails); `mask` the openings
  * white on black, clipped to the round field. Sets window.__done when drawn.
  */
@@ -13,7 +14,8 @@ canvas.width = w
 canvas.height = h
 const ctx = canvas.getContext('2d')!
 if (def) {
-  const svg = plateSvg(def, q.get('view') === 'mask' ? 'mask' : 'metal', 'rgb(245,244,240)')
+  const params = q.get('params') ? JSON.parse(q.get('params')!) : {}
+  const svg = plateSvg(def, q.get('view') === 'mask' ? 'mask' : 'metal', 'rgb(245,244,240)', params)
   const img = new Image()
   img.src = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }))
   await img.decode()

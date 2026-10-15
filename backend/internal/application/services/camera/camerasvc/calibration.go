@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"image"
 	"log/slog"
+	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -29,6 +31,18 @@ var OutputTarget = realtime.Target{Role: "output"}
 // PatternTimeout bounds one output.pattern answer (3 presented frames).
 var PatternTimeout = 8 * time.Second
 
+// SettleDelay waits after the output says a pattern is presented and before the phone captures it. The output's
+// "presented" means the browser drew it; a wireless display (AirPlay) or a slow projector shows it 100–300 ms later,
+// and a capture before that sees the previous pattern. PROJMAP_CALIB_SETTLE_MS overrides it (use 800 for AirPlay).
+var SettleDelay = settleFromEnv()
+
+func settleFromEnv() time.Duration {
+	if v, err := strconv.Atoi(os.Getenv("PROJMAP_CALIB_SETTLE_MS")); err == nil && v >= 0 {
+		return time.Duration(v) * time.Millisecond
+	}
+	return 350 * time.Millisecond
+}
+
 // Calibrations implements CalibrationService.
 type Calibrations struct {
 	repo   camerarepo.CalibrationRepository
@@ -40,11 +54,18 @@ type Calibrations struct {
 	pub    realtime.Publisher
 	log    *slog.Logger
 
-	mu       sync.Mutex
-	running  string
-	progress map[string]*camera.Progress
-	maps     map[string]cameraport.Map
-	cands    map[string][]camera.Candidate
+	mu        sync.Mutex
+	running   string
+	aimUntil  time.Time // the aiming image stays up until then unless renewed (calibration.aim heartbeats)
+	aimWatch  bool
+	checking  bool // a light check drives the output
+	lastCheck *camera.LightCheck
+
+	// ActiveSetup names the active setup (for the aim ROI); set by the module.
+	ActiveSetup func(context.Context) string
+	progress    map[string]*camera.Progress
+	maps        map[string]cameraport.Map
+	cands       map[string][]camera.Candidate
 }
 
 var _ camerasvc.CalibrationService = (*Calibrations)(nil)
@@ -56,6 +77,25 @@ func NewCalibrations(repo camerarepo.CalibrationRepository, setups setupssvc.Set
 		progress: map[string]*camera.Progress{}, maps: map[string]cameraport.Map{}, cands: map[string][]camera.Candidate{}}
 }
 
+// Recover marks calibrations left running by a previous server process as failed (their sequencer died with it), so
+// clients that ask, or subscribe to calib:{id}, see why instead of a pass that never ends.
+func (s *Calibrations) Recover(ctx context.Context) {
+	l, err := s.repo.Running(ctx)
+	if err != nil {
+		s.log.Warn("calibration recovery", "err", err)
+		return
+	}
+	for _, c := range l {
+		c.Status, c.Message = camera.CalFailed, "Interrupted: the server restarted during calibration. Run it again."
+		if err := s.repo.Save(ctx, c); err != nil {
+			s.log.Warn("calibration recovery", "id", c.ID, "err", err)
+			continue
+		}
+		s.report(c.ID, camera.Progress{Step: "failed", Message: c.Message})
+		s.log.Info("calibration interrupted by a restart", "id", c.ID)
+	}
+}
+
 func (s *Calibrations) report(id string, p camera.Progress) {
 	s.mu.Lock()
 	s.progress[id] = &p
@@ -64,15 +104,20 @@ func (s *Calibrations) report(id string, p camera.Progress) {
 }
 
 func (s *Calibrations) Start(ctx context.Context, setupID string) (*camera.Calibration, error) {
+	return s.StartROI(ctx, setupID, camera.ROI{})
+}
+
+// StartROI starts a calibration limited to a region of interest (scene rectangle and/or camera rectangle).
+func (s *Calibrations) StartROI(ctx context.Context, setupID string, roi camera.ROI) (*camera.Calibration, error) {
 	set, _, err := s.setups.Get(ctx, setupID)
 	if err != nil {
 		return nil, err
 	}
 	if !s.caller.Has(OutputTarget) {
-		return nil, app_errors.Unavailable("No projector output is connected. Open /out on the projector first.")
+		return nil, app_errors.NoOutput(NoOutputMessage)
 	}
 	if !s.caller.Has(CameraTarget) {
-		return nil, app_errors.Unavailable("No phone with a camera is connected. Put the phone on its stand and open auto map.")
+		return nil, app_errors.NoPhone(NoPhoneMessage)
 	}
 	s.mu.Lock()
 	if s.running != "" {
@@ -80,8 +125,17 @@ func (s *Calibrations) Start(ctx context.Context, setupID string) (*camera.Calib
 		s.mu.Unlock()
 		return nil, app_errors.Conflict("Calibration %s is still running.", id)
 	}
+	s.aimUntil = time.Time{} // the calibration takes over the output
 	c := &camera.Calibration{ID: services.NewID("cal"), SetupID: setupID, Status: camera.CalRunning, Message: "starting",
 		ProjW: set.Output.Width, ProjH: set.Output.Height, CreatedAt: time.Now().UTC()}
+	if !roi.Scene.Empty() {
+		c.ROI = roi.Scene
+	}
+	if !roi.Camera.Empty() {
+		r := clampUnit(*roi.Camera)
+		c.CameraROI = &r
+	}
+	c.ProjectorROI = s.projectorROI(ctx, set, c.ROI, c.CameraROI)
 	s.running = c.ID
 	s.mu.Unlock()
 	if err := s.repo.Save(ctx, c); err != nil {
@@ -90,8 +144,7 @@ func (s *Calibrations) Start(ctx context.Context, setupID string) (*camera.Calib
 		s.mu.Unlock()
 		return nil, err
 	}
-	bx, by := s.vision.Bits(set.Output.Width), s.vision.Bits(set.Output.Height)
-	s.report(c.ID, camera.Progress{Step: "start", Done: 0, Total: 2 + 2*(bx+by), Message: "Locking the camera"})
+	s.report(c.ID, camera.Progress{Step: "start", Done: 0, Total: len(s.steps(set)), Message: "Locking the camera"})
 	go s.run(c, set)
 	return c, nil
 }
@@ -99,10 +152,25 @@ func (s *Calibrations) Start(ctx context.Context, setupID string) (*camera.Calib
 type step struct {
 	name string
 	args map[string]any
+	// checkable: the camera should see this pattern differ clearly from the one before (stripes wide enough to
+	// survive blur), so a still that does not is stale.
+	checkable bool
+}
+
+// withROI adds the projector ROI to a pattern's args (the output draws the pattern inside it and black outside).
+func withROI(args map[string]any, r *camera.Rect) map[string]any {
+	if r.Empty() {
+		return args
+	}
+	out := map[string]any{"roi": map[string]any{"x": r.X, "y": r.Y, "w": r.W, "h": r.H}}
+	for k, v := range args {
+		out[k] = v
+	}
+	return out
 }
 
 func (s *Calibrations) steps(set *setup.Setup) []step {
-	out := []step{{"white", map[string]any{"kind": "white"}}, {"black", map[string]any{"kind": "black"}}}
+	out := []step{{"white", map[string]any{"kind": "white"}, false}, {"black", map[string]any{"kind": "black"}, false}}
 	for _, ax := range []struct {
 		axis string
 		n    int
@@ -110,11 +178,12 @@ func (s *Calibrations) steps(set *setup.Setup) []step {
 		for bit := 0; bit < s.vision.Bits(ax.n); bit++ {
 			for _, inv := range []bool{false, true} {
 				out = append(out, step{fmt.Sprintf("%s%d%s", ax.axis, bit, map[bool]string{true: "i", false: ""}[inv]),
-					map[string]any{"kind": "gray", "axis": ax.axis, "bit": bit, "inverse": inv}})
+					map[string]any{"kind": "gray", "axis": ax.axis, "bit": bit, "inverse": inv}, bit >= max(4, s.vision.Bits(ax.n)-4)})
 			}
 		}
 	}
-	return out
+	// white again: compared with the first white, it shows whether the phone moved during the pass
+	return append(out, step{"verify", map[string]any{"kind": "white"}, true})
 }
 
 func (s *Calibrations) run(c *camera.Calibration, set *setup.Setup) {
@@ -139,33 +208,101 @@ func (s *Calibrations) run(c *camera.Calibration, set *setup.Setup) {
 	}
 	steps := s.steps(set)
 	shots := map[string]image.Image{}
-	for i, st := range steps {
-		s.report(c.ID, camera.Progress{Step: st.name, Done: i, Total: len(steps), Message: fmt.Sprintf("Pattern %d of %d", i+1, len(steps))})
-		pctx, pcancel := context.WithTimeout(ctx, PatternTimeout)
-		_, err := s.caller.Call(pctx, OutputTarget, "output.pattern", st.args)
-		pcancel()
-		if err != nil {
-			fail(err)
-			return
+	settle := SettleDelay
+	var sc *syncCheck
+	var prev *image.Gray
+	// shoot waits settle and captures one still
+	shoot := func(name string) (*image.Gray, string, error) {
+		select {
+		case <-time.After(settle):
+		case <-ctx.Done():
+			return nil, "", ctx.Err()
 		}
 		a, err := s.cam.Capture(ctx, "calibration")
 		if err != nil {
-			fail(err)
-			return
+			return nil, "", phoneErr(err, name, s.caller.Has(CameraTarget))
 		}
 		b, err := s.assets.Read(ctx, a.SHA)
 		if err != nil {
-			fail(err)
-			return
+			return nil, "", err
 		}
 		img, err := DecodeStill(b)
+		if err != nil {
+			return nil, "", err
+		}
+		return img, a.SHA, nil
+	}
+	restarts := 0
+	for i := 0; i < len(steps); i++ {
+		st := steps[i]
+		s.report(c.ID, camera.Progress{Step: st.name, Done: i, Total: len(steps), Message: fmt.Sprintf("Pattern %d of %d", i+1, len(steps))})
+		pctx, pcancel := context.WithTimeout(ctx, PatternTimeout)
+		_, err := s.caller.Call(pctx, OutputTarget, "output.pattern", withROI(st.args, c.ProjectorROI))
+		pcancel()
+		if err != nil {
+			fail(outputErr(err, st.name, s.caller.Has(OutputTarget)))
+			return
+		}
+		img, sha, err := shoot(st.name)
 		if err != nil {
 			fail(err)
 			return
 		}
+		// Synchronisation: a still that shows the previous pattern (the projector or the phone lags) is taken again
+		// with a longer settle, and the longer settle is kept for the rest of the pass. When black needed a longer
+		// settle, the white before it was taken too early as well: the pass starts over from white.
+		settleBefore := settle
+		for {
+			stale, why := false, ""
+			switch {
+			case st.name == "black":
+				ct := s.vision.Contrast(grayF(shots["white"].(*image.Gray)), grayF(img), img.Bounds().Dx(), img.Bounds().Dy())
+				if ct.Lit < 0.01 || ct.Peak < 6 {
+					stale, why = true, "black looks like white"
+				}
+				if !stale || settle >= MaxSettle {
+					if stale {
+						q := camera.Quality{Contrast: &ct}
+						c.Quality = &q
+						fail(app_errors.Invalid("%s", decodeFailure(&ct, fmt.Errorf("white and black look the same"))))
+						return
+					}
+					sc = newSyncCheck(shots["white"].(*image.Gray), img, ct.Threshold/255)
+				}
+			case sc != nil && prev != nil && st.checkable:
+				if ch := sc.changed(prev, img); ch < 0.15 {
+					stale, why = true, fmt.Sprintf("only %.0f%% of the lit area changed", ch*100)
+				}
+			}
+			if !stale || settle >= MaxSettle {
+				break
+			}
+			settle = min(MaxSettle, max(2*settle, 250*time.Millisecond))
+			c.SettleMs = int(settle / time.Millisecond)
+			s.log.Info("calibration: stale capture, waiting longer", "id", c.ID, "step", st.name, "why", why, "settle", settle)
+			s.report(c.ID, camera.Progress{Step: st.name, Done: i, Total: len(steps),
+				Message: fmt.Sprintf("Pattern %d of %d: the projector lags, waiting %d ms per pattern", i+1, len(steps), settle/time.Millisecond)})
+			if img, sha, err = shoot(st.name); err != nil {
+				fail(err)
+				return
+			}
+		}
+		if st.name == "black" && settle != settleBefore && restarts < 4 {
+			restarts++
+			sc, prev = nil, nil
+			i = -1
+			continue
+		}
+		prev = img
 		shots[st.name] = img
+		if st.name == "verify" {
+			if moved := Moved(shots["white"], img, shots["black"]); moved > MovedLimitPx {
+				s.log.Warn("calibration: the phone moved", "id", c.ID, "shiftPx", moved)
+				fail(app_errors.Invalid("The phone moved during calibration (about %.0f px). Steady it and retry.", moved))
+				return
+			}
+		}
 		if st.name == "white" {
-			sha := a.SHA
 			c.WhiteAsset = &sha
 		}
 	}
@@ -180,9 +317,32 @@ func (s *Calibrations) run(c *camera.Calibration, set *setup.Setup) {
 			*ax.dst = append(*ax.dst, [2]image.Image{shots[fmt.Sprintf("%s%d", ax.axis, bit)], shots[fmt.Sprintf("%s%di", ax.axis, bit)]})
 		}
 	}
-	m, q, err := s.vision.Decode(f, set.Output.Width, set.Output.Height)
+	var droi cameraport.DecodeROI
+	if r := c.CameraROI; !r.Empty() && f.White != nil {
+		b := f.White.Bounds()
+		droi.CamROI = image.Rect(int(r.X*float64(b.Dx())), int(r.Y*float64(b.Dy())), int((r.X+r.W)*float64(b.Dx())), int((r.Y+r.H)*float64(b.Dy())))
+	}
+	if r := c.ProjectorROI; !r.Empty() {
+		droi.ProjROI = image.Rect(int(r.X), int(r.Y), int(r.X+r.W), int(r.Y+r.H))
+	}
+	if g0, ok := f.White.(*image.Gray); ok {
+		if g1, ok := f.Black.(*image.Gray); ok {
+			if png, err := DiffPNG(g0, g1); err == nil {
+				if a, err := s.assets.Upload(ctx, png, "calibration"); err == nil {
+					sha := a.SHA
+					c.DiffAsset = &sha
+				}
+			}
+		}
+	}
+	m, q, err := s.vision.Decode(f, set.Output.Width, set.Output.Height, droi)
 	if err != nil {
-		fail(app_errors.Invalid("Decoding failed: %v. Dim the room, check the phone sees the whole projection and run it again.", err))
+		c.Quality = &q
+		fail(app_errors.Invalid("%s", decodeFailure(q.Contrast, err)))
+		return
+	}
+	if q.Coverage < MinCoverage && (q.ROI == nil || q.ROI.Mapped < 0.2) {
+		fail(app_errors.Invalid("The camera saw only %.0f%% of the projection. Point the phone so the whole projected image is in view, dim the room and retry.", q.Coverage*100))
 		return
 	}
 	png, err := m.Encode()
@@ -197,8 +357,23 @@ func (s *Calibrations) run(c *camera.Calibration, set *setup.Setup) {
 	}
 	sha := asset.SHA
 	c.MapAsset, c.Quality = &sha, &q
+	if conf, err := m.Confidence(); err == nil {
+		if ca, err := s.assets.Upload(ctx, conf, "calibration"); err == nil {
+			csha := ca.SHA
+			c.ConfidenceAsset = &csha
+		}
+	}
 	c.CameraW, c.CameraH = m.CameraSize()
 	c.Status, c.Message = camera.CalDone, fmt.Sprintf("Calibrated: %.0f%% coverage, %.2f px error", q.Coverage*100, q.ErrorPx)
+	if r := q.ROI; r != nil {
+		c.Message += fmt.Sprintf(". Sharp area mapped: %.0f%%", r.Sharp*100)
+		if r.Sharp < 0.4 {
+			c.Message += ". Most of the area is out of focus: focus the projector on the object, or draw a smaller area around it"
+		}
+	}
+	if q.Coverage < 0.5 && c.ProjectorROI.Empty() && c.CameraROI.Empty() {
+		c.Message += ". The camera saw only part of the projection: surfaces outside it cannot be mapped"
+	}
 	if err := s.repo.Save(ctx, c); err != nil {
 		fail(err)
 		return
@@ -279,6 +454,12 @@ func (s *Calibrations) CameraToScene(ctx context.Context, setupID string, pts []
 	}
 	out := make([]camera.Pt, len(pts))
 	for i, p := range pts {
+		if ok, near, found := m.Confident(p.X, p.Y); !ok {
+			if found {
+				return nil, app_errors.Invalid("Camera point %d (%.0f, %.0f) has no reliable correspondence in the calibration (out of focus, unlit or outside the mapped area). The nearest reliable camera pixel is (%.0f, %.0f): move the point there, or recalibrate with the projector focused on this spot.", i, p.X, p.Y, near.X, near.Y)
+			}
+			return nil, app_errors.Invalid("Camera point %d (%.0f, %.0f) has no reliable correspondence anywhere near it. Recalibrate with the projector focused on this spot, or mark it as the calibration's region of interest.", i, p.X, p.Y)
+		}
 		q, ok := m.CamToProj(p.X, p.Y)
 		if !ok {
 			return nil, app_errors.Invalid("Camera point %d (%.0f, %.0f) is not lit by the projector in the calibration.", i, p.X, p.Y)

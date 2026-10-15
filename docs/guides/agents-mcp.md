@@ -121,8 +121,14 @@ slower pass).
 
 > add venetian blinds over the window and soften the focus
 
-`attachment_add` with gobo `blinds` (the window stays: attachments stack, each blocks more light), then `light_set`
-with a lower `focus`.
+`attachment_add` with gobo `plate-blinds` (the window stays: attachments stack, each blocks more light), then
+`light_set` with a lower `focus`.
+
+> make the window an arched one with six rows, seen a little from the side
+
+`attachment_update` on the window with `params: { arch: true, rows: 6, taper: -0.2, slantY: 0.3 }`: the window plates
+are one parametric window (catalog `family: "window"`), and `catalog_get { section: "gobos" }` lists its params and
+each preset's geometry.
 
 > start a new live scene with rain on glass and put it on the wall
 

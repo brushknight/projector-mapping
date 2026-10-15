@@ -50,6 +50,10 @@ var (
 	NoAudio = mk("no_audio", http.StatusConflict)
 	// InvalidURL answers a link that is not a YouTube video.
 	InvalidURL = mk("invalid_url", http.StatusBadRequest)
+	// NoOutput refuses calibration (and aim) while no projector output (/out) is connected.
+	NoOutput = mk("no_output", http.StatusConflict)
+	// NoPhone refuses calibration while no phone with a camera is connected.
+	NoPhone = mk("no_phone", http.StatusConflict)
 )
 
 // Stale is the patch rejection of protocol §3.

@@ -11,11 +11,13 @@ enum CameraBridge {
     static var streaming = false
     private static var statusTask: Task<Void, Never>?
     private static var lastSize = (0, 0)
+    private static var generation = 0
 
     static func install(_ model: AppModel) {
         model.hub.handleRPC("camera.capture") { [weak model] args in
             guard let model, let api = model.api else { throw LiveError.notConnected }
-            let jpeg = try await model.camera.captureStill(lock: args["lock"]?.bool ?? true)
+            var jpeg = try await model.camera.captureStill(lock: args["lock"]?.bool ?? true)
+            if let w = args["maxWidth"]?.int, w > 0 { jpeg = await CameraController.downscale(jpeg: jpeg, maxWidth: w) }
             if let request = args["requestId"]?.string, !request.isEmpty {
                 let sha = try await api.uploadStill(requestId: request, jpeg: jpeg)
                 return ["sha": .string(sha)]
@@ -27,23 +29,33 @@ enum CameraBridge {
 
     static func startStreaming(_ model: AppModel) {
         let hub = model.hub
-        model.camera.onFrame = { frame in
+        generation += 1
+        let gen = generation
+        model.camera.onFrame = { frame, text in
             Task { @MainActor in
-                guard streaming else { return }
+                guard streaming, generation == gen else { return }
                 lastSize = (frame.width, frame.height)
-                hub.sendCameraFrame(frame)
+                hub.sendCameraFrameText(text)
             }
         }
         statusTask?.cancel()
         let motion = MotionStatus.shared
         statusTask = Task { @MainActor in
-            while streaming && !Task.isCancelled {
+            while streaming && !Task.isCancelled && generation == gen {
                 hub.sendCameraStatus(CameraStatus(streaming: true, fps: model.camera.frameRate, width: lastSize.0, height: lastSize.1,
                                                   steady: motion.steady, level: motion.level))
                 try? await Task.sleep(for: .seconds(1))
             }
-            hub.sendCameraStatus(CameraStatus(streaming: false, fps: 0, width: 0, height: 0, steady: false, level: 0))
+            // only the last stream says it stopped: a restarted stream must not be overwritten by its predecessor
+            if generation == gen && !streaming {
+                hub.sendCameraStatus(CameraStatus(streaming: false, fps: 0, width: 0, height: 0, steady: false, level: 0))
+            }
         }
+    }
+
+    static func stopStreaming(_ model: AppModel) {
+        streaming = false
+        model.camera.onFrame = nil
     }
 }
 

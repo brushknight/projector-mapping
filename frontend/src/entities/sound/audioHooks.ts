@@ -107,7 +107,8 @@ export function useAudioClient(hub: Hub, opts: { role: 'output' | 'editor' | 're
     engine.syncTimeline(planner)
   }, [active, unlocked, show, scene, engine, hub, clockTick])
 
-  return { active, unlocked, unlock: unlockAudio, masterGain: active && unlocked ? engine.masterGain : 0 }
+  // from show.audio itself (not the engine, which takes the new master in an effect after this render)
+  return { active, unlocked, unlock: unlockAudio, masterGain: active && unlocked && !audio.muted ? Math.max(0, Math.min(1, audio.volume)) : 0 }
 }
 
 /**

@@ -43,5 +43,14 @@ type AgentService interface {
 	// Owned tells whether the runner started the session (then its CLI output is the log).
 	Owned(sessionID string) bool
 	Settings(ctx context.Context) agents.Settings
+	// Available says which agent CLIs this Mac can run: agent → "" when it can, else why not.
+	Available(ctx context.Context) []Availability
 	UpdateSettings(ctx context.Context, partial json.RawMessage) (agents.Settings, error)
+}
+
+// Availability is one agent CLI on the server's Mac (GET /agents/available).
+type Availability struct {
+	Agent     string `json:"agent"`
+	Available bool   `json:"available"`
+	Reason    string `json:"reason,omitempty"`
 }

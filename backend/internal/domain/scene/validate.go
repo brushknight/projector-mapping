@@ -93,8 +93,12 @@ func (s *Scene) Validate(refs Refs) error {
 	if !Kinds[s.Kind] {
 		c.fail("kind %q is not one of static, live, color, scenery, mapping", s.Kind)
 	}
-	if len(s.Backdrop.Static.Layers) > 0 {
-		c.fail("the static stack takes no layers: put gobos in backdrop.static.attachments")
+	// (protocol §16) the static stack's layers are its background: colour, gradient, animated colour or an effect,
+	// under the attachments; gobos go in attachments
+	for _, l := range s.Backdrop.Static.Layers {
+		if !StaticLayerKinds[l.Kind] {
+			c.fail("layer %s (static): the static stack takes background layers of kind solid, gradient, generator or procedural, not %q: put gobos in backdrop.static.attachments", l.ID, l.Kind)
+		}
 	}
 	// backdrop ids: layers and attachments share one namespace (motion tracks target either)
 	backdropIDs := map[string]bool{}
@@ -546,14 +550,17 @@ const (
 	LightLive   = "light:live"
 )
 
+// StaticLayerKinds are the layer kinds the static stack takes as its background (protocol §16).
+var StaticLayerKinds = map[string]bool{"solid": true, "gradient": true, LayerGenerator: true, "procedural": true}
+
 // stackLight checks a static or live light (protocol §15).
 func (c *checker) stackLight(w string, l *StackLight, refs Refs) {
 	c.rng(w+".intensity", l.Intensity, 0, 1)
 	c.rng(w+".focus", l.Focus, 0, 1)
+	c.rng(w+".backgroundFocus", l.BackgroundFocus, 0, 1)
 	c.lightColor(w, l.Color, l.FX)
 	c.rng(w+".fringe", l.Fringe, 0, 1)
 	c.rng(w+".vignette", l.Vignette, 0, 1)
-	c.rng(w+".haze", l.Haze, 0, 1)
 	c.rng(w+".slide.x", l.Slide.X, -1, 1)
 	c.rng(w+".slide.y", l.Slide.Y, -1, 1)
 	if cl := l.ColorLayer; cl != nil {

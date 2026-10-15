@@ -69,6 +69,8 @@ extension LineIcon {
     public static let mic = LineIcon([.rect(9, 3, 6, 11, rx: 3), .path("M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21")])
     public static let send = LineIcon([.path("M4 12l16-8-6 16-2.5-6.5z")])
     public static let flipH = LineIcon([.path("M12 3v18"), .path("M9 7L4 17h5zM15 7l5 10h-5z")])
+    /// (§16) window geometry: panes in a frame
+    public static let panes = LineIcon([.rect(4, 4, 16, 16, rx: 2), .path("M12 4v16M4 12h16")])
     public static let rotate = LineIcon([.path("M20 12a8 8 0 1 1-2.3-5.7"), .path("M20 4v4h-4")])
     public static let trash = LineIcon([.path("M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3")])
     public static let qr = LineIcon([.rect(3.5, 3.5, 7, 7, rx: 1.5), .rect(13.5, 3.5, 7, 7, rx: 1.5), .rect(3.5, 13.5, 7, 7, rx: 1.5), .path("M14 14h2.5v2.5M20 14v.01M14 20h.01M17 17h3v3")])
@@ -134,7 +136,8 @@ extension LineIcon {
         switch key {
         case "intensity", "brightness", "master", "fromKelvin", "toKelvin", "warmth", "travel": .sun
         case "softness", "focus", "blur", "sharpness", "haze": .softness
-        case "angle": .angle
+        case "angle", "taper", "taperY", "slant", "slantY": .angle
+        case "sashes", "cols", "rows", "gap", "width", "height", "frame", "mullion", "diamonds", "slats", "slatWidth", "spokes", "hub", "archHeight": .panes
         case "grain", "amount", "density", "drops", "size", "seed": .grain
         default: .wind
         }

@@ -13,23 +13,27 @@ describe('attachments (§15)', () => {
     expect([...ATTACHMENT_IDS].sort()).toEqual(catalog.gobos.map((g) => g.id).sort())
   })
   it('fills params from goboParams, the item defaults and its own schema', () => {
-    const p = attachmentParams(catalog, { gobo: 'window-4', params: { mullion: 0.6 } })
-    expect(p.throw).toBe(0.25)
-    expect(p.cols).toBe(2)
-    expect(p.mullion).toBe(0.6)
-    expect(p.skew).toBe(0.3)
+    const p = attachmentParams(catalog, { gobo: 'plate-arched-window', params: { rows: 6 } })
+    expect(p.throw).toBe(0)
+    expect(p.depth).toBe(0)
+    expect(p.field).toBe('round')
+    expect(p.rows).toBe(6)
+    expect(p.cols).toBe(3)
+    expect(p.arch).toBe(true)
   })
-  it('maps shutter blades onto the shape slots', () => {
-    const u = attachmentUniforms(catalog, { gobo: 'shutter', params: { top: 0.5 } })!
-    expect(u.gp0[0]).toBe(0.5)
-    expect(u.depth).toBe(0)
+  it('maps every plate onto the plate shape, and nothing else', () => {
+    expect(attachmentUniforms(catalog, { gobo: 'plate-dots', params: { field: 'tile' } })!.gp0[0]).toBe(3)
+    expect(attachmentUniforms(catalog, { gobo: 'plate-dots', params: {} })!.depth).toBe(0)
+    expect(attachmentUniforms(catalog, { gobo: 'shutter', params: {} })).toBeNull()
     expect(attachmentUniforms(catalog, { gobo: 'nope', params: {} })).toBeNull()
   })
-  it('makes a new attachment with the catalog start values', () => {
-    const a = newAttachment(catalog, 'blinds', 'att_1')
-    expect(a.scale).toBe(1.4)
-    expect(a.params.slats).toBe(22)
+  it('makes a new attachment with the catalog start values, a window without its geometry', () => {
+    const a = newAttachment(catalog, 'plate-blinds', 'att_1')
+    expect(a.scale).toBe(1)
+    expect(a.params.field).toBe('round')
+    expect(a.params.slats).toBeUndefined()
     expect(a.visible).toBe(true)
+    expect(newAttachment(catalog, 'plate-hearts', 'att_2').name).toBe('hearts')
   })
   it('defaults the stack light to the whole frame at 5600 K', () => {
     const l = stackLightOf(null, catalog)

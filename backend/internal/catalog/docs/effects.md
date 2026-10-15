@@ -96,6 +96,10 @@ fails when the catalog and the renderer disagree. Thumbnails come from the same 
 gobo and procedural layer headless into `backend/internal/catalog/assets/thumbs/`, which the server embeds and serves
 at `/catalog/thumbs/<id>.png`.
 
+Live layers (catalog `procedural`: tree sway, clouds, rain…) are branches of `procedural()` in
+`src/render/shaders/layer.ts`, with their shared shapes in `src/render/shaders/live.ts`; a multiply one is a mask over
+the light (§16). [guides/live-layers.md](guides/live-layers.md) walks through adding one.
+
 ## Colour generators (frontend, protocol §15)
 
 Animated colour for a light's `colorLayer` and for `generator` layers in the color and live stacks. Each generator is

@@ -193,9 +193,12 @@ struct LiveTab: View {
         if let layer {
             model.edit(.setLayerField(layerId: layer.id, field: ["visible"], value: .bool(on)))
         } else if on, let item = model.catalog.procedural(ref) {
+            // (§16) shadow layers (clouds, rain) block light like an attachment: they multiply into the light's mask
+            if item.isShadow, model.light("live") == nil { model.edit(.setLight(mode: "live", field: ["intensity"], value: 0.85)) }
             let light = (try? JSONValue(encoding: Light())) ?? [:]
             let new: JSONValue = ["id": .string(NewID.make("lay")), "kind": "procedural", "ref": .string(ref), "name": .string(title),
-                                  "visible": true, "opacity": 1, "blend": "screen", "light": light, "params": .object(item.defaults)]
+                                  "visible": true, "opacity": 1, "blend": .string(item.isShadow ? "multiply" : "screen"), "light": light,
+                                  "params": .object(item.defaults)]
             model.edit(.addLayer(mode: "live", layer: new, index: nil))
         }
     }

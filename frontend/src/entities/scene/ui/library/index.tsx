@@ -101,7 +101,7 @@ function EffectsTab({ onTab }: { onTab: (t: LibraryTab) => void }) {
         label="gobo"
         title="put a window gobo on air (static)"
         onClick={() => {
-          pick('static', 'gobo', 'window')
+          pick('static', 'gobo', 'plate-grid-window')
           onTab('backdrops')
         }}
       />
@@ -318,7 +318,7 @@ function BackdropsTab() {
               swatch={top ? layerSwatch(cat, top) : undefined}
               label={p.name}
               title={`apply ${p.name}: replaces the ${p.mode} stack and puts ${p.mode} on air`}
-              onClick={() => void ed.editing.edit(() => applyPresetOps(p)).then(() => ed.toast(`Applied ${p.name}.`))}
+              onClick={() => void ed.editing.edit((sc) => applyPresetOps(p, sc)).then(() => ed.toast(`Applied ${p.name}.`))}
             />
           )
         })}

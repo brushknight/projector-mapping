@@ -1,48 +1,39 @@
 import SwiftUI
 import PMKit
 import PMDesign
+import PMPreview
 
-/// Board `phone-addlayer`: search, category pills and catalog cards; a tap puts the layer on top of the stack.
+/// Board `phone-addlayer`, the live gallery (protocol §16): every live layer as an animated tile. A tap tries it in
+/// the preview at the top (`/preview?scene=<id>&try=<ref>`: the live stack with that layer, never on air); "add to
+/// live" puts it on top of the stack. Shadow layers (nature, weather, texture) block light like an attachment, so
+/// they join as `multiply` and bring the default stack light when the live stack has none.
 struct AddLayerSheet: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     @State private var query = ""
     @State private var category = "all"
+    /// The tile being tried; `-pm-try <id>` starts with one (screenshots).
+    @State private var trying: String? = UserDefaults.standard.string(forKey: "pm-try")
+    @State private var host = PreviewHost()
 
-    struct Item: Identifiable {
-        var id: String
-        var name: String
-        var category: String
-        var kind: String
-        var animated: Bool
-        var description: String
-    }
-
-    /// Live shadows first, then the gobos not on the wall yet, then the rest (the board's order).
-    var items: [Item] {
-        let cat = model.catalog
-        let inStack = Set(model.layers("live").map(\.ref) + model.attachments("live").map(\.gobo))
-        func p(_ x: ProceduralItem) -> Item { Item(id: x.id, name: x.name, category: x.category, kind: "procedural", animated: x.animated, description: "") }
-        // Gobos join the live stack as attachments in front of its light (§15), listed under "shadows".
-        func g(_ x: GoboItem) -> Item { Item(id: x.id, name: x.name, category: "shadows", kind: "gobo", animated: false, description: x.description) }
-        let nature = cat.procedural.filter { $0.category == "nature" }.map(p)
-        let lateGobos: Set<String> = ["dots", "spot"]
-        let gobos = cat.gobos.filter { !inStack.contains($0.id) && $0.id != "tree" && $0.id != "palm" }
-        let first = gobos.filter { !lateGobos.contains($0.id) }.map(g)
-        let dapple = cat.procedural.filter { $0.id == "dapple" }.map(p)
-        let others = cat.procedural.filter { $0.category != "nature" && $0.id != "dapple" }.map(p)
-        return nature + first + dapple + others + gobos.filter { lateGobos.contains($0.id) }.map(g)
+    var items: [ProceduralItem] {
+        let order = ["nature", "weather", "texture", "light"]
+        let rank = Dictionary(order.enumerated().map { ($1, $0) }, uniquingKeysWith: { a, _ in a })
+        return model.catalog.procedural.enumerated()
+            .sorted { (rank[$0.element.category] ?? .max, $0.offset) < (rank[$1.element.category] ?? .max, $1.offset) }
+            .map(\.element)
     }
 
     var categories: [String] {
-        let order = ["all", "shadows", "nature", "weather", "light", "texture"]
-        let present = Set(items.map(\.category))
-        return order.filter { $0 == "all" || present.contains($0) } + present.subtracting(order).sorted()
+        let present = items.map(\.category)
+        var seen = Set<String>()
+        return ["all"] + present.filter { seen.insert($0).inserted }
     }
 
     var body: some View {
         let q = query.trimmingCharacters(in: .whitespaces).lowercased()
-        let shown = items.filter { (category == "all" || $0.category == category) && (q.isEmpty || $0.name.contains(q) || $0.category.contains(q) || $0.description.contains(q)) }
+        let shown = items.filter { (category == "all" || $0.category == category) && (q.isEmpty || $0.name.lowercased().contains(q) || $0.category.contains(q)) }
+        let tried = trying.flatMap { model.catalog.procedural($0) }
         VStack(spacing: 14) {
             HStack(spacing: 10) {
                 Text("add layer").titleStyle(26)
@@ -50,6 +41,13 @@ struct AddLayerSheet: View {
                 IconPill(.close, size: 16, label: "close") { dismiss() }
             }
             .padding(.top, 4)
+            preview(tried)
+            if let tried {
+                HStack(spacing: 10) {
+                    WideButton("add \(tried.name) to live", icon: .plus) { add(tried) }
+                    IconPill(.close, size: 16, label: "stop trying \(tried.name)") { trying = nil }
+                }
+            }
             SearchField("search shadows, weather, light", text: $query)
             ScrollView(.horizontal) {
                 HStack(spacing: 8) {
@@ -63,7 +61,11 @@ struct AddLayerSheet: View {
             ScrollView {
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
                     ForEach(shown) { item in
-                        ImageCard(item.name, badge: item.animated ? "live" : nil, action: { add(item) }) { CatalogThumb(item.id) { GoboArt(GoboFallback.art(item.id, category: model.catalog.gobo(item.id)?.browseCategory ?? "")) } }
+                        ImageCard(item.name, meta: item.isShadow ? "blocks light" : item.category, on: item.id == trying, aspect: 16 / 9,
+                                  badge: item.animated ? "live" : nil, action: { trying = item.id == trying ? nil : item.id }) {
+                            AnimatedThumb(id: item.id)
+                        }
+                        .accessibilityHint("tries \(item.name) in the preview without putting it on air")
                     }
                 }
                 .padding(.bottom, 20)
@@ -79,25 +81,36 @@ struct AddLayerSheet: View {
         .presentationCornerRadius(38)
         .presentationDragIndicator(.visible)
         .presentationDetents([.large])
+        .onDisappear { host.stop() }
     }
 
-    func add(_ item: Item) {
-        if item.kind == "gobo", let g = model.catalog.gobo(item.id), let a = try? JSONValue(encoding: model.catalog.newAttachment(g)) {
-            if model.light("live") == nil { model.edit(.setLight(mode: "live", field: ["intensity"], value: 0.85)) }
-            model.edit(.addAttachment(mode: "live", attachment: a))
-            dismiss()
-            return
-        }
+    /// The live stack as it is, or with the tried layer, at full size.
+    func preview(_ tried: ProceduralItem?) -> some View {
+        Palette.hero
+            .aspectRatio(16 / 9, contentMode: .fit)
+            .overlay {
+                if model.demo || model.api == nil {
+                    if let tried { AnimatedThumb(id: tried.id) } else { BackdropArt(focus: .live) }
+                } else {
+                    PreviewWebView(url: model.api?.previewURL(width: 1110, scene: model.sceneId, try: tried?.id), host: host) {
+                        if let tried { AnimatedThumb(id: tried.id) } else { BackdropArt(focus: .live) }
+                    }
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .overlay(alignment: .topLeading) {
+                GlassPill { Text(tried.map { "trying \($0.name) · not on air" } ?? "the wall now · tap a tile to try it") }.padding(10)
+            }
+    }
+
+    func add(_ item: ProceduralItem) {
+        if item.isShadow, model.light("live") == nil { model.edit(.setLight(mode: "live", field: ["intensity"], value: 0.85)) }
         let light = (try? JSONValue(encoding: Light(intensity: 0.8, softness: 0.62))) ?? [:]
-        var params: JSONValue = [:]
-        var blend = "normal"
-        if item.kind == "procedural", let p = model.catalog.procedural(item.id) {
-            params = .object(p.defaults)
-            if p.category == "nature" { blend = "multiply" }
-        }
-        let layer: JSONValue = ["id": .string(NewID.make("lay")), "kind": .string(item.kind), "ref": .string(item.id), "name": .string(item.name),
-                                "visible": true, "opacity": 1, "blend": .string(blend), "light": light, "params": params]
+        let layer: JSONValue = ["id": .string(NewID.make("lay")), "kind": "procedural", "ref": .string(item.id), "name": .string(item.name),
+                                "visible": true, "opacity": 1, "blend": .string(item.isShadow ? "multiply" : "normal"), "light": light,
+                                "params": .object(item.defaults)]
         model.edit(.addLayer(mode: "live", layer: layer, index: nil))
+        trying = nil
         dismiss()
     }
 }

@@ -64,12 +64,12 @@ struct LiveServerTests {
         let before = try await api.scene(sceneId)
 
         // One attachment replaces the list.
-        let item = try #require(cat.gobo("blinds"))
+        let item = try #require(cat.gobo("plate-slat-blinds"))
         let a = cat.newAttachment(item)
         hub.edit(sceneId: sceneId, .replaceAttachments(mode: "static", attachments: [try JSONValue(encoding: a)]))
         try await eventually(5) { (try? db.pendingItems().isEmpty) == true }
         var remote = try await api.scene(sceneId)
-        #expect(remote.value(at: "/backdrop/static/attachments/0/gobo") == "blinds")
+        #expect(remote.value(at: "/backdrop/static/attachments/0/gobo") == "plate-slat-blinds")
         #expect(remote.value(at: "/backdrop/static/attachments/0/id")?.string == a.id)
 
         // The slide is a param the server commits.

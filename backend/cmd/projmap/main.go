@@ -29,6 +29,7 @@ import (
 
 	"projmap/internal/app"
 	"projmap/internal/config"
+	"projmap/internal/infrastructure/browser"
 	"projmap/internal/sim"
 )
 
@@ -193,25 +194,40 @@ func open(args []string) error {
 	return nil
 }
 
-// openKiosk opens /out in a separate Chrome window, fullscreen on the given display.
+// openKiosk opens /out full screen on the given display in the output's own Chrome profile, and checks with the
+// server that /out reports that display's size (internal/infrastructure/browser).
 func openKiosk(display int) error {
-	x, y := 0, 0
-	if display > 1 {
-		js := `ObjC.import('AppKit'); var s=$.NSScreen.screens.js; var main=s[0].frame; JSON.stringify(s.map(function(x){var f=x.frame; return [f.origin.x, main.size.height-f.origin.y-f.size.height]}))`
-		b, err := exec.Command("osascript", "-l", "JavaScript", "-e", js).Output()
-		if err == nil {
-			var frames [][2]float64
-			if json.Unmarshal(b, &frames) == nil && display <= len(frames) {
-				x, y = int(frames[display-1][0]), int(frames[display-1][1])
-			} else {
-				fmt.Fprintf(os.Stderr, "display %d not found; opening on the main display\n", display)
+	ctx := context.Background()
+	list, err := browser.Displays(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v; opening on the main display\n", err)
+	}
+	var d *browser.Display
+	if display >= 1 && display <= len(list) {
+		d = &list[display-1]
+	} else if display > 1 {
+		fmt.Fprintf(os.Stderr, "display %d not found; opening on the main display\n", display)
+	}
+	size := func(context.Context) (int, int, bool) {
+		var devs []struct {
+			Role      string `json:"role"`
+			Online    bool   `json:"online"`
+			Telemetry *struct {
+				Width  int `json:"width"`
+				Height int `json:"height"`
+			} `json:"telemetry"`
+		}
+		if getJSON("GET", "/api/v1/devices", &devs) != nil {
+			return 0, 0, false
+		}
+		for _, v := range devs {
+			if v.Role == "output" && v.Online && v.Telemetry != nil && v.Telemetry.Width > 0 {
+				return v.Telemetry.Width, v.Telemetry.Height, true
 			}
 		}
+		return 0, 0, false
 	}
-	profile := filepath.Join(config.Load().DataDir, "chrome-out")
-	return exec.Command("open", "-na", "Google Chrome", "--args", "--kiosk", "--app="+base()+"/out",
-		fmt.Sprintf("--window-position=%d,%d", x, y), "--user-data-dir="+profile, "--no-first-run",
-		"--autoplay-policy=no-user-gesture-required", "--disable-features=Translate").Run()
+	return browser.Open(ctx, base()+"/out", d, list, config.Load().DataDir, size)
 }
 
 func runSim(args []string) error {

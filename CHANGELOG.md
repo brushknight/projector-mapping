@@ -6,30 +6,112 @@ version section, and the release workflow uses that section as the GitHub releas
 
 ## [Unreleased]
 
+### Focus, lens and background layers
+
+- **Two focus rings, sharp by default.** "Attachment focus" sharpens the plates, "background focus" the colour,
+  gradient or effect under them (in live: "live layer focus" for the live layers). Both start at 100 %, and at 100 %
+  nothing is blurred.
+- **Background layers in static.** Put a colour, gradient, animated colour or effect under the window: the Show static
+  panel has a gallery for attachments and for backgrounds, with try before add, and a stack card that reads
+  attachments on top, background below, each with its focus.
+- **Settings stay put.** Picking another attachment keeps its place, size, turn, motion and the light; applying a
+  preset keeps your focus, fringe, vignette and slide.
+- **Lens.** Vignette is off by default; colour fringe stays; dust and haze is gone.
+- **Instant slide.** Drags show in the preview the next frame and go to the server at about 60 Hz.
+
+### Sharper, cleaner output
+
+- **Sharp plates on a projector.** The light's mask rendered at most 1280 px wide and was stretched up to the
+  1920 px output, and focus 1 still blurred it a little, so blinds and figures looked soft and stepped. The mask now
+  renders at the output's full size, focus 1 means no blur, plate masks are 4096 px on a projector (2048 px in
+  previews) with trilinear and anisotropic filtering, and enlarged plates keep a one-pixel anti-aliased edge.
+- **No more specks.** Dust and haze are gone from the light (they drew dark motes and moving grain over the
+  picture). Plates no longer wrap at their edge unless tiled, and the colour fringe never samples past the mask's
+  edge. A test renders every attachment at sharp focus and fails on isolated dark pixels.
+- **Window drags stay fast.** Dragging a window's geometry draws a quick draft and redraws it at full size once
+  the value holds.
+
+### Controls
+
+- **The wheel only scrolls.** Sliders, the hero slide, the motion path handles and the timeline scrubbers no longer
+  move when you scroll the mouse wheel after a drag: a control only drags while a button is down, a drag ends when
+  the pointer is released, cancelled or loses capture, and a pointer press leaves no keyboard focus behind (arrows
+  still work after Tab).
+
+### Output windows
+
+- **Put on projector.** The editor (Show preview and Set up) lists the displays attached to the Mac and opens the
+  output on the one you pick full screen in a Chrome app window: no address bar, its own Chrome profile, sound
+  allowed. The window moves onto the display through the Accessibility API, so it lands right even on a projector
+  placed above or left of the main display, and the page goes full screen there by itself, no click. projmap checks
+  the output measures exactly that display's pixels before it says it worked. New local-only endpoints `GET /api/v1/outputs/displays` and `POST /api/v1/outputs/launch`;
+  `projmap open --out` shares the code.
+- **Full screen on the viewer and the output.** The first click goes full screen, double-click and F switch it, Esc
+  leaves. A "click for full screen" hint shows for 3 s, and the cursor and the viewer's bar hide after 2 s at rest.
+  This hides Chrome's address bar, which a pop-up window keeps even in macOS full screen.
+
+### Reference plates and parametric windows
+
+- **Only the plates from your reference photos.** The attachment library is now 55 metal plates, each following one
+  of the photos in `design/refs/gobo-plates` (its source names the photo): the 20 Amaran MO05 to MO24 replicas, and
+  new plates from set A (moon and stars, bonfire, eight point stars, leaf breakup), set 2 (breakup, cracked branches,
+  rainbow arch, hearts, radial burst, vine leaves), set 3 (starburst cross, stardust, stars, slit, tree with leaves,
+  swirl), set 4 and set B (bubbles, squiggles, circle, dots, jungle, radial, maze, snowflake field, big snowflake,
+  and the windows). Designs that repeat across sheets appear once. The invented attachments are gone: the 33 shader
+  attachments and the 23 original plates.
+- **Groups**: windows, nature, sky, patterns and beams, taken from the catalog on the web and the phone.
+- **Windows you can reshape.** The 6-pane grid, arched, palace, skewed, setting sun, slanted, tall grid, diamond
+  lattice and window grid III windows, the blinds, slat blinds and the fine-lines plates are presets of one
+  parametric window. The attachment card's **window** section (and the phone's) adjusts sashes, columns, rows, pane
+  gap, width, height, frame and mullion width, an arch with its height, spokes and hub, a round outline, perspective
+  (top width, right height, slant, rise), a diamond lattice with its density and inner squares, and slats with their
+  width and direction; **reset to preset** puts the preset back.
+- **Older scenes move on their own.** On start the server moves every removed attachment to the closest plate or
+  window preset (a 4-pane window becomes the grid window with one sash of 2 × 2 panes, blinds keep their slats) and
+  logs each move. Catalog version 6, scenes and presets carry `format: 6`; protocol §16.
+- **For agents**: `catalog_get` lists the plates with their category, source and window geometry, and
+  `attachment_add` and `gobo_set` take window params.
+
+### Live gallery
+
+- **Live layers as a gallery.** The Show live panel shows every live layer (tree sway, palm sway, clouds, rain on
+  glass, caustics, dapple, film grain, haze, lightning, day cycle, sun drift, candle) as an animated tile, drawn by
+  the real engine with one shared renderer. Tap a tile to try it full size in the preview without putting it on air,
+  then add it to live or cancel.
+- **Live layers block light like attachments.** Trees, palms, clouds, rain and the textures start as masks over the
+  light (blend multiply), so the focus ring softens them like a gobo; adding one to a live stack without a light adds
+  the light.
+- **More natural motion.** Trees and palms move with one smooth wind: slow swells, gusts that build and release, tips
+  moving more than boughs, and every leaf turning on its own stalk. Boughs keep an even width. Clouds billow and
+  drift in two layers with soft edges and clear gaps of sun. Raindrops meander instead of shivering.
+- **Animated strips for the phone.** `npm run thumbs` renders a looping 36 frame strip of every live layer
+  (`/catalog/thumbs/<id>-anim.jpg`) for the phone's live gallery, and `/preview?try=<id>` previews a layer on the
+  phone's hero without putting it on air.
+- **Add a live layer** in a few steps: `docs/guides/live-layers.md`.
+
+### Video sound and brightness
+
+- **YouTube loops play their sound.** Turn on **sound** on a video layer (files and YouTube) and set its volume: it
+  plays on the audio output only (`/out` by default, the editor's wall preview when the output is the editor), at
+  the layer volume times the master, and master mute silences it. The YouTube player unmutes over the IFrame Player
+  API; if the browser blocks sound, `/out` asks for one click. Previews and thumbnails stay muted.
+- **Brightness 100 % is the original picture.** Photo and video brightness no longer multiplies by 1.4, so 100 % no
+  longer clips colours, and warmth never lifts a channel above its original value. New layers start at 90 %; stored
+  scenes and presets scale their brightness by 1.4 (up to 100 %) once, so they look as before.
+
 ### Static light like a real spotlight
 
 - **The light model.** In static and live mode the projector is a spotlight: the light lights the whole frame (16:9
   or 9:16), attachments in front of it block light and multiply as you add them, and one focus ring softens the
   whole picture. Existing scenes upgrade on their own: their gobo becomes an attachment and its softness the focus.
-- **33 photorealistic attachments** in windows (4-pane, 6-pane, arched, church window with leaded glass, porthole,
-  French doors, skylight, barn), blinds (fine, standard and wide venetian, vertical, plantation shutters), nature
-  (three leaf breakups, palm, branch, ivy, bamboo), patterns (dots, lattice, Moroccan, honeycomb, stripes, grid, star
-  field, water ripple) and spots (hard, soft, oval, framing shutters with four draggable blades, iris). Each has
-  throw (low sun stretch), keystone, frame depth (the soft double edge) and its own shape controls; the lens adds
-  colour fringe, vignette and dust and haze. Research notes with sources: `docs/research/gobos.md`.
+- **Attachments** have throw (low sun stretch), keystone and frame depth (the soft double edge); the lens adds colour
+  fringe and vignette. Research notes with sources: `docs/research/gobos.md`.
 - **Real thumbnails** rendered by the engine at build time and served at `/catalog/thumbs/<id>.png`, in a browser
   by category on the web and the phone.
-- **Metal gobo plates.** A new `plates` category of 43 round laser-cut plates, drawn as vectors and rasterized once
-  into a 2048 px mask so focus, rotation, scale and throw work as on every attachment. 20 follow a common M-size set
-  (sunburst, louvre, rain lines, fan rays, skewed window, 6-pane grid window, arched window, crossed lines, scattered
-  sticks, pixel cloud, water ripples, snowflakes, lightning, starfield, flames, firework burst, bare branches, fern
-  leaves, foliage breakup, rings) and 23 are new backdrops (curved venetian, bamboo stalks, palm silhouette,
-  monstera, jungle breakup, stained-glass grid, Moroccan arch lattice, honeycomb, concentric circles, spiral,
-  cityscape skyline, starburst fine and bold, Art Deco fan, diagonal blinds, porthole grid, god rays, wave lines,
-  abstract triangles, dappled light fine and bold, mesh fence, window with curtains), each with the tie bridges a
-  real steel plate needs. A plate projects a round light field; its **light field** control fills the frame,
-  stretches to it or tiles across it instead. Plate tiles show the metal plate itself, or the light it projects.
-  Catalog version 5; `docs/guides/static-light.md` says how to add a plate.
+- **Metal gobo plates**, drawn as vectors and rasterized into a mask so focus, rotation, scale and throw work as on
+  every attachment, each with the tie bridges a real steel plate needs. A plate projects a round light field; its
+  **light field** control fills the frame, stretches to it or tiles across it instead. Plate tiles show the metal
+  plate itself, or the light it projects. `docs/guides/static-light.md` says how to add a plate.
 - **Animated colour.** The light can carry a gradient gel or an animated colour (hue cycle, colour flow, colour
   pulse, aurora, daylight cycle); the color tab offers them too. New generators are one GLSL function each
   (`docs/effects.md`).

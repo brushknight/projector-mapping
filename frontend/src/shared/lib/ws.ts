@@ -30,6 +30,18 @@ export interface SocketLike {
 
 export type HubStatus = 'idle' | 'connecting' | 'open' | 'closed'
 
+/** (§16) the param throttle window: at most one `param` per path every PARAM_MS (about 60 Hz) */
+export const PARAM_MS = 16
+
+interface ParamSlot {
+  ch: string
+  path: string
+  value: unknown
+  /** a newer value waits for the end of the window */
+  waiting: boolean
+  timer: ReturnType<typeof setTimeout>
+}
+
 export interface HubOptions {
   /** ws URL; defaults to ws(s)://<page host>/ws */
   url?: string
@@ -118,6 +130,8 @@ export class Hub {
 
   private sock: SocketLike | null = null
   private channels = new Map<string, Channel>()
+  /** (§16) the param throttle's open windows, by channel and path */
+  private paramSlots = new Map<string, ParamSlot>()
   private cmds = new Map<string, { resolve: (d: unknown) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }>()
   private rpc = new Map<string, RpcHandler>()
   private listeners = new Map<keyof HubEvents, Set<(v: never) => void>>()
@@ -357,8 +371,11 @@ export class Hub {
   // ── changing things ────────────────────────────────────────────────────────
 
   /**
-   * A continuous value (drag). Applied locally at once and forwarded by the server to every other subscriber; the
-   * server commits it 200 ms after the last param on that path. Dropped while disconnected.
+   * A continuous value (drag). Applied locally at once (every view of the channel, the editor's previews included,
+   * draws it the same frame) and forwarded by the server to every other subscriber; the server commits it 200 ms
+   * after the last param on that path. (§16) Sends are throttled per path to one every PARAM_MS (about 60 Hz): the
+   * first goes at once, the newest value of a burst goes at the end of the window, so the wire never floods and the
+   * last value always arrives. A patch flushes the waiting params first, so order holds. Dropped while disconnected.
    */
   param(ch: string, path: string, value: unknown): boolean {
     const c = this.channel(ch)
@@ -370,7 +387,33 @@ export class Hub {
       }
       this.recompute(c)
     }
-    return this.send({ t: 'param', ch, d: { path, value } })
+    if (this.status !== 'open') return false
+    const key = `${ch}\u0000${path}`
+    const slot = this.paramSlots.get(key)
+    if (slot) {
+      // inside the window: keep the newest, it goes when the window ends
+      slot.value = value
+      slot.waiting = true
+      return true
+    }
+    const sent = this.send({ t: 'param', ch, d: { path, value } })
+    const s: ParamSlot = { ch, path, value, waiting: false, timer: setTimeout(() => this.flushParam(key), PARAM_MS) }
+    this.paramSlots.set(key, s)
+    return sent
+  }
+
+  /** Sends a path's waiting value, if any, and closes its window. */
+  private flushParam(key: string) {
+    const s = this.paramSlots.get(key)
+    if (!s) return
+    clearTimeout(s.timer)
+    this.paramSlots.delete(key)
+    if (s.waiting) this.send({ t: 'param', ch: s.ch, d: { path: s.path, value: s.value } })
+  }
+
+  /** Sends every waiting param of a channel (before a patch on it, so a drag's last value lands first). */
+  flushParams(ch?: string) {
+    for (const [key, s] of [...this.paramSlots]) if (!ch || s.ch === ch) this.flushParam(key)
   }
 
   /**
@@ -388,6 +431,7 @@ export class Hub {
   }
 
   private sendPending(c: Channel, p: Pending) {
+    this.flushParams(c.name)
     this.send({ t: 'patch', ch: c.name, id: p.id, base: c.version, d: p.ops })
     // when offline the patch stays pending and is resent after the next snapshot
   }

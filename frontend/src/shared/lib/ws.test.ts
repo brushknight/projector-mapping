@@ -245,3 +245,36 @@ describe('Hub', () => {
     expect(median([])).toBe(0)
   })
 })
+
+describe('Hub param throttle (§16)', () => {
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => vi.useRealTimers())
+
+  it('applies every drag value locally the same moment and sends at most one per path every 16 ms, the newest last', () => {
+    const { hub, s, welcome } = setup()
+    welcome()
+    const seen: number[] = []
+    hub.subscribe('scene:x', (snap) => seen.push((snap.doc as { light: { slide: { x: number } } } | null)?.light.slide.x ?? NaN))
+    s().recv({ t: 'snapshot', ch: 'scene:x', v: 1, d: { light: { slide: { x: 0 } } } })
+    const t0 = performance.now()
+    for (let i = 1; i <= 10; i++) {
+      hub.param('scene:x', '/light/slide/x', i / 10)
+      // input-to-frame: the view has the value before the call returns
+      expect((hub.get('scene:x').doc as { light: { slide: { x: number } } }).light.slide.x).toBe(i / 10)
+    }
+    expect(performance.now() - t0).toBeLessThan(16)
+    expect(s().all('param')).toHaveLength(1)
+    vi.advanceTimersByTime(16)
+    const params = s().all('param')
+    expect(params).toHaveLength(2)
+    expect((params[1].d as { value: number }).value).toBe(1)
+    // a patch flushes a waiting param first
+    hub.param('scene:x', '/light/slide/x', 0.5)
+    hub.param('scene:x', '/light/slide/x', 0.6)
+    void hub.patch('scene:x', [{ op: 'replace', path: '/light/slide/x', value: 0 }]).catch(() => {})
+    const tail = s().sent.slice(-2)
+    expect(tail.map((e) => e.t)).toEqual(['param', 'patch'])
+    expect((tail[0].d as { value: number }).value).toBe(0.6)
+    expect(seen.length).toBeGreaterThan(10)
+  })
+})

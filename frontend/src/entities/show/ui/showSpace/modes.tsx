@@ -18,8 +18,10 @@ import { useVideoUpload } from '../../../video/ui/videoUpload'
 import { useVideos, videoThumbUrl } from '../../../video/ui/useVideos'
 import { youtubeRef, type Video } from '../../../video/types'
 import { playheadNow } from '../../live'
+import { showAudio } from '../../types'
 import { useShow } from './context'
 import { AttachmentBrowser, AttachmentCard, LightCard, MotionCard, PictureMotion, StaticLightPanel } from './light'
+import { LiveGallery } from './liveGallery'
 import { useLayerThumb } from './thumbs'
 import s from './styles.module.css'
 
@@ -167,7 +169,7 @@ export function PresetChips({ mode }: { mode: BackdropMode }) {
           const sw = top ? layerSwatch(sh.catalog, top) : undefined
           return (
             <span key={p.id} className={s.preset}>
-              <button type="button" className={s.presetMain} onClick={() => void sh.editing.edit(() => applyPresetOps(p)).then(() => sh.toast(`${p.name} is on air.`))} title={`apply ${p.name}: replaces the ${mode} look and puts ${mode} on air`} data-testid={`preset-${p.id}`}>
+              <button type="button" className={s.presetMain} onClick={() => void sh.editing.edit((sc) => applyPresetOps(p, sc)).then(() => sh.toast(`${p.name} is on air.`))} title={`apply ${p.name}: replaces the ${mode} look and puts ${mode} on air`} data-testid={`preset-${p.id}`}>
                 {sw && <i className={s.presetSw} style={{ background: sw }} />}
                 {p.name}
               </button>
@@ -251,6 +253,7 @@ export function LivePanel() {
   const selAtt = atts.find((a) => a.id === att) ?? null
   return (
     <>
+      <LiveGallery />
       <LiveLayers />
       <div className={s.split}>
         <AttachmentBrowser mode="live" selected={selAtt?.id ?? null} onSelect={setAtt} />
@@ -274,7 +277,7 @@ function LiveLayers() {
   return (
     <div className={s.split}>
       <Card cap="layers · top first" aside={<AddLayerMenu />} testId="live-stack">
-        {layers.length === 0 && <EmptyState>no live layers. add a swaying tree, clouds or rain.</EmptyState>}
+        {layers.length === 0 && <EmptyState>no live layers. tap a tile above to try one, then add it to live.</EmptyState>}
         <div className={s.rows}>
           {[...layers].reverse().map((l, k) => {
             const i = layers.length - 1 - k
@@ -440,7 +443,8 @@ export function SceneryPanel() {
         ) : (
           <div className={s.controls} data-testid="scenery-controls">
             <FillSlider label="blur" value={num('blur', 0.2)} display={pct(num('blur', 0.2))} onChange={(v, ph) => set(lp('params', 'blur'), r2(v), ph)} />
-            <FillSlider label="brightness" value={num('brightness', 0.8)} display={pct(num('brightness', 0.8))} onChange={(v, ph) => set(lp('params', 'brightness'), r2(v), ph)} />
+            {/* (§16) 100 % is the original picture */}
+            <FillSlider label="brightness" value={num('brightness', 0.9)} display={num('brightness', 0.9) >= 1 ? '100% · original' : pct(num('brightness', 0.9))} onChange={(v, ph) => set(lp('params', 'brightness'), r2(v), ph)} />
             <FillSlider label="warmth" value={num('warmth', 0)} min={-1} max={1} step={0.01} display={num('warmth', 0) === 0 ? '0' : num('warmth', 0) > 0 ? `+${num('warmth', 0).toFixed(2)}` : num('warmth', 0).toFixed(2)} onChange={(v, ph) => set(lp('params', 'warmth'), r2(v), ph)} />
             {!(layer.kind === 'video' && layer.ref.startsWith('youtube:')) && <FillSlider label="drift" value={num('drift', 0)} display={pct(num('drift', 0))} onChange={(v, ph) => set(lp('params', 'drift'), r2(v), ph)} />}
             {layer.kind === 'video' && (
@@ -450,11 +454,17 @@ export function SceneryPanel() {
                   <FillSlider label="from" value={num('start', 0)} min={0} max={Math.max(dur, num('start', 0), num('end', 0), 60)} step={0.5} display={`${num('start', 0).toFixed(1)} s`} onChange={(v, ph) => set(lp('params', 'start'), Math.round(v * 10) / 10, ph)} />
                   <FillSlider label="to" value={num('end', 0)} min={0} max={Math.max(dur, num('start', 0), num('end', 0), 60)} step={0.5} display={num('end', 0) === 0 ? 'end' : `${num('end', 0).toFixed(1)} s`} onChange={(v, ph) => set(lp('params', 'end'), Math.round(v * 10) / 10, ph)} />
                 </div>
-                <div className={s.switchRow}>
-                  <span>play its sound</span>
-                  <Switch checked={layer.params.audio === true} onChange={(v) => set(lp('params', 'audio'), v)} ariaLabel="play the video's sound" />
+                {/* (§16) the video's own sound plays on the audio output (show.audio.output), at volume × master */}
+                <div className={s.switchRow} data-testid="video-sound">
+                  <span>sound</span>
+                  <Switch checked={layer.params.audio === true} onChange={(v) => set(lp('params', 'audio'), v)} ariaLabel="play the video's sound on the audio output" />
                 </div>
-                {layer.params.audio === true && <FillSlider label="video volume" value={num('volume', 1)} display={pct(num('volume', 1))} onChange={(v, ph) => set(lp('params', 'volume'), r2(v), ph)} />}
+                {layer.params.audio === true && (
+                  <>
+                    <FillSlider label="volume" value={num('volume', 1)} display={pct(num('volume', 1))} onChange={(v, ph) => set(lp('params', 'volume'), r2(v), ph)} />
+                    <p className={s.note}>{soundWhere(showAudio(sh.show).output)}</p>
+                  </>
+                )}
                 {layer.ref.startsWith('youtube:') && <p className={s.note}>an embedded youtube player: blur, brightness and warmth apply as a filter, drift and motion do not. it needs the internet.</p>}
               </>
             )}
@@ -476,6 +486,13 @@ export function SceneryPanel() {
       )}
     </div>
   )
+}
+
+/** (§16) Where a video layer's sound plays, for the scenery panel. */
+function soundWhere(output: 'projector' | 'editor' | 'phone'): string {
+  if (output === 'projector') return 'plays on the projector computer (/out), at this volume times the master.'
+  if (output === 'editor') return 'plays on this laptop, in the editor, at this volume times the master.'
+  return 'sound plays on the phone, which does not play video sound yet. pick projector or laptop under sound plays on.'
 }
 
 // ── objects ──────────────────────────────────────────────────────────────────

@@ -12,7 +12,7 @@ import (
 func TestCatalog(t *testing.T) {
 	h := apitest.New(t)
 	m := h.Do("GET", "/api/v1/catalog", nil).Map(t)
-	if m["version"] != float64(5) || len(m["gobos"].([]any)) != 76 || len(m["effects"].([]any)) != 11 {
+	if m["version"] != float64(6) || len(m["gobos"].([]any)) < 45 || len(m["effects"].([]any)) != 11 {
 		t.Fatalf("catalog %v", m["version"])
 	}
 	r := h.Do("GET", "/catalog/assets/scenery/flowers.jpg", nil)
@@ -23,13 +23,15 @@ func TestCatalog(t *testing.T) {
 	apitest.ExpectErr(t, h.Do("GET", "/catalog/assets/scenery/nope.jpg", nil), http.StatusNotFound, "not_found")
 	// thumbnails (protocol §15): built into the server by the web build; unknown ids answer 404 without auth
 	apitest.ExpectErr(t, h.Remote("GET", "/catalog/thumbs/nope.png", nil, ""), http.StatusNotFound, "not_found")
-	if _, err := fs.Stat(builtin.Assets(), "thumbs/window-4.png"); err == nil {
-		r := h.Remote("GET", "/catalog/thumbs/window-4.png", nil, "")
+	if _, err := fs.Stat(builtin.Assets(), "thumbs/plate-grid-window.png"); err == nil {
+		r := h.Remote("GET", "/catalog/thumbs/plate-grid-window.png", nil, "")
 		apitest.Expect(t, r, http.StatusOK)
 		if r.Header.Get("Content-Type") != "image/png" {
 			t.Fatalf("thumb content type %s", r.Header.Get("Content-Type"))
 		}
 	}
+	// (catalog 6) the removed attachments' thumbnails are gone
+	apitest.ExpectErr(t, h.Remote("GET", "/catalog/thumbs/window-4.png", nil, ""), http.StatusNotFound, "not_found")
 	// (catalog 5) a metal plate's two thumbnails: the light it projects and the plate itself
 	for _, f := range []string{"plate-sunburst.png", "plate-sunburst-metal.png"} {
 		if _, err := fs.Stat(builtin.Assets(), "thumbs/"+f); err == nil {

@@ -17,12 +17,12 @@ export const DEFAULT_LIGHT: Light = {
 /** (§14) the video layer params, for a catalog older than version 3 */
 export const VIDEO_PARAMS: ParamSchema = {
   blur: { type: 'number', min: 0, max: 1, default: 0.2, label: 'background blur' },
-  brightness: { type: 'number', min: 0, max: 1, default: 0.8, label: 'brightness' },
+  brightness: { type: 'number', min: 0, max: 1, default: 0.9, label: 'brightness' },
   warmth: { type: 'number', min: -1, max: 1, default: 0, label: 'warmth' },
   drift: { type: 'number', min: 0, max: 1, default: 0, label: 'drift' },
   start: { type: 'number', min: 0, max: 36000, default: 0, label: 'loop from' },
   end: { type: 'number', min: 0, max: 36000, default: 0, label: 'loop to' },
-  audio: { type: 'boolean', default: false, label: 'play its sound' },
+  audio: { type: 'boolean', default: false, label: 'sound' },
   volume: { type: 'number', min: 0, max: 1, default: 1, label: 'volume' },
 }
 
@@ -58,10 +58,10 @@ export function defaultStackLight(catalog: Catalog | null, over: Partial<StackLi
   const d = schemaDefaults(catalog?.stackLight?.params) as Partial<StackLight>
   return {
     intensity: 0.85,
-    focus: 0.7,
+    focus: 1,
+    backgroundFocus: 1,
     fringe: 0.2,
-    vignette: 0.3,
-    haze: 0,
+    vignette: 0,
     ...d,
     color: { mode: 'cct', kelvin: catalog?.stackLight?.kelvin ?? 5600, tint: 0, hue: 212, sat: 0.7 },
     fx: { kind: 'none', speed: 0.35 },
@@ -76,13 +76,18 @@ export function defaultStackLight(catalog: Catalog | null, over: Partial<StackLi
 export function stackLightOf(light: Partial<StackLight> | null | undefined, catalog: Catalog | null = null): StackLight {
   const base = defaultStackLight(catalog)
   if (!light) return base
-  return { ...base, ...light, color: { ...base.color, ...(light.color ?? {}) }, fx: { ...base.fx, ...(light.fx ?? {}) }, slide: { ...base.slide, ...(light.slide ?? {}) } }
+  // (§16) haze is gone: an older document's haze is dropped
+  const { haze: _haze, ...rest } = light as Partial<StackLight> & { haze?: number }
+  void _haze
+  return { ...base, ...rest, color: { ...base.color, ...(light.color ?? {}) }, fx: { ...base.fx, ...(light.fx ?? {}) }, slide: { ...base.slide, ...(light.slide ?? {}) } }
 }
 
 /** (§15) a new attachment of a catalog gobo with its defaults (scale, rotation, params). The id is an optimistic temporary. */
 export function newAttachment(catalog: Catalog | null, gobo: string, id: string): Attachment {
   const item = catalog?.gobos.find((g) => g.id === gobo)
   const params: Record<string, unknown> = { ...schemaDefaults(catalog?.goboParams), ...(item?.defaults ?? {}), ...schemaDefaults(item?.params) }
+  // (§16) a window preset's geometry stays out: missing params take the preset, so "reset to preset" removes them
+  if (item?.family === 'window') for (const g of catalog?.windowParamGroups ?? []) for (const k of g.params) delete params[k]
   return {
     id,
     gobo,
@@ -112,6 +117,18 @@ export function catalogName(catalog: Catalog | null, kind: LayerKind, ref: strin
   return list.find((x) => x.id === ref)?.name ?? (ref.startsWith('asset:') ? 'my photo' : ref)
 }
 
+/**
+ * (§16) The blend a new procedural layer gets: the catalog item's `blend`, else `multiply` for shadows (nature,
+ * weather and texture, except lightning, which flashes over the light) and `normal` for the rest. A multiply layer in
+ * a live stack with a light is a mask over the light, like an attachment.
+ */
+export function proceduralBlend(catalog: Catalog | null, ref: string): Layer['blend'] {
+  const item = catalog?.procedural.find((p) => p.id === ref)
+  if (item?.blend) return item.blend
+  const cat = item?.category ?? (ref === 'tree-sway' || ref === 'palm-sway' ? 'nature' : ref === 'clouds' ? 'weather' : '')
+  return ref !== 'lightning' && (cat === 'nature' || cat === 'weather' || cat === 'texture') ? 'multiply' : 'normal'
+}
+
 /** A new layer of a catalog item with every default filled in. The id is an optimistic temporary. */
 export function newLayer(catalog: Catalog | null, kind: LayerKind, ref: string, id: string): Layer {
   const lit = kind === 'gobo' || kind === 'procedural'
@@ -127,7 +144,7 @@ export function newLayer(catalog: Catalog | null, kind: LayerKind, ref: string, 
     name: catalogName(catalog, kind, ref),
     visible: true,
     opacity: 1,
-    blend: kind === 'procedural' && (ref === 'tree-sway' || ref === 'palm-sway' || ref === 'clouds') ? 'multiply' : 'normal',
+    blend: kind === 'procedural' ? proceduralBlend(catalog, ref) : 'normal',
     light: lit ? defaultLight(catalog) : null,
     params,
   }

@@ -13,17 +13,22 @@ type Pt struct {
 }
 
 // StackLight is the light of the static and live stacks (protocol §15): a spotlight that lights the whole frame,
-// coloured by its colour or a colour layer, masked by the attachments, softened by one focus ring.
+// coloured by its colour, a colour layer or the stack's background layers, masked by the attachments. Focus sharpens
+// the attachments (and in live the multiply layers that join the mask), BackgroundFocus the background (protocol §16).
+// Haze is gone since §16: an old document's haze is dropped on decode and never written.
 type StackLight struct {
 	Intensity float64 `json:"intensity"`
-	Focus     float64 `json:"focus"`
-	Color     Color   `json:"color"`
-	FX        LightFX `json:"fx"`
+	// Focus is the attachment focus: 1 sharp (the default), 0 fully soft.
+	Focus float64 `json:"focus"`
+	// BackgroundFocus blurs what lies under the attachments: the colour layer and background layers in static, the
+	// live layers in live. 1 sharp (the default).
+	BackgroundFocus float64 `json:"backgroundFocus"`
+	Color           Color   `json:"color"`
+	FX              LightFX `json:"fx"`
 	// ColorLayer colours the light before the masks; nil = the light's own colour.
 	ColorLayer *ColorLayer `json:"colorLayer"`
 	Fringe     float64     `json:"fringe"`
 	Vignette   float64     `json:"vignette"`
-	Haze       float64     `json:"haze"`
 	// Slide pans the whole composed light inside the frame (frame fractions, -1..1).
 	Slide Pt `json:"slide"`
 	// Motion drives the slide, turns and scales every attachment and drifts the CCT; nil = none.
@@ -33,10 +38,11 @@ type StackLight struct {
 // DefaultKelvin is the colour temperature of a new stack light.
 const DefaultKelvin = 5600
 
-// DefaultStackLight is the light a static stack gets when it has none: 5600 K, intensity 0.85, focus 0.7.
+// DefaultStackLight is the light a static stack gets when it has none: 5600 K, intensity 0.85, both focus rings sharp
+// (1), colour fringe 0.2, no vignette (protocol §16).
 func DefaultStackLight() StackLight {
-	return StackLight{Intensity: 0.85, Focus: 0.7, Color: Color{Mode: "cct", Kelvin: DefaultKelvin, Tint: 0, Hue: 212, Sat: 0.7},
-		FX: LightFX{Kind: "none", Speed: 0.35}, Fringe: 0.2, Vignette: 0.3, Haze: 0}
+	return StackLight{Intensity: 0.85, Focus: 1, BackgroundFocus: 1, Color: Color{Mode: "cct", Kelvin: DefaultKelvin, Tint: 0, Hue: 212, Sat: 0.7},
+		FX: LightFX{Kind: "none", Speed: 0.35}, Fringe: 0.2, Vignette: 0}
 }
 
 // UnmarshalJSON fills absent fields with the defaults.

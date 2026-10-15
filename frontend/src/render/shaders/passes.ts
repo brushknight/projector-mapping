@@ -127,6 +127,7 @@ uniform float u_blackout;
 uniform int u_test;          // 0 off 1 grid 2 white 3 crosshair 4 corners
 uniform vec2 u_sceneSize;    // authored px
 uniform vec2 u_canvas;       // framebuffer px
+uniform vec2 u_outPx;        // the projector's physical output size (setup.output); patterns use its pixel grid
 uniform int u_pattern;       // 0 none 1 gray 2 white 3 black
 uniform int u_axis;          // 0 x 1 y
 uniform uint u_bit;
@@ -183,7 +184,9 @@ void main() {
   if (u_space == 1 && u_pattern > 0) {
     if (u_pattern == 2) { o_color = vec4(1.0); return; }
     if (u_pattern == 3) { o_color = vec4(0.0, 0.0, 0.0, 1.0); return; }
-    uint c = u_axis == 0 ? uint(gl_FragCoord.x) : uint(u_canvas.y) - 1u - uint(gl_FragCoord.y);
+    // §7: Gray code over the projector's own pixels (setup.output), whatever the window's size or pixel density
+    vec2 opx = vec2(gl_FragCoord.x, u_canvas.y - gl_FragCoord.y) * (u_outPx / u_canvas);
+    uint c = u_axis == 0 ? uint(opx.x) : uint(opx.y);
     uint g = c ^ (c >> 1u);
     bool on = ((g >> u_bit) & 1u) == 1u;
     if (u_inverse == 1) on = !on;

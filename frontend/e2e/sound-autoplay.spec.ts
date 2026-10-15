@@ -72,3 +72,51 @@ test('GO plays the cue sound and schedules the timeline sound on the wall clock'
   await request.post(`${API}/api/v1/show/stop`, { data: {} })
   await expect.poll(async () => (await stopped(page)).some((s) => s.clipId === 'clp_rain')).toBe(true)
 })
+
+// §16: a fake YouTube player that answers the IFrame Player API and records the commands it gets
+const FAKE_PLAYER = `<html><body><script>
+window.cmds = [];
+addEventListener('message', (e) => {
+  let m; try { m = JSON.parse(e.data) } catch { return }
+  if (m.event === 'listening') parent.postMessage(JSON.stringify({ event: 'onReady', id: 1 }), '*')
+  if (m.event === 'command') {
+    window.cmds.push(m.func + (m.args && m.args.length ? ':' + m.args.join(',') : ''))
+    const muted = m.func === 'mute' ? true : m.func === 'unMute' ? false : undefined
+    if (muted !== undefined) parent.postMessage(JSON.stringify({ event: 'infoDelivery', info: { muted, playerState: 1 } }), '*')
+  }
+})
+</script></body></html>`
+
+test('/out unmutes a YouTube layer with sound at volume × master, and mutes it again', async ({ page, request }) => {
+  await page.route(/youtube-nocookie\.com|ytimg\.com|youtube\.com/, (r) => r.fulfill({ status: 200, contentType: 'text/html', body: FAKE_PLAYER }))
+  await request.post(`${API}/api/v1/show/audio`, { data: { output: 'projector', volume: 0.8, muted: false } })
+  await request.post(`${API}/api/v1/scenes/scn_desk/patch`, {
+    data: {
+      base: 0,
+      ops: [
+        { op: 'replace', path: '/backdrop/scenery/layers/0/visible', value: true },
+        { op: 'replace', path: '/backdrop/scenery/layers/1/visible', value: false },
+        { op: 'replace', path: '/backdrop/scenery/layers/0/params/audio', value: true },
+        { op: 'replace', path: '/backdrop/scenery/layers/0/params/volume', value: 0.5 },
+        { op: 'replace', path: '/mode', value: 'scenery' },
+      ],
+    },
+  })
+  await page.goto('/out?headless=1')
+  await waitForAudioOutput(page, request)
+  const bd = page.getByTestId('youtube-backdrop')
+  const src = (await bd.locator('iframe').getAttribute('src'))!
+  expect(src).toContain('mute=1')
+  expect(src).toContain('enablejsapi=1')
+  const cmds = async () => {
+    const f = page.frames().find((x) => x.url().includes('youtube-nocookie.com'))
+    return f ? ((await f.evaluate(() => (window as unknown as { cmds: string[] }).cmds)) ?? []) : []
+  }
+  await expect.poll(cmds, { timeout: 10_000 }).toEqual(expect.arrayContaining(['unMute', 'setVolume:40', 'playVideo']))
+  await expect(bd.locator('iframe')).toHaveAttribute('data-volume', '40')
+  // master mute silences it
+  await request.post(`${API}/api/v1/show/audio`, { data: { muted: true } })
+  await expect(bd.locator('iframe')).toHaveAttribute('data-volume', '0')
+  await expect.poll(async () => (await cmds()).at(-1), { timeout: 10_000 }).toBe('mute')
+  await expect(page.getByTestId('enable-sound')).toHaveCount(0)
+})

@@ -23,6 +23,19 @@ type Feed interface {
 	Status() (camera.Status, time.Time, bool)
 	// CameraDevice is the id of the connected camera client ("" when none).
 	CameraDevice() string
+	// FrameRate is the preview frames per second the server actually received over the last 2 s.
+	FrameRate() float64
+	// ProjectorOutput is the newest connected projector output (/out) and its last telemetry.
+	ProjectorOutput() (Output, bool)
+}
+
+// Output is a connected projector output.
+type Output struct {
+	DeviceID string
+	Name     string
+	// Width, Height and FPS come from its telemetry (0 until the first report).
+	Width, Height int
+	FPS           float64
 }
 
 // Frames are the captured stills of one calibration pass.
@@ -39,12 +52,25 @@ type Map interface {
 	ProjToCam(x, y float64) (camera.Pt, bool)
 	CameraSize() (int, int)
 	Encode() ([]byte, error)
+	// Confidence is the 8-bit confidence PNG (see camera.Calibration.ConfidenceAsset).
+	Confidence() ([]byte, error)
+	// Confident tells whether camera pixel (u, v) has a correspondence, and when not, the nearest one that does
+	// (ok false when none is near).
+	Confident(u, v float64) (bool, camera.Pt, bool)
+}
+
+// DecodeROI limits a decode: CamROI in still pixels, ProjROI in physical projector pixels (empty = none).
+type DecodeROI struct {
+	CamROI, ProjROI image.Rectangle
 }
 
 // Vision is the Gray-code math.
 type Vision interface {
 	Bits(n int) int
-	Decode(f Frames, projW, projH int) (Map, camera.Quality, error)
+	// Decode fills Quality.Contrast even when it fails.
+	Decode(f Frames, projW, projH int, roi DecodeROI) (Map, camera.Quality, error)
+	// Contrast measures a white − black pair of 0..1 luma buffers.
+	Contrast(white, black []float32, w, h int) camera.Contrast
 	Load(b []byte) (Map, error)
 	Detect(m Map) []camera.Candidate
 	// Align measures each projector-space edge against the physical edges seen in lit, using the outline still.

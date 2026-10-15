@@ -6,30 +6,52 @@ import (
 )
 
 // Upgrade brings a stored scene document to the current format and reports whether it changed anything; current
-// documents pass through untouched. Two steps:
+// documents pass through untouched. See UpgradeNotes.
+func Upgrade(doc []byte) ([]byte, bool, error) {
+	out, _, changed, err := UpgradeNotes(doc)
+	return out, changed, err
+}
+
+// UpgradeNotes brings a stored scene document to the current format, with one note per change worth a log line. The
+// steps:
 //
 //   - Modes (protocol §1, "Upgrade of older documents"): see upgradeModes.
 //   - The light model (protocol §15, "Upgrade"): see UpgradeStack; a scene without kind gets the inferred one.
-func Upgrade(doc []byte) ([]byte, bool, error) {
-	s, changed, err := decode(doc)
+//   - The plate library (protocol §16, "Migration"): removed attachments move to their plate (MigrateGobos).
+//   - Format 6: photo and video brightness × 1.4, clamped to 1 (ScaleBrightness), once, then `format` is 6.
+//
+// Only the stored-scene upgrade on start scales brightness: Decode never does, so a document read twice is not
+// scaled twice.
+func UpgradeNotes(doc []byte) ([]byte, []string, bool, error) {
+	s, notes, changed, err := decode(doc)
 	if err != nil {
-		return nil, false, err
+		return nil, nil, false, err
+	}
+	if s.Format < FormatVersion {
+		for _, m := range BackdropModes {
+			if ScaleBrightness(s.Backdrop.Stack(m)) {
+				notes = append(notes, fmt.Sprintf("%s: photo and video brightness × 1.4 (100 %% is now the original picture)", m))
+			}
+		}
+		s.Format = FormatVersion
+		changed = true
 	}
 	if !changed {
-		return doc, false, nil
+		return doc, nil, false, nil
 	}
-	return s.Encode(), true, nil
+	return s.Encode(), notes, true, nil
 }
 
-// decode parses a document, upgrading it, and reports whether it was upgraded.
-func decode(doc []byte) (*Scene, bool, error) {
+// decode parses a document, upgrading it, and reports whether it was upgraded and what moved. It keeps the stored
+// `format` so UpgradeNotes can tell an old document (see Decode for the read path).
+func decode(doc []byte) (*Scene, []string, bool, error) {
 	doc, changed, err := upgradeModes(doc)
 	if err != nil {
-		return nil, false, err
+		return nil, nil, false, err
 	}
 	var s Scene
 	if err := json.Unmarshal(doc, &s); err != nil {
-		return nil, false, err
+		return nil, nil, false, err
 	}
 	if UpgradeStack(ModeStatic, &s.Backdrop.Static) {
 		changed = true
@@ -37,12 +59,17 @@ func decode(doc []byte) (*Scene, bool, error) {
 	if UpgradeStack(ModeLive, &s.Backdrop.Live) {
 		changed = true
 	}
+	notes := MigrateGobos(ModeStatic, &s.Backdrop.Static)
+	notes = append(notes, MigrateGobos(ModeLive, &s.Backdrop.Live)...)
+	if len(notes) > 0 {
+		changed = true
+	}
 	if s.Kind == "" {
 		s.Kind = InferKind(&s)
 		changed = true
 	}
 	s.Normalize()
-	return &s, changed, nil
+	return &s, notes, changed, nil
 }
 
 // UpgradeStack moves a static or live stack from before the light model (no attachments) to it: every gobo layer

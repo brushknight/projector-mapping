@@ -383,9 +383,9 @@ WebRTC through Pion is a later optimization. v1 sends the phone's preview as JPE
 
 | route | what |
 | --- | --- |
-| `/out` | the projector output: fullscreen, idle pairing screen, role `output` |
-| `/view?token=…` | (§15) the viewer: what the projector shows, read only, role `remote`, no caps |
-| `/preview?token=…&w=…&mode=hero\|layer&layer=<id>&scene=<id>` | a chrome-less render of the active scene (or one layer, from any stack) for embedding in the iPhone app's WKWebView. Same engine, lower resolution, no pairing UI, role `remote` (read only). The hero draws the scene's `mode` and the active test pattern exactly like `/out` |
+| `/out` | the projector output: fullscreen, idle pairing screen, role `output` (§17: first click, double-click, F and Esc for full screen) |
+| `/view?token=…` | (§15) the viewer: what the projector shows, read only, role `remote`, no caps (§17: full screen like `/out`) |
+| `/preview?token=…&w=…&mode=hero\|layer&layer=<id>&scene=<id>&try=<procedural id>` | a chrome-less render of the active scene (or one layer, from any stack) for embedding in the iPhone app's WKWebView. Same engine, lower resolution, no pairing UI, role `remote` (read only). The hero draws the scene's `mode` and the active test pattern exactly like `/out`. (§16) `try` draws the scene in live mode with a trial live layer on top, locally, never on air |
 | `/editor/…` | the laptop editor |
 | `/components` | the living style guide |
 | `/a/{sha}`, `/catalog/assets/…` | assets and built-in catalog files (scenery photos at `/catalog/assets/scenery/<id>.jpg`) |
@@ -860,7 +860,8 @@ timestamp, on subscribe and on every change.
   file); `audio` (default false) sends the video's own sound to the audio output; `volume` 0…1 (1).
 - `asset:` videos are a WebGL video texture drawn exactly like a photo (cover the frame, blur, brightness, warmth,
   drift), looping `start`…`end`, muted. With `audio: true` and `output: "projector"`, `/out` unmutes its element at
-  `volume × master`; other outputs ignore the video's sound in this version.
+  `volume × master`; other outputs ignore the video's sound in this version. (§16 extends this to YouTube and the
+  editor output, and changes brightness: 100 % is the original picture.)
 - `youtube:` videos are an embedded player (`https://www.youtube-nocookie.com/embed/<id>`, muted, looping, no
   controls, from `start`, to `end` when set) that `/out` and `/preview` place **behind** the WebGL canvas, sized to
   cover the frame (and rotated and flipped with the output), with CSS `blur()`, `brightness()` and a warm or cool tint
@@ -1040,6 +1041,8 @@ rejects layers in the static stack).
 
 ### Catalog version 4
 
+(Catalog 6, §16, replaces the attachment list with reference plates; the item shape below stays.)
+
 - `gobos` items: `{ id, name, description, category, thumb, params, attachment: { scale, rotation }, focus,
   defaults }`. `category`: `windows` | `blinds` | `nature` | `patterns` | `spots`, and `plates` since version 5
   (listed with display names in `goboCategories`). `thumb` is relative to `/catalog/assets/` (see Thumbnails). `attachment` holds the scale and
@@ -1073,8 +1076,13 @@ Additive: catalog `version` 5 adds a gobo category and two optional item fields;
   aspect; `tile` repeats the plate across the frame at its size. `defaults` sets `depth` 0. `throw`, `skew`,
   `rotation`, `scale`, `offsetX`/`offsetY`, `opacity` and motion apply as for every attachment.
 - Renderers: a plate is vector paths in plate space (the unit circle, y down, viewBox `-1 -1 2 2`, field radius
-  per plate, about 0.84) rasterized once into a 2048 px mask texture; at scale 1 the field is 0.9 of the frame
-  height. The web engine keeps the sources in `frontend/src/render/plates/`. Other clients show the thumbnails.
+  per plate, about 0.84) rasterized once into a one-channel mask texture: 4096 px on an output of 1200 px or more
+  (a projector), 2048 px on previews and tiles, mipmapped with trilinear and anisotropic filtering, clamped at its
+  edge (repeated only in `tile` mode). Where one texel covers several output pixels the shader re-sharpens the edge
+  to one output pixel (from the texel footprint), so edges stay anti-aliased and never show the texel staircase. The
+  light's mask renders at the output's full size (up to 4096 px), and focus 1 applies no blur at all. At scale 1
+  the field is 0.9 of the frame height. The web engine keeps the sources in `frontend/src/render/plates/`. Other
+  clients show the thumbnails.
 - `GET /catalog/thumbs/<id>-metal.png` serves the metal thumbnail like any other thumbnail.
 - Clients: the attachment browser gets a "plates" category; its tiles show the metal plate by default with a toggle
   to show the light instead. The attachment card shows `field` as a segmented control (`fill` reads "fill frame").
@@ -1127,7 +1135,8 @@ frame: it can enter and leave).
 - `GET /scenes` and the `scenes` channel list `[{ id, name, setupId, version, kind, mode }]`.
 - `POST /scenes { name, setupId?, duplicate?, kind?, template? }`: with `template` (a `sceneTemplates` id) or a
   `kind` (its default template), the server builds the scene from the template:
-  - `static-window` (static): the static light at 3200 K, intensity 0.85, focus 0.68, one `window-4` attachment
+  - `static-window` (static): the static light at 3200 K, intensity 0.85, focus 0.68, one `window-4` attachment (since
+    catalog 6 `plate-grid-window`, §16)
     (catalog defaults, `throw` 0.25) with the `sun-lr` motion present but `on: false`.
   - `live-window-tree` (live): the live light at 3200 K with a `window-4` attachment and a `tree-sway` layer
     (multiply).
@@ -1226,3 +1235,422 @@ draft").
   `agentMayGoLive`. Live writes are patches against the version the tool read; a concurrent structural edit answers
   "call the tool again". `attachment_add` takes `motion` as a `motionPresets` id; `motion_set` with `on: false`
   stores the current progress in `phase`. `light_set` takes `colorLayer: { kind: "none" }` to clear the colour layer.
+
+## 16. Reference plates, parametric windows, live gallery, video sound and brightness (2026-10-15)
+
+Catalog `version` 6. Every client decodes the new fields as optional, so older documents and catalogs load.
+
+### Catalog version 6: the plate library
+
+**Every attachment is a metal plate** (§15 "Catalog version 5" describes a plate: vector cut-outs in the unit circle,
+a round light field, `metalThumb`, the `field` param). The library holds only plates that follow the user's reference
+photos in `design/refs/gobo-plates` (README there: which part of each photo is light); nothing is invented. The 33
+attachments of catalog 4 (windows, blinds, nature, patterns, spots) and the 23 original plates of catalog 5 are gone
+(Migration, below).
+
+- `gobos`: 55 plates, ids `plate-<name>`. Every item carries `thumb`, `metalThumb`, `source` and the `field` param.
+  `source` names the reference: `"<file in design/refs/gobo-plates>, <label>"`, with `"; also <file>, <label>"` when
+  one design appears on several sheets (for example `"amaran-as-gb-m-set1.png, MO05; also set-a-six-plates.png,
+  sunburst and set-b-17-paper-plates.png, Radiant light (80)"`).
+- `category` is one of the new `goboCategories`, in browser order: `windows`, `nature`, `sky`, `patterns`, `beams`
+  (the `plates` category and the old five are gone). Clients take the categories from the catalog.
+- New optional item field **`family`**: `"window"` for the 13 parametric window presets (below); absent otherwise.
+- New top-level **`windowParamGroups`**: `[{ id, name, params: [keys] }]`, the window params in display order.
+- Every plate starts at scale 1, rotation 0, `defaults: { depth: 0 }`, `focus` 0.82 (0.9 for the fine lines).
+- Renderers: a plate is rasterized into its mask texture once; a window preset once per geometry (the attachment's
+  window params), keeping only the newest few geometries.
+- The list (id: source):
+
+| category | plates |
+| --- | --- |
+| windows | `plate-grid-window` (MO10), `plate-arched-window` (MO11), `plate-skewed-window` (MO09), `plate-palace-window`, `plate-setting-sun`, `plate-window-grid-iii`, `plate-blinds` (set B), `plate-slanted-window`, `plate-tall-grid-window`, `plate-diamond-window`, `plate-slat-blinds`, `plate-fine-vertical-lines`, `plate-fine-horizontal-lines` (set 4), `plate-louvre` (MO06) |
+| nature | `plate-scattered-sticks` (MO13, set A), `plate-water-ripples` (MO15), `plate-flames` (MO19), `plate-bare-branches` (MO21), `plate-fern-leaves` (MO22), `plate-foliage-breakup` (MO23), `plate-bonfire`, `plate-leaf-breakup` (set A), `plate-breakup`, `plate-cracked-branches`, `plate-vine-leaves` (set 2), `plate-tree-with-leaves` (set 3), `plate-jungle` (set B) |
+| sky | `plate-rain-lines` (MO07), `plate-snowflakes` (MO16), `plate-lightning` (MO17), `plate-starfield` (MO18), `plate-firework-burst` (MO20), `plate-moon-and-stars`, `plate-eight-point-stars` (set A), `plate-stardust`, `plate-stars` (set 3), `plate-snowflake-field`, `plate-big-snowflake` (set B) |
+| patterns | `plate-crossed-lines` (MO12), `plate-pixel-cloud` (MO14), `plate-rings` (MO24), `plate-rainbow-arch`, `plate-hearts` (set 2), `plate-swirl` (set 3), `plate-bubbles`, `plate-squiggles`, `plate-dots`, `plate-maze` (set B) |
+| beams | `plate-sunburst` (MO05, set A, set B radiant light), `plate-fan-rays` (MO08), `plate-radial-burst` (set 2), `plate-starburst-cross`, `plate-slit` (set 3, set B gap), `plate-circle`, `plate-radial` (set B) |
+
+- MCP: `catalog_get { section: "gobos" }` lists every plate with `category` and `source`, the `categories`, and for a
+  window preset `family: "window"` and `window` (its preset geometry); the window params schema comes once as
+  `windowParams` with `windowParamGroups`. `attachment_add`, `attachment_update` and `gobo_set` take window geometry
+  in `params`.
+- Templates: `static-window` and `live-window-tree` (§15) use `plate-grid-window` with `throw` 0.25 at scale 1.25.
+  The starter presets use `plate-grid-window`, `plate-slat-blinds`, `plate-blinds` and `plate-tall-grid-window`.
+
+### Parametric windows
+
+The window plates are one window generator with presets: an attachment of a preset (`family: "window"`) adjusts its
+geometry through these params (catalog item `params`, defaults = the preset's values; `windowParamGroups` groups
+them). Numbers and integers are clamped to their range, booleans are JSON booleans.
+
+| group | param | type, range | what |
+| --- | --- | --- | --- |
+| grid | `sashes` | integer 1…4 | sashes side by side |
+| | `cols`, `rows` | integer 1…12, 1…16 | panes per sash |
+| | `gap` | 0…1 | the pane gap (glazing bars): 0.006 + 0.054 × gap plate units |
+| frame | `width`, `height` | 0.1…1 | the window's size as a fraction of the plate's diameter |
+| | `frame` | 0…1 | the frame width: 0.16 × frame plate units of metal inside the outline |
+| | `mullion` | 0…1 | the bar between sashes: 0.16 × mullion plate units, never thinner than the pane gap |
+| arch | `arch` | boolean | a round head on top of the window |
+| | `archHeight` | 0…1 | its rise as a fraction of half the width (1 is a half circle) |
+| | `spokes` | integer 0…9 | bars splitting the head like a fan light |
+| | `hub` | 0…0.8 | a small half wheel at the spokes' centre (with spokes), as a fraction of the head |
+| shape | `round` | boolean | a round (elliptic) window; the arch is ignored |
+| | `taper` | −1…1 | top width against the bottom: positive is wider at the top |
+| | `taperY` | −1…1 | right height against the left: positive is taller on the right |
+| | `slant` | −1…1 | the top edge slides right of the bottom (negative: left) |
+| | `slantY` | −1…1 | the right side rises (negative: drops) |
+| lattice | `diamond` | boolean | each pane is leaded in diamonds |
+| | `diamonds` | integer 1…16 | diamonds across one sash |
+| | `jewels` | boolean | a framed inner square on every other lattice crossing |
+| blinds | `slats` | integer 0…120 | 0 is glass panes; otherwise each pane is that many slats |
+| | `slatWidth` | 0.1…0.9 | the metal part of each slat's pitch |
+| | `vertical` | boolean | the slats run vertically |
+
+- Geometry: the window is drawn flat (sashes, panes, head, lattice and slats as cut polygons, the metal left between
+  them), then mapped by one homography from its flat box onto the quad that `taper`, `taperY`, `slant` and `slantY`
+  give, so panes shrink towards the far side as in perspective. No bar is thinner than 0.006 plate units.
+- A new attachment of a window preset carries no window params: missing params take the preset. **Reset to preset**
+  removes them (`replace .../params` without those keys). UIs show the groups, sliders for numbers and integers,
+  switches for booleans, and hide a param whose switch is off (`archHeight`, `spokes`, `hub` without `arch`;
+  `diamonds`, `jewels` without `diamond`; `slatWidth`, `vertical` without slats).
+- The presets (window params that differ from the plain window: one sash, one pane, gap 0.25, width 0.5, height 0.6,
+  mullion 0.3, arch height 1, 4 diamonds, slat width 0.5):
+
+| preset | geometry |
+| --- | --- |
+| `plate-grid-window` 6-pane grid window | sashes 2, cols 2, rows 4, gap 0.3, width 0.62, height 0.44, mullion 0.35 |
+| `plate-arched-window` arched window | cols 3, rows 4, gap 0.3, width 0.34, height 0.6, arch, spokes 4, hub 0.4 (field 0.9) |
+| `plate-skewed-window` skewed window | cols 4, rows 5, gap 0.22, width 0.5, height 0.32, taperY 0.6, slantY −1 |
+| `plate-palace-window` palace window | cols 4, rows 5, gap 0.4, width 0.46, height 0.5, arch, archHeight 0.72, spokes 2 |
+| `plate-setting-sun` setting sun | cols 4, rows 4, gap 0.4, width 0.62, height 0.3, taperY 0.6, slantY 0.6 |
+| `plate-slanted-window` slanted window | cols 4, rows 4, gap 0.22, width 0.44, height 0.46, taper 0.8, slant −0.55 |
+| `plate-tall-grid-window` tall grid window | cols 5, rows 5, gap 0.2, width 0.42, height 0.64 |
+| `plate-diamond-window` diamond lattice window | sashes 3, gap 0.08, width 0.68, height 0.42, mullion 0.4, diamond |
+| `plate-window-grid-iii` window grid III | gap 0.3, width 0.84, height 0.84, round, diamond, diamonds 7, jewels |
+| `plate-blinds` blinds | cols 3, gap 0.05, width 0.55, height 0.66, slats 22, slatWidth 0.42 |
+| `plate-slat-blinds` slat blinds | width 0.5, height 0.6, slats 12, slatWidth 0.22 |
+| `plate-fine-vertical-lines` fine vertical lines | width 0.62, height 0.38, slats 64, vertical |
+| `plate-fine-horizontal-lines` fine horizontal lines | width 0.58, height 0.58, slats 60 |
+
+### Migration (server, on start)
+
+Scenes and presets carry a document **`format`** (integer): 6 since this change, written on every scene and preset;
+absent (0) is a document from before it. Clients decode it as optional and keep it.
+
+- On start the server rewrites every stored scene and preset: each attachment whose gobo was removed moves to the
+  closest plate or window preset (below). The attachment keeps its id, name, placement, opacity, visibility and
+  motion; its params keep `throw`, `skew`, `depth` and a valid `field`, take the window geometry the old gobo maps to,
+  and drop the rest. The server logs one line per move (`upgraded scene to the plate library`, with the scene and
+  `<stack> attachment <id>: <old> → <new>`). Reading or patching a document moves removed gobos the same way, so an
+  older client that writes one gets the plate.
+- Once, for a document below format 6: photo and video brightness × 1.4, clamped to 1 (Video sound and brightness,
+  below), logged too. Then `format` becomes 6. Documents read through the API are always current.
+- The mapping:
+
+| removed | becomes |
+| --- | --- |
+| `window-4`, `window`, `barn` | `plate-grid-window` with `sashes` 1 and the old `cols` × `rows` (2 × 2, 2 × 3, 2 × 2) |
+| `arch` | `plate-arched-window` with the old `cols` × `rows` |
+| `french-doors` | `plate-tall-grid-window`, `sashes` 2, half the old columns per sash, the old rows |
+| `skylight` | `plate-skewed-window` with the old `cols` × `rows` |
+| `gothic` | `plate-palace-window` |
+| `porthole`, `spot`, `spot-soft`, `oval`, `shutter`, `iris` | `plate-circle` |
+| `blinds-fine` | `plate-fine-horizontal-lines` |
+| `blinds` | `plate-slat-blinds` with the old `slats` |
+| `vertical-blinds` | `plate-slat-blinds` with the old `slats` and `vertical` |
+| `shutters` | `plate-blinds` with the old `slats` |
+| `blinds-wide`, `stripes` | `plate-louvre` |
+| `leaves-light` | `plate-leaf-breakup` |
+| `tree` | `plate-tree-with-leaves` |
+| `leaves-dense`, `plate-dapple-fine` | `plate-foliage-breakup` |
+| `palm`, `plate-palm-silhouette`, `plate-monstera`, `plate-jungle-breakup` | `plate-jungle` |
+| `branch` | `plate-bare-branches` |
+| `ivy` | `plate-vine-leaves` |
+| `bamboo`, `plate-bamboo-stalks` | `plate-fern-leaves` |
+| `dots`, `plate-portholes` | `plate-dots` |
+| `lattice`, `moroccan`, `plate-moroccan-arch` | `plate-window-grid-iii` |
+| `honeycomb`, `plate-honeycomb`, `plate-dapple-bold` | `plate-bubbles` |
+| `grid`, `plate-skyline` | `plate-tall-grid-window` |
+| `stars` | `plate-starfield` |
+| `water`, `plate-wave-lines` | `plate-water-ripples` |
+| `plate-curved-venetian`, `plate-diagonal-blinds` | `plate-blinds` |
+| `plate-stained-glass`, `plate-mesh-fence` | `plate-diamond-window` |
+| `plate-concentric` | `plate-rings` |
+| `plate-spiral` | `plate-swirl` |
+| `plate-starburst-fine` | `plate-radial` |
+| `plate-starburst-bold` | `plate-radial-burst` |
+| `plate-deco-fan`, `plate-god-rays` | `plate-fan-rays` |
+| `plate-triangles` | `plate-breakup` |
+| `plate-curtain-window` | `plate-grid-window` |
+
+- Thumbnails of removed ids answer 404.
+
+### Live gallery
+
+Live layers (catalog `procedural`) work like attachments: a **shadow** layer is a mask over the light. The web Show
+live panel and the phone Live tab's add-layer sheet show them as a gallery of animated tiles; tapping a tile **tries**
+it full size in the preview without putting it on air, and "add to live" commits it.
+
+- Procedural items gain three optional fields: `blend` (the blend a new layer of it gets; absent = `normal`),
+  `animThumb` (`"thumbs/<id>-anim.jpg"`, relative to `/catalog/assets/`, also served at
+  `/catalog/thumbs/<id>-anim.jpg` with `image/jpeg` and the thumbnails' cache headers), `animFrames` (integer, 36) and
+  `animFps` (number, 12). The strip is a vertical JPEG of `animFrames` frames, each 192 × 108, top to bottom, that
+  loops seamlessly at `animFps` (its last 8 frames fade into the frames just before the first). It is rendered at
+  build time by the web engine (`npm run thumbs`): the layer under a warm 3200 K light filling the frame for a shadow,
+  over black for a light effect. Clients that cannot animate show `thumb`.
+- `blend: "multiply"` on `tree-sway`, `palm-sway`, `clouds`, `rain-glass` (nature, weather) and `caustics`, `dapple`,
+  `film-grain`, `haze` (texture): in a `live` stack with a light, a visible multiply procedural layer joins the
+  attachments' mask before the focus blur (§15), so focus softens it like an attachment. `lightning` (it flashes
+  over the light) and the light effects `day-cycle`, `sun-drift`, `candle-flicker` stay `normal`. Clients and the
+  server (`NewLayer`) give a new procedural layer its item's `blend`; a client that adds a multiply layer to a live
+  stack without a light also adds the default stack light (the mask needs light to block). Existing layers keep their
+  blend.
+- **Try** is client side only: `/preview?scene=<id>&try=<procedural id>` (the phone's hero) and the web Show hero draw
+  the scene in live mode with a trial layer (id `lay_try`, catalog defaults and `blend`) on top of the live stack, and
+  the default stack light at 3200 K when the stack has none and the layer is a mask. Nothing is sent; another `try`
+  replaces it; an unknown id draws the scene as is. "Add to live" adds a fresh layer (`add /backdrop/live/layers/-`,
+  plus the light when needed) like any add.
+- Realism (renderer only, no wire change): the trees and palms move with one smooth wind per frame (slow swells,
+  gusts that build and release, tips moving more than boughs, boughs out of step), each leaf turns on its own stalk,
+  and clouds are domain-warped noise in two drifting layers with soft edges. `docs/guides/live-layers.md` says how
+  to add a live layer.
+
+### Video sound and brightness
+
+A video layer's own sound (§14 `params.audio`, shown as "sound", and `params.volume`) and the photo controls of
+photo and video layers. No message changes; `videoParams.audio` is relabelled "sound".
+
+**Who plays a video's sound.** Only the audio output client (§14 `show.audio.output`), at `volume × master` (0 while
+`muted`), live as the master changes:
+
+- `projector`: `/out`. `editor`: the editor's wall preview (Show space). `phone`: no client plays video sound in this
+  version (the phone's hero is a `/preview` web view, which never plays sound).
+- `/preview`, thumbnails, the editor's other views and the phone stay muted. `/view` plays video sound only while its
+  own sound toggle is on (at `volume × master`), as before.
+- File videos (`asset:`): the client unmutes the video element at that gain.
+- YouTube videos (`youtube:`): the player always loads muted (muted autoplay is never blocked). On a page that may play
+  sound the embed URL adds `enablejsapi=1` and `origin=<page origin>`, and the page drives the IFrame Player API over
+  `postMessage` (no script tag): it sends `listening` until the player answers (`onReady`, `infoDelivery`), then
+  `unMute`, `setVolume [round(volume × master × 100)]` and `playVideo` while the gain is above 0, and `mute`
+  otherwise, again on every change. If the browser pauses the unmuted player or keeps it muted (autoplay with sound
+  needs a gesture), the page mutes and plays it again and `/out` shows "click to enable sound"; the click retries.
+  `projmap open --out` passes `--autoplay-policy=no-user-gesture-required`, so no click is needed there.
+
+**Brightness.** `brightness` 0…1 of photo and video layers is a plain gain: **1 (100 %) is the original picture**
+(before, the renderers multiplied it by 1.4, so 100 % clipped colours). Warmth −1…1 gives the channel gains
+`(1 + 0.22 w, 1 + 0.04 w, 1 − 0.22 w)` divided by the largest of them, so no channel goes above its original value
+at 100 %. The shader and the YouTube CSS (`brightness()` plus a multiply tint) use the same math
+(`frontend/src/render/photoLook.ts`). Defaults: `photoParams.brightness` 0.9 (was 0.66), `videoParams.brightness`
+0.9 (was 0.8). UIs label it "brightness" and show 100 % as the original.
+
+**Upgrade (server).** Stored scenes and presets from before catalog 6 scale every photo and video layer's
+`params.brightness` by 1.4, clamped to 1, once (the `format` marker, Migration above), so they look as they did.
+
+## 17. Output windows (2026-10-15)
+
+A clean projector output: no browser chrome, on the display you pick. Additive; nothing else changes on the wire.
+
+### Full screen on `/view` and `/out`
+
+Chrome keeps the location bar on a pop-up window even in macOS full screen; only the Fullscreen API hides it. Both
+pages therefore take it on the document element:
+
+- The first click anywhere enters full screen (on `/out` the same click also unlocks sound, §14). A double-click
+  within 600 ms of that first click keeps it.
+- Double-click and the F key toggle full screen; Esc leaves it.
+- While not full screen, a "click for full screen" hint shows for 3 s after load: big and centred on `/view`, a small
+  corner note on `/out` (the launcher puts `/out` in full screen itself, below). `?headless=1` hides it (both routes
+  accept `headless`).
+- The cursor (and `/view`'s hover bar) hides after 2 s without mouse movement.
+
+### Put on projector (REST, prefix `/api/v1`)
+
+| method | path | body / result |
+| --- | --- | --- |
+| GET | `/outputs/displays` | `[{ index, name, width, height, scale, x, y, pointWidth, pointHeight, main }]`: the displays attached to the server's Mac, main first. `index` counts from 1 (as `projmap open --out --display`); `width` and `height` are pixels; `x`, `y`, `pointWidth`, `pointHeight` the frame in screen points in Accessibility coordinates (main display top-left = 0, 0, y down: a display above the main one has a negative `y`) |
+| POST | `/outputs/launch` | `{ display, route?: "out" \| "view" }` (route default `out`) → 202 `{ launched: true, url, display }` |
+
+- **Local only.** Both answer requests from the server's own Mac (loopback, no `X-Forwarded-For`); anything else is
+  403 `forbidden`. They start a program on that Mac.
+- Errors: unknown `display` → 404 `not_found`; another `route` → 400 `bad_request`; the display list, Chrome, the
+  Accessibility permission or a window that does not land failing → 503 `unavailable` with a message that says what
+  happened (for example "the window ended up on display 3 … not on display 2").
+- The server opens `http://127.0.0.1:<port>/<route>` (loopback is trusted, so no token) with
+  `open -na "Google Chrome" --args --app=<url> --user-data-dir=<data>/chrome-out --window-position=<x>,<y>
+  --window-size=<w>,<h> --no-first-run --autoplay-policy=no-user-gesture-required --disable-features=Translate`
+  `--remote-debugging-port=0` (each flag one argument, no shell: the data folder path has a space). No `--kiosk`:
+  Chrome on macOS ignores the position for displays left of or above the main one. It then finds that Chrome's main
+  process (`ps`, by the profile flag), moves its front window inside the display with System Events (`osascript`,
+  Accessibility coordinates) and reads the bounds back. Then it puts the page itself into full screen with no
+  gesture and no Chrome UI: DevTools on the loopback port Chrome writes to `<profile>/DevToolsActivePort`,
+  `Runtime.evaluate` of `document.documentElement.requestFullscreen()` with `userGesture: true`. Without DevTools it
+  falls back to macOS full screen of the window (`AXFullScreen`). For `out` it waits up to 12 s for the output's
+  telemetry (§1, the canvas: window size × devicePixelRatio) to equal the display's pixel size, give or take 2
+  pixels (3840 × 2160 for a 1920 × 1080 point display at 2×). A miss retries, three attempts in all, then 503 says
+  what it measured.
+  `projmap open --out --display <n>` runs the same code (`internal/infrastructure/browser`).
+- The server lists displays with AppKit's `NSScreen.screens` (through `osascript`) and converts the frames
+  (origin the main display's bottom-left, y up) to Accessibility points: `y = mainHeight − (frame.y + frame.height)`.
+- Clients: the editor shows **put on projector** with a display picker next to "open viewer" (the Show preview's
+  top bar and Set up). "Open viewer" stays for a windowed preview.
+
+
+### Focus, lens and background layers (2026-10-15)
+
+Supersedes the §15 defaults and the "one focus ring" rule; nothing else of §15 changes.
+
+- **StackLight.focus** is the **attachment focus**: 1 is sharp, 0 fully soft. Default **1** (was 0.7). The renderer
+  blurs the attachment mask by `(1 − focus)^1.5 × 60` px at 1080 p; at 1 there is no blur at all.
+- **StackLight.backgroundFocus** (new, number 0…1, default **1**, absent decodes to 1): the **background focus**. In
+  `static` it softens the background (the background layers, or the colour layer, or the light's own colour) under the
+  attachments; in `live` it is the **live layer focus**: it softens the live layers, and the multiply live layers
+  (tree sway, clouds…) that join the mask are softened by it on their own, then multiplied over the focused
+  attachments. Same curve as `focus`. A sharp attachment over a soft background is valid.
+- **Vignette** defaults to **0** (was 0.3); the control stays. **Fringe** stays (default 0.2).
+- **Haze is gone**: `haze` is no longer in `stackLight.params`, never written, and dropped on decode (server and
+  clients). The MCP `light_set` lost `haze` and gained `backgroundFocus`.
+- **Static background layers.** `static.layers` now takes layers of kind `solid`, `gradient`, `generator` and
+  `procedural` (effects such as caustics or dapple): the static stack reads, bottom to top, **background layers ↓,
+  the light, attachments ↑**. While the stack has visible background layers they are the light's colour (composed
+  bottom to top over black, normal blend), in place of the colour layer or CCT/HSI colour; intensity and fx still
+  scale them. `colorLayer` stays valid as a single background. Other kinds (gobo, photo, video) in `static.layers`
+  answer 422 `invalid`. MCP `backdrop_set` takes `mode: "static"` with those kinds.
+- **Settings persist.** Picking an attachment (`gobo_set`, a client pick) replaces the plate and its own params only:
+  the new attachment takes the replaced one's id, rotation, scale, offsets, opacity, visibility and motion, and the
+  light is not touched (a pick no longer writes the gobo's catalog `focus`). Applying a static or live preset takes the
+  preset's attachments, layers and light intensity, colour, fx and colour layer, and keeps the scene's `focus`,
+  `backgroundFocus`, `fringe`, `vignette`, `slide` and light `motion` (server `PresetOps` and the web client alike).
+- **Continuous controls are instant.** A client applies a `param` to its own copy of the document at once and draws it
+  the next frame; the web hub sends at most one `param` per path every 16 ms (about 60 Hz), the newest value last, and
+  flushes waiting params before a patch on the same channel. A slide is a uniform offset in the compose pass: it never
+  rebuilds a plate mask. `/out` applies an incoming `param` to its document and draws it on the next frame.
+- **Web Show static panel**: a gallery with two tabs, attachments ↑ (plates) and background ↓ (colours, gradients,
+  animated colours, effects as animated tiles); a tap tries the item in the hero only, a bar over the hero puts it on
+  ("put it on", "add on top", "add to the background") or cancels. The stack card lists attachments with the
+  attachment focus, the light, and the background layers with the background focus.
+- **Phone** (iOS): the same fields: show "attachment focus" and "background focus" (static) or "live layer focus"
+  (live), default sharp; no haze control; vignette default 0; static background layers listed under the attachments.
+
+## 18. Auto map on real hardware: pre-flight, aim, measured streaming (2026-10-15)
+
+Additive, except the two error codes on `POST /calibrations`.
+
+### REST (prefix `/api/v1`)
+
+| method | path | body / result |
+| --- | --- | --- |
+| GET | `/camera/preflight` | `{ server, output, camera, ready, reason?, aiming, running }`, below |
+| POST | `/calibrations/aim` | `{ on }` → `{ on }`; same as the `calibration.aim` cmd |
+| GET | `/agents/available` | `[{ agent: "claude" \| "codex", available, reason? }]`: which agent CLIs the server's Mac can run |
+
+Pre-flight, every check `{ ok, detail, fix? }` (`fix` says in plain words what to do when `ok` is false):
+
+- `server`: always `ok` when it answers (a client that gets no answer shows "can't reach the server").
+- `output`: the newest `/out` (role `output`) plus `connected, name, width, height, fps` from its telemetry,
+  `setupWidth, setupHeight` of the active setup, and `warning` when the window size is more than 5 % off the setup's
+  output (the window does not fill the projector). The warning does not block.
+- `camera`: `connected, streaming, fps, width, height, steady, lastFrameAgeMs`.
+- `ready` = output ok && camera ok && no calibration running; `reason` says what blocks it.
+- `aiming`: the aiming image is up. `running`: the id of the calibration in progress, or "".
+
+### `cmd calibration.aim { on: bool }`
+
+While the phone's setup screen is open it sends `on: true` every 5 s. The server calls
+`output.pattern { kind: "white" }` on the output each time (the output already knows `white`, `black`, `gray`,
+`off`; full white gives the phone the clearest area to outline), and `{ kind: "off" }` on `on: false` or 15 s after
+the last `on: true`. While a calibration runs, `on: true` answers `conflict` and `on: false` does nothing (the
+calibration drives the output). No output: `no_output` (409). Ack: `{ on }`.
+
+### Camera status is measured
+
+`GET /camera/status` (and `camera_stream_status`): `streaming` is true while the last `camera.frame` is under 2.5 s
+old and `fps` counts the frames that arrived in the last 2 s. The phone's `camera.status` only contributes `steady` and
+`level`. Before, both came from the phone's status, so a phone whose status messages stopped (or whose frames did not
+arrive) showed the wrong thing.
+
+### Calibration
+
+- `POST /calibrations` with no output: **409 `no_output`** "No projector output is connected. Open the output on
+  the projector: in the editor, Set up → put on projector, or run `projmap open --out --display 2`." No phone:
+  **409 `no_phone`** (both were 503 `unavailable`).
+- One more step at the end, `verify`: white again. The server compares it with the first white (the lit area of each
+  against black) and fails with "The phone moved during calibration (about N px). Steady it and retry." when the mean
+  edge shift is over 6 camera pixels (at 1280 px wide).
+- New failure messages on `calib:{id}` (`step: "failed"`): the output disconnected or did not show a pattern in time,
+  the phone disconnected or did not send a photo in time (each names the pattern), and coverage under 5 % ("The camera
+  saw only N% of the projection…"). A done calibration under 50 % coverage says so in its message.
+- `camera.capture` args gain `purpose` (`calibration`, `snapshot`, `photo`…) and, for calibration, `maxWidth: 1600`:
+  the phone shrinks the still (keeping the sensor's pixel layout, no EXIF rotation) before uploading it.
+
+### Phone (ios)
+
+- Preview frames: the `camera.frame` envelope is built on the camera queue, not the main actor, and always goes to
+  the current socket. A failed send on the ordered outbox now closes the socket so the hub reconnects; before, it
+  ended the outbox silently and every later `camera.status`, `sub` and `cmd` was lost while frames kept flowing.
+- "Phone is steady" = attitude changed less than 0.5° over the last 1.5 s. It does not block the start.
+- The light check finds the projected area (pixels well above the room) and outlines its quad on the live preview,
+  in capture-device coordinates. Candidates draw the same way over the live camera.
+
+### Real-hardware fixes (same day)
+
+- **Stills one pattern behind.** On a real rig every capture showed the previous pattern: `/out`'s "presented" comes
+  before the projector shows the frame, and iOS zero shutter lag returns a frame from before the request. The phone
+  turns off zero shutter lag, responsive capture and fast capture prioritization (quality `.balanced`). The server
+  keeps `SettleDelay` and checks synchronisation: after black it measures white − black; if black looks like white
+  it doubles the settle (at least 250 ms, at most 1.5 s), takes it again and starts the pass over from white. Coarse
+  Gray-code steps (bit ≥ max(4, bits − 4)) and `verify` must change at least 15 % of the lit area against the step
+  before, else the still is retaken with a longer settle. The learned value is `settleMs` on the calibration.
+  If black still looks like white at 1.5 s, the calibration fails at once with the contrast message.
+- **Low contrast.** The decoder thresholds the white − black difference adaptively: 3×3 box blur, Otsu split, noise
+  floor 4 × the unlit side's MAD, at least 3/255 (a fixed `MinContrast` still overrides). A bit is readable when
+  pattern − inverse clears both 15 % of the local white − black and 2.5 × √2 × the noise. `quality.contrast =
+  { lit, median, peak, room, noise, threshold, brighterPct }` (0–255 levels; `brighterPct` = peak over the room
+  level). Decode failures say what the camera saw ("The projector light is only N% brighter than the room…").
+  `diffAsset` (|white − black| × 4, PNG, ≤ 640 px) is on every calibration, failed ones too.
+- **EXIF.** Stills are decoded in the sensor's pixel layout and EXIF orientation is ignored everywhere (preview
+  frames, stills, the phone's downscaled stills, the decoder), so all camera pixels share one frame.
+- **Exposure.** Before starting, the phone meters exposure and focus on the marked object (or the middle of the
+  projected area) while the output shows the aiming white, then locks them for the whole pass.
+- **Light check.** `POST /calibrations/lightcheck` → `{ level: "strong" | "weak" | "none", message, contrast, at }`:
+  white, black, white on the output, compared on the phone's preview frames (the darker of the two whites). The last
+  one (10 min) is `preflight.light`. 409 while a calibration runs; `no_output`, `no_phone` as above.
+
+### Region of interest and adaptive precision
+
+- `POST /calibrations` takes `{ setupId, roi?: {x, y, w, h} (scene px), cameraRoi?: {x, y, w, h} (camera-view
+  fractions 0…1 of the still) }`; MCP `calibration_run` takes `roi`. The server keeps `roi`, `cameraRoi` and
+  `projectorRoi` (physical projector px: the scene ROI, or the camera ROI through the setup's previous calibration,
+  plus a 6 % margin of at least 24 px) on the calibration.
+- With `projectorRoi`, every `output.pattern` carries `roi: {x, y, w, h}` (physical px): the output should draw the
+  pattern inside it and black outside. **`/out` does not do this yet** (frontend change pending); `projmap sim` does.
+  Decoding drops correspondences outside `projectorRoi` and camera pixels outside `cameraRoi` either way.
+  `calibration.aim { on, cameraRoi? }` lights only that area when an earlier calibration can place it.
+- Adaptive bits: per camera pixel, a run of unreadable bits from the finest up is blur; up to 2 are dropped and the
+  pixel sits at the centre of the 2^k px interval the readable bits leave; more, and it gets no correspondence. One
+  more unreadable bit above that run is a stripe edge and keeps its sign.
+- Quality adds `sharp` (share of mapped pixels with at most the last bit lost) and `roi: { mapped, sharp, errorPx }`
+  over the lit pixels inside the ROI (the whole frame when none). `errorPx` only uses sharp pixels. The done message
+  says "Sharp area mapped: N%" and warns under 40 %.
+- `confidenceAsset`: 8-bit PNG at decode resolution, 0 = no correspondence, else 255 · bits read / bits per axis.
+  MCP `calibration_get` returns it as an image; `surface_create_from_camera` refuses a point with no correspondence
+  within 2 decode px and names the nearest reliable camera pixel.
+- Map PNG version 2: B = 65535 − lost bits when valid (version 1 maps still load).
+
+### `projmap mcp` bridge
+
+The stdio bridge keeps the client's `initialize` (and `notifications/initialized`). When the server's session is
+gone (a restart answers "session not found") or a write fails, it reconnects, replays them, resends every call that
+had no answer, and carries on; a call it cannot deliver within 30 s gets a JSON-RPC error instead of silence. It
+exits only when the client closes stdin. Bridges started before this change still die with the server: restart
+Codex (or kill those `projmap mcp` processes) once to pick up the new binary.
+
+### Restarts and stale patterns
+
+- On start the server marks every calibration still `running` as `failed` with "Interrupted: the server restarted
+  during calibration. Run it again." and publishes `{ step: "failed", message }` on `calib:{id}` (a later `sub` gets
+  the same snapshot). The phone also reads `GET /calibrations/{id}` every 3 s while calibrating, so it shows the
+  failure even though its old subscription died with the server.
+- `/out` drops a calibration or aiming pattern 15 s after the last `output.pattern`, and at once when its hub
+  connection drops; while disconnected it shows "reconnecting to projmap…" in the corner.
+- `output.pattern` (calibration, aim, light check) goes to exactly one client: the newest connection with role
+  `output`. The pre-flight shows that output's window size next to the setup's size.

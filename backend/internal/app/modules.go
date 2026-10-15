@@ -183,9 +183,13 @@ type CameraModule struct {
 	Calibrations *camerasvc.Calibrations
 }
 
-func NewCameraModule(db *gorm.DB, h *hub.Hub, as assetsservices.AssetService, setups setupsservices.SetupService, _ showservices.ShowService, log *slog.Logger) *CameraModule {
+func NewCameraModule(db *gorm.DB, h *hub.Hub, as assetsservices.AssetService, setups setupsservices.SetupService, sh showservices.ShowService, log *slog.Logger) *CameraModule {
 	cam := camerasvc.NewCamera(h, h, as)
 	cal := camerasvc.NewCalibrations(camerasql.New(db), setups, cam, as, adapter.Vision{}, h, h, log)
+	if sh != nil {
+		cal.ActiveSetup = func(ctx context.Context) string { return sh.Get(ctx).ActiveSetupID }
+	}
+	cal.Recover(context.Background())
 	return &CameraModule{Camera: cam, Calibrations: cal}
 }
 

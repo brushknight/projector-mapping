@@ -96,15 +96,16 @@ export interface ColorLayer {
 /** (§15) the light of the static and live stacks: lights the whole frame, attachments block it */
 export interface StackLight {
   intensity: number
-  /** 1 = sharp, 0 = fully soft: one focus ring for every attachment */
+  /** (§16) the attachment focus: 1 = sharp (the default), 0 = fully soft */
   focus: number
+  /** (§16) the background focus: the static background layers or colour layer, or the live layers; 1 = sharp. Absent = 1 */
+  backgroundFocus?: number
   color: LightColor
   fx: LightFx
   /** null = the light's own colour */
   colorLayer?: ColorLayer | null
   fringe: number
   vignette: number
-  haze: number
   /** the frame slide: a pan of the whole composed light, frame fractions */
   slide: FramePt
   motion?: Motion | null
@@ -357,6 +358,8 @@ export interface Scene {
   mode: SceneMode
   /** (§15) optional on the wire; infer with sceneKind() */
   kind?: SceneKind
+  /** (§16) the document format: 6 since the plate library; absent on documents from before it */
+  format?: number
   backdrop: Backdrop
   /** optional on the wire; absent = DEFAULT_UNDERLAY */
   underlay?: Underlay

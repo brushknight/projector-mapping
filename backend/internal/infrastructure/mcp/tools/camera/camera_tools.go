@@ -33,13 +33,13 @@ func Register(s *mcp.Server, env *tools.Env) {
 	tools.Add(s, env, &mcp.Tool{Name: "camera_compare", Title: "Compare draft and wall",
 		Description: "Puts your draft's frame t on the projector, photographs the wall, and returns the render, the photo and, when calibrated, the photo with your surfaces' outlines drawn where the projector puts them. Needs \"agent may preview\"."}, compare)
 	tools.Add(s, env, &mcp.Tool{Name: "calibration_run", Title: "Calibrate camera and projector",
-		Description: "Projects Gray-code stripes, captures each with the phone and decodes a dense camera to projector map (about 20 s). Needs the phone on a stand, the output open and \"agent may preview\". Returns coverage and error."}, calibrationRun)
+		Description: "Projects Gray-code stripes, captures each with the phone and decodes a dense camera to projector map (about 20 s). Needs the phone on a stand, the output open and \"agent may preview\". Optional roi (scene px) limits it to one object. Returns coverage, error, the sharp share and the quality inside the roi."}, calibrationRun)
 	tools.Add(s, env, &mcp.Tool{Name: "calibration_get", Title: "Read the calibration",
-		Description: "The current calibration of the scene's setup: status, coverage, error in projector px, camera frame size."}, calibrationGet)
+		Description: "The current calibration of the scene's setup: status, coverage, error in projector px, camera frame size, sharp share and quality inside the region of interest (roi, cameraRoi, projectorRoi), contrast, and an image of the confidence map: per camera pixel, black = no correspondence (blurred, unlit or outside the ROI), brighter = more Gray-code bits read (white = full precision). Only pick camera points in bright areas."}, calibrationGet)
 	tools.Add(s, env, &mcp.Tool{Name: "detect_surfaces", Title: "Find candidate surfaces",
 		Description: "Planar regions found in the calibration map (wall, cube faces…) as polygons in camera, projector and scene pixels with confidence, plus the white calibration photo with the candidates outlined."}, detect)
 	tools.Add(s, env, &mcp.Tool{Name: "surface_create_from_camera", Title: "Create a surface from camera points",
-		Description: "Like surface_create, but the points are camera pixels you picked on a camera image; the calibration map turns them into scene pixels (subpixel)."}, fromCamera)
+		Description: "Like surface_create, but the points are camera pixels you picked on a camera image; the calibration map turns them into scene pixels (subpixel). A point on a pixel with no reliable correspondence (black in calibration_get's confidence map: out of focus, unlit or outside the ROI) is refused with the nearest reliable camera pixel; move it there."}, fromCamera)
 	tools.Add(s, env, &mcp.Tool{Name: "alignment_error", Title: "Measure alignment",
 		Description: "Projects a surface's outline, photographs it and the lit object, and returns per edge how far the projected line is from the real edge in projector px. Fix with surface_nudge and measure again until under about 1 px. Needs \"agent may preview\" and a calibration."}, alignment)
 }
@@ -229,7 +229,8 @@ func camerasvcMax(img image.Image) int {
 }
 
 func calibrationRun(ctx context.Context, e *tools.Env, in struct {
-	SetupID string `json:"setup_id,omitempty" jsonschema:"default: the scene's setup"`
+	SetupID string       `json:"setup_id,omitempty" jsonschema:"default: the scene's setup"`
+	ROI     *camera.Rect `json:"roi,omitempty" jsonschema:"region of interest in scene pixels {x, y, w, h}: patterns only there (plus a margin), quality measured there. Use it when the projector is focused on one object"`
 }) (*mcp.CallToolResult, error) {
 	if err := e.NeedPreview(ctx); err != nil {
 		return nil, err
@@ -241,7 +242,7 @@ func calibrationRun(ctx context.Context, e *tools.Env, in struct {
 		}
 		in.SetupID = sid
 	}
-	c, err := e.D.Calibrations.Start(ctx, in.SetupID)
+	c, err := e.D.Calibrations.StartROI(ctx, in.SetupID, camera.ROI{Scene: in.ROI})
 	if err != nil {
 		return nil, err
 	}
@@ -280,7 +281,15 @@ func calibrationGet(ctx context.Context, e *tools.Env, in struct {
 	if err != nil {
 		return nil, err
 	}
-	return tools.JSON(c.Message, c), nil
+	res := tools.JSON(c.Message, c)
+	if c.ConfidenceAsset != nil {
+		if b, err := e.D.Assets.Read(ctx, *c.ConfidenceAsset); err == nil {
+			if img, _, err := tools.ImageBytes(b); err == nil && img != nil {
+				res.Content = append(res.Content, img)
+			}
+		}
+	}
+	return res, nil
 }
 
 func detect(ctx context.Context, e *tools.Env, in struct {

@@ -5,18 +5,17 @@ import PMTestSupport
 
 /// Protocol §15: the light model, catalog v4, scene kinds, settings and Motion progress.
 @Suite struct LightModelTests {
-    @Test func catalogV4() throws {
+    @Test func catalogV6() throws {
         let cat = try Catalog.decode(Data(contentsOf: Fixtures.catalogURL))
-        #expect(cat.goboCategories.map(\.id) == ["windows", "blinds", "nature", "patterns", "spots", "plates"])
-        #expect(cat.gobos(in: "windows").first?.id == "window-4")
-        #expect(cat.gobos.allSatisfy { GoboCategory.known.contains($0.category) && $0.browseCategory == $0.category })
-        let w4 = try #require(cat.gobo("window-4"))
-        #expect(w4.thumb == "thumbs/window-4.png" && w4.focus != nil && w4.attachment.scale > 0)
-        #expect(w4.params.items.map(\.key) == ["cols", "rows", "mullion"])
-        #expect(w4.defaults["throw"] == 0.25)
-        #expect(cat.thumbId("window-4") == "window-4" && cat.thumbId("tree-sway") == "tree-sway")
+        #expect(cat.goboCategories.map(\.id) == ["windows", "nature", "sky", "patterns", "beams"])
+        #expect(cat.gobos.allSatisfy { GoboCategory.v6.contains($0.category) && $0.browseCategory == $0.category })
+        #expect(cat.gobos(in: "windows").first?.id == "plate-grid-window")
+        let w = try #require(cat.gobo("plate-grid-window"))
+        #expect(w.thumb == "thumbs/plate-grid-window.png" && w.focus != nil && w.attachment.scale > 0 && w.isWindow)
+        #expect(cat.thumbId("plate-grid-window") == "plate-grid-window" && cat.thumbId("tree-sway") == "tree-sway")
         #expect(cat.goboParams.items.map(\.key) == ["throw", "skew", "depth"])
-        #expect(cat.stackLight.params.items.map(\.key) == ["intensity", "focus", "fringe", "vignette", "haze"])
+        #expect(Array(cat.stackLight.params.items.map(\.key).prefix(2)) == ["intensity", "focus"])
+        #expect(cat.stackLight.params["haze"] == nil && cat.stackLight.params["fringe"] != nil)
         #expect(cat.stackLight.kelvin == 5600)
         #expect(cat.stackLight.attachmentParams.items.map(\.key) == ["opacity", "rotation", "scale", "offsetX", "offsetY"])
         #expect(cat.stackLight.attachmentParams["opacity"]?.label == "blocks")
@@ -31,19 +30,70 @@ import PMTestSupport
         #expect(cat.params(for: Layer(id: "g", kind: "generator", ref: "hue-cycle", name: "")).items.map(\.key) == ["speed", "saturation", "spread"])
     }
 
-    /// Catalog 5: metal gobo plates, with the plate's own thumbnail, where it comes from and its light field.
+    /// Catalog 6: every attachment is a metal plate from the reference photos, with its own thumbnail and light field.
     @Test func plates() throws {
         let cat = try Catalog.decode(Data(contentsOf: Fixtures.catalogURL))
-        let plates = cat.gobos(in: "plates")
-        #expect(plates.count == 43)
+        #expect(cat.gobos.count >= 45 && cat.gobos.count <= 60)
         let sun = try #require(cat.gobo("plate-sunburst"))
-        #expect(sun.name == "sunburst" && sun.source == "inspired by Amaran AS-GB-M MO05")
+        #expect(sun.name == "sunburst" && sun.source?.hasPrefix("amaran-as-gb-m-set1.png, MO05") == true && sun.category == "beams")
         #expect(sun.metalThumb == "thumbs/plate-sunburst-metal.png" && cat.metalThumbId("plate-sunburst") == "plate-sunburst-metal")
         #expect(cat.thumbId("plate-sunburst") == "plate-sunburst")
         let field = try #require(sun.params["field"])
         #expect(field.type == "enum" && field.options == ["round", "fill", "stretch", "tile"] && field.default == "round")
         #expect(cat.newAttachment(sun).params["field"] == "round")
-        #expect(plates.filter { $0.source != nil }.count == 20)
+        #expect(cat.gobos.allSatisfy { $0.source != nil && $0.metalThumb != nil })
+        #expect(!sun.isWindow && cat.windowGroups("plate-sunburst").isEmpty && cat.windowKeys("plate-sunburst").isEmpty)
+    }
+
+    /// Catalog 6 (§16): parametric window presets, grouped geometry, reset keys.
+    @Test func windowPresets() throws {
+        let cat = try Catalog.decode(Data(contentsOf: Fixtures.catalogURL))
+        let windows = cat.gobos.filter(\.isWindow)
+        #expect(windows.count == 13)
+        #expect(cat.windowParamGroups.map(\.id) == ["grid", "frame", "arch", "shape", "lattice", "blinds"])
+        let palace = try #require(cat.gobo("plate-palace-window"))
+        #expect(palace.params["arch"]?.default == true && palace.params["spokes"]?.type == "integer")
+        let groups = cat.windowGroups("plate-palace-window")
+        #expect(groups.map(\.group.id) == ["grid", "frame", "arch", "shape", "lattice", "blinds"])
+        #expect(groups[0].params.map(\.key) == ["sashes", "cols", "rows", "gap"])
+        #expect(groups.flatMap { $0.params.map(\.key) }.count == 23)
+        #expect(!cat.windowKeys("plate-palace-window").contains("field") && cat.windowKeys("plate-palace-window").count == 23)
+        #expect(cat.params(for: Layer(id: "v", kind: "video", ref: "youtube:aqz-KE-bpKQ", name: "")).items.map(\.key).contains("audio"))
+    }
+
+    /// Catalog 6 (§16): live layers carry an animated strip; shadow layers block light like an attachment.
+    @Test func liveGallery() throws {
+        let cat = try Catalog.decode(Data(contentsOf: Fixtures.catalogURL))
+        let tree = try #require(cat.procedural("tree-sway"))
+        #expect(tree.isShadow && cat.procedural("candle-flicker")?.isShadow == false)
+        if let s = cat.animStrip("tree-sway") {
+            #expect(s.path == "thumbs/tree-sway-anim.jpg" && s.frames > 1 && s.fps > 0)
+        }
+        let old = try Catalog.decode(Data(#"{"version":5,"procedural":[{"id":"clouds","name":"clouds","category":"weather"}]}"#.utf8))
+        #expect(old.animStrip("clouds") == nil && old.windowParamGroups.isEmpty)
+    }
+
+    /// §16: scene documents carry `format` (6 now); older ones decode without it, and it round-trips.
+    @Test func sceneFormatRoundTrips() throws {
+        let s = try JSONDecoder().decode(Scene.self, from: Data(#"{"id":"s","format":6,"backdrop":{}}"#.utf8))
+        #expect(s.format == 6)
+        let again = try JSONDecoder().decode(Scene.self, from: JSONEncoder().encode(s))
+        #expect(again.format == 6)
+        #expect(try JSONDecoder().decode(Scene.self, from: Data(#"{"id":"s"}"#.utf8)).format == nil)
+        #expect(try Fixtures.json("scene").decode(Scene.self).format == 6)
+        #expect(try Fixtures.json("preset").decode(Preset.self).format == 6)
+    }
+
+    /// §16: sharp defaults, background focus, no haze, and background layers in the static stack.
+    @Test func focusLensAndBackgroundLayers() throws {
+        #expect(StackLight() == StackLight(intensity: 0.85, focus: 1, fringe: 0.2, vignette: 0, backgroundFocus: 1))
+        let json = #"{"id":"s","backdrop":{"static":{"layers":[{"id":"lay_bg","kind":"gradient","ref":"ember"},{"id":"lay_c","kind":"procedural","ref":"caustics"}],"light":{"haze":0.4,"backgroundFocus":0.3},"attachments":[]}}}"#
+        let s = try JSONDecoder().decode(Scene.self, from: Data(json.utf8))
+        #expect(s.layers("static").map(\.id) == ["lay_bg", "lay_c"])
+        let l = try #require(s.light("static"))
+        #expect(l.backgroundFocus == 0.3 && l.focus == 1 && l.vignette == 0)
+        let out = try JSONValue(encoding: l)
+        #expect(out["haze"] == nil && out["backgroundFocus"] == 0.3)
     }
 
     @Test func olderCatalogStillDecodes() throws {
@@ -58,7 +108,7 @@ import PMTestSupport
     @Test func staticStackDefaultsAndLiveWithoutLight() throws {
         let scene = try JSONDecoder().decode(Scene.self, from: Data(#"{"id":"s","backdrop":{"static":{"layers":[]},"live":{"layers":[]}}}"#.utf8))
         #expect(scene.light("static") == StackLight())
-        #expect(scene.light("static")?.color.kelvin == 5600 && scene.light("static")?.intensity == 0.85 && scene.light("static")?.focus == 0.7)
+        #expect(scene.light("static")?.color.kelvin == 5600 && scene.light("static")?.intensity == 0.85 && scene.light("static")?.focus == 1)
         #expect(scene.light("live") == nil)
         #expect(scene.kind == "static")
         let partial = try JSONDecoder().decode(StackLight.self, from: Data(#"{"color":{"mode":"hsi","hue":10}}"#.utf8))
@@ -112,13 +162,14 @@ import PMTestSupport
             #expect(scene.kind == kind && scene.mode == SceneKind.mode(kind))
         }
         let s = try SceneTemplates.document(kind: "static", id: "s", name: "s", setupId: "set", catalog: cat).decode(Scene.self)
-        #expect(s.attachments("static").map(\.gobo) == ["window-4"])
-        #expect(s.attachments("static")[0].param("throw") == 0.25)
-        #expect(s.attachments("static")[0].rotation == cat.gobo("window-4")?.attachment.rotation)
+        #expect(s.attachments("static").map(\.gobo) == ["plate-grid-window"])
+        #expect(s.attachments("static")[0].motion?.phase == 0.5)
+        #expect(s.attachments("static")[0].rotation == cat.gobo("plate-grid-window")?.attachment.rotation)
         #expect(s.attachments("static")[0].motion?.preset == "sun-lr" && s.attachments("static")[0].motion?.on == false)
         #expect(s.light("static")?.color.kelvin == 3200 && s.light("static")?.intensity == 0.85 && s.light("static")?.focus == 0.68)
         let l = try SceneTemplates.document(kind: "live", id: "s", name: "s", setupId: "set", catalog: cat).decode(Scene.self)
         #expect(l.layers("live").map(\.ref) == ["tree-sway"] && l.layers("live")[0].blend == "multiply" && l.attachments("live").count == 1)
+        #expect(l.light("live")?.focus == cat.gobo("plate-grid-window")?.focus)
     }
 }
 
@@ -241,11 +292,44 @@ import PMTestSupport
         #expect(DragIntent.decide(dx: 40, dy: 0) == .horizontal)
     }
 
+    /// The lock is decided once per gesture, vertical wins ties, a dead zone keeps taps, a moving page keeps the touch.
+    @Test func directionLock() {
+        var l = DirectionLock()
+        l.begin(pageMoving: false)
+        #expect(l.move(dx: 4, dy: 1) == .undecided && l.isTap)
+        #expect(l.move(dx: 2, dy: 12) == .page)
+        #expect(l.move(dx: 80, dy: 12) == .page)          // sticky: a vertical start never becomes a slider drag
+        l.begin(pageMoving: false)
+        #expect(l.move(dx: 12, dy: 8) == .page)           // a tie (12 < 1.5 × 8) goes to the page
+        l.begin(pageMoving: false)
+        #expect(l.move(dx: 10, dy: 2) == .control && l.origin == (10, 2))
+        #expect(l.move(dx: 10, dy: 60) == .control)       // sticky the other way too: the drag stays on the control
+        l.begin(pageMoving: true)
+        #expect(l.decision == .page && l.move(dx: 40, dy: 0) == .page && !l.isTap)   // catching a scroll never adjusts
+    }
+
     @Test func shouldBeginFallsBackToVelocity() {
         #expect(DragIntent.shouldBegin(dx: 10, dy: 1, vx: 0, vy: 0))
         #expect(!DragIntent.shouldBegin(dx: 1, dy: 10, vx: 500, vy: 0))   // the translation decides once it is long
         #expect(DragIntent.shouldBegin(dx: 2, dy: 1, vx: 400, vy: 100))
         #expect(!DragIntent.shouldBegin(dx: 2, dy: 1, vx: 100, vy: 400))
         #expect(!DragIntent.shouldBegin(dx: 0, dy: 0, vx: 0, vy: 0))
+    }
+}
+
+/// §16: picking another attachment keeps the user's placement, opacity and motion; nothing touches the light.
+@Suite struct AttachmentSwapTests {
+    @Test func keepsPlacementOpacityAndMotion() throws {
+        let cat = try Catalog.decode(Data(contentsOf: Fixtures.catalogURL))
+        var old = cat.newAttachment(try #require(cat.gobo("plate-grid-window")), id: "att_old")
+        old.rotation = -22; old.scale = 1.7; old.offsetX = 0.3; old.offsetY = -0.1; old.opacity = 0.6
+        old.motion = cat.motionPreset("sun-lr")?.motion
+        old.params["throw"] = 0.4
+        let next = AttachmentSwap.replacing(old, with: try #require(cat.gobo("plate-hearts")), catalog: cat, id: "att_new")
+        #expect(next.id == "att_new" && next.gobo == "plate-hearts" && next.name == cat.gobo("plate-hearts")?.name)
+        #expect(next.rotation == -22 && next.scale == 1.7 && next.offsetX == 0.3 && next.offsetY == -0.1 && next.opacity == 0.6)
+        #expect(next.motion == old.motion && next.param("throw") == 0.4)
+        let fresh = AttachmentSwap.replacing(nil, with: try #require(cat.gobo("plate-hearts")), catalog: cat, id: "att_f")
+        #expect(fresh == cat.newAttachment(try #require(cat.gobo("plate-hearts")), id: "att_f"))
     }
 }

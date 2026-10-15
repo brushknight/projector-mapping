@@ -156,9 +156,12 @@ describe('light and attachment ops (§15)', () => {
     expect(attachmentPath(sc, 'att_live_window', 'rotation')).toBe('/backdrop/live/attachments/0/rotation')
     expect(attachmentPath(sc, 'nope')).toBeNull()
   })
-  it('picks one attachment and puts static on air', () => {
+  it('picks one attachment and puts static on air, in the place of the one it replaces (§16)', () => {
     const ops = pickAttachment({ ...sc, mode: 'live' }, 'static', att)
-    expect(ops[0]).toEqual({ op: 'replace', path: '/backdrop/static/attachments', value: [att] })
+    const old = sc.backdrop.static.attachments![0]
+    expect(ops[0]).toEqual({ op: 'replace', path: '/backdrop/static/attachments', value: [{ ...att, id: old.id, rotation: old.rotation, scale: old.scale, offsetX: old.offsetX, offsetY: old.offsetY, opacity: old.opacity, visible: old.visible, motion: old.motion }] })
+    const empty = { ...sc, mode: 'live', backdrop: { ...sc.backdrop, static: { ...sc.backdrop.static, attachments: [] } } } as SceneT
+    expect(pickAttachment(empty, 'static', att)[0]).toEqual({ op: 'replace', path: '/backdrop/static/attachments', value: [att] })
     expect(ops.at(-1)).toEqual({ op: 'replace', path: '/mode', value: 'static' })
   })
   it('adds on top and removes', () => {

@@ -317,6 +317,16 @@ func (s *Service) Owned(id string) bool {
 	return s.owned[id]
 }
 
+// Available implements AgentService.
+func (s *Service) Available(context.Context) []agentssvc.Availability {
+	out := []agentssvc.Availability{}
+	for _, a := range []string{"claude", "codex"} {
+		why := s.runner.Available(a)
+		out = append(out, agentssvc.Availability{Agent: a, Available: why == "", Reason: why})
+	}
+	return out
+}
+
 func (s *Service) Settings(ctx context.Context) agents.Settings {
 	var st agents.Settings
 	if b, err := s.kv.Get(ctx, settingsKey); err == nil && b != nil {

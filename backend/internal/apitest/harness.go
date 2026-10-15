@@ -21,6 +21,7 @@ import (
 	"projmap/internal/app"
 	agentport "projmap/internal/application/ports/out/agents"
 	"projmap/internal/application/ports/out/media"
+	calibimpl "projmap/internal/application/services/camera/camerasvc"
 	"projmap/internal/config"
 	"projmap/internal/domain/agents"
 	"projmap/internal/infrastructure/clients/mediatools"
@@ -38,6 +39,9 @@ type H struct {
 	// Media runs ffprobe, ffmpeg and yt-dlp; the default looks on PATH only (tests set PATH to choose what exists).
 	Media media.Tools
 }
+
+// Tests run the calibration sequence without the settle delay a real projector needs.
+func init() { calibimpl.SettleDelay = 0 }
 
 // New starts an app (seeded with the desk setup, scene and presets).
 func New(t *testing.T) *H {

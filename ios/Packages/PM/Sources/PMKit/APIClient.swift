@@ -175,15 +175,33 @@ extension APIClient {
         return any?["sha"]?.string ?? any?["asset"]?["sha"]?.string ?? ""
     }
 
-    public func startCalibration(setupId: String) async throws -> String {
-        let r: IDResult = try await send("POST", "\(Self.v1)/calibrations", body: ["setupId": .string(setupId)])
+    public func startCalibration(setupId: String, cameraRoi: ROIRect? = nil) async throws -> String {
+        var body: JSONObject = ["setupId": .string(setupId)]
+        if let r = cameraRoi { body["cameraRoi"] = r.json }
+        let r: IDResult = try await send("POST", "\(Self.v1)/calibrations", body: .object(body))
         return r.id
     }
+
+    /// What auto map needs before it can start (protocol §18).
+    public func preflight() async throws -> Preflight { try await get("\(Self.v1)/camera/preflight") }
+
+    /// Shows (or takes down) the aiming image on the projector output; renew `on` every few seconds (protocol §18).
+    public func aim(_ on: Bool, cameraRoi: ROIRect? = nil) async throws {
+        var body: JSONObject = ["on": .bool(on)]
+        if let r = cameraRoi { body["cameraRoi"] = r.json }
+        try await call("POST", "\(Self.v1)/calibrations/aim", body: .object(body))
+    }
+
+    /// Flashes white, black, white on the projector and says how visible it is in the phone's preview.
+    public func lightCheck() async throws -> LightCheck { try await send("POST", "\(Self.v1)/calibrations/lightcheck") }
+
+    /// Which agent CLIs the server's Mac can run.
+    public func agentsAvailable() async throws -> [AgentAvailability] { try await get("\(Self.v1)/agents/available") }
 
     /// The calibration and its candidate surfaces (`/calibrations/{id}/candidates`, protocol §9).
     public func calibration(_ id: String) async throws -> CalibrationResult {
         var r: CalibrationResult = try await get("\(Self.v1)/calibrations/\(id)")
-        if r.objects.isEmpty, let list: [CalibrationResult.Candidate] = try? await get("\(Self.v1)/calibrations/\(id)/candidates") {
+        if r.objects.isEmpty, r.status == "done", let list: [CalibrationResult.Candidate] = try? await get("\(Self.v1)/calibrations/\(id)/candidates") {
             r.attach(list)
         }
         return r
@@ -324,15 +342,17 @@ extension APIClient {
     /// `GET /catalog/thumbs/<id>.png` (no auth, immutable): a 384 × 216 PNG of a gobo or procedural layer (§15).
     public func catalogThumbURL(_ id: String) -> URL { url("/catalog/thumbs/\(id).png") }
 
-    /// `/preview?token=…&w=…&mode=hero|layer&layer=<id>&scene=<id>` (protocol §6, §15). An empty token is left out:
-    /// the page would send `Bearer ` and a LAN server would refuse it.
-    public func previewURL(width: Int, mode: String = "hero", layer: String? = nil, scene: String? = nil) -> URL {
+    /// `/preview?token=…&w=…&mode=hero|layer&layer=<id>&scene=<id>&try=<procedural id>` (protocol §6, §15, §16). An
+    /// empty token is left out: the page would send `Bearer ` and a LAN server would refuse it. `try` shows the scene's
+    /// live stack with that procedural layer on top, client side, without putting it on air (the live gallery).
+    public func previewURL(width: Int, mode: String = "hero", layer: String? = nil, scene: String? = nil, try trial: String? = nil) -> URL {
         var q: [URLQueryItem] = []
         if let token, !token.isEmpty { q.append(.init(name: "token", value: token)) }
         q.append(.init(name: "w", value: String(width)))
         q.append(.init(name: "mode", value: mode))
         if let layer { q.append(.init(name: "layer", value: layer)) }
         if let scene { q.append(.init(name: "scene", value: scene)) }
+        if let trial { q.append(.init(name: "try", value: trial)) }
         return url("/preview", query: q)
     }
 }
@@ -393,4 +413,11 @@ enum Multipart {
         line("--\(boundary)--")
         return (d, "multipart/form-data; boundary=\(boundary)")
     }
+}
+
+/// A rectangle in camera-view fractions (0…1 of the still / capture-device space): the calibration's region of interest.
+public struct ROIRect: Sendable, Hashable {
+    public var x, y, w, h: Double
+    public init(x: Double, y: Double, w: Double, h: Double) { self.x = x; self.y = y; self.w = w; self.h = h }
+    public var json: JSONValue { ["x": .number(x), "y": .number(y), "w": .number(w), "h": .number(h)] }
 }

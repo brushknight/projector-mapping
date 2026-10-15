@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Cap, Glass, Icon, ModeTabs, OnAirDot, Panel, type ModeTab } from '../../../../shared/components'
 import { useChannel, useServerSecond } from '../../../../shared/lib/useHub'
+import { pressed } from '../../../../shared/lib/pointer'
 import { useRaf } from '../../../../shared/lib/useRaf'
 import { HubError, type Hub } from '../../../../shared/lib/ws'
 import type { Catalog } from '../../../catalog/types'
@@ -22,7 +23,11 @@ import { WallPanel } from '../wallPanel'
 import { ShowContext, useShow, type ShowState } from './context'
 import { ColorPanel, LivePanel, ObjectsPanel, PresetChips, SceneryPanel, StaticPanel } from './modes'
 import { LivePreview } from './preview'
+import { TryBar } from './liveGallery'
+import { StaticTryBar } from './staticGallery'
+import type { StaticTry } from '../../../catalog/staticTry'
 import { openViewer } from '../../../output/viewer'
+import { PutOnProjector } from '../../../output/ui/putOnProjector'
 import s from './styles.module.css'
 
 export const NO_AUDIO = 'Nothing plays sound right now. Open /out on the projector computer and click it once.'
@@ -73,6 +78,13 @@ export function ShowSpace({
   const { sounds, reload: reloadSounds } = useSounds(hub)
   const [tab, setTab] = useState<SceneMode>('static')
   const [liveLayer, setLiveLayer] = useState<string | null>(null)
+  const [trying, setTrying] = useState<string | null>(null)
+  const [staticTry, setStaticTry] = useState<StaticTry | null>(null)
+  // a try ends when the scene on the wall changes or the tab changes
+  useEffect(() => {
+    setTrying(null)
+    setStaticTry(null)
+  }, [scene?.id, tab])
 
   // the open tab is what is on air: follow the wall (another client may switch it), never send on open
   useEffect(() => {
@@ -119,6 +131,10 @@ export function ShowSpace({
     play: async (a) => void (await play(a)),
     liveLayer,
     setLiveLayer,
+    trying,
+    setTrying,
+    staticTry,
+    setStaticTry,
     presetMode: tab === 'objects' ? 'static' : tab,
   }
 
@@ -279,6 +295,11 @@ function SlideDrag() {
       onPointerMove={(e) => {
         const d = drag.current
         if (!d) return
+        // a move without a button (the wheel scrolls the page under a still pointer) never slides the light
+        if (!pressed(e)) {
+          drag.current = null
+          return
+        }
         const dx = e.clientX - d.x, dy = e.clientY - d.y
         const along = portrait ? dy : dx, across = portrait ? dx : dy
         if (!d.on) {
@@ -298,6 +319,11 @@ function SlideDrag() {
         if (!d?.on) return
         const along = portrait ? e.clientY - d.y : e.clientX - d.x
         sh.editing.setValue(path, clamp(d.v + along / (portrait ? d.h : d.w)), 'final')
+      }}
+      onPointerCancel={() => (drag.current = null)}
+      onPointerLeave={(e) => {
+        // released or left before the slide took the pointer: forget the press
+        if (!e.currentTarget.hasPointerCapture(e.pointerId)) drag.current = null
       }}
       onDoubleClick={() => sh.editing.setValue(`/backdrop/${mode}/light/slide`, { x: 0, y: 0 }, 'final')}
     />
@@ -330,6 +356,8 @@ function Hero() {
     <div className={s.heroWrap}>
       <div className={s.hero} style={{ aspectRatio: String(ar), ['--ar' as string]: String(ar) }} data-testid="show-hero">
         <LivePreview className={s.canvas} />
+        <TryBar />
+        <StaticTryBar />
         <div className={s.heroTop}>
           <Glass>
             <OnAirDot off={!onAir} />
@@ -343,9 +371,20 @@ function Hero() {
               <Icon name="viewer" size={14} />
               open viewer
             </button>
+            <PutOnProjector
+              className={s.heroMenu}
+              onDone={(m) => sh.toast(m)}
+              onError={(m) => sh.toast(m, { bad: true })}
+              trigger={({ toggle }) => (
+                <button type="button" className={s.heroBtn} onClick={toggle} title="open the output full screen on a display, with no browser bars" data-testid="show-put-on-projector">
+                  <Icon name="projector" size={14} />
+                  put on projector
+                </button>
+              )}
+            />
           </span>
         </div>
-        <SlideDrag />
+        {!sh.trying && !sh.staticTry && <SlideDrag />}
         {sh.scene?.mode === 'objects' && (
           <div className={s.heroBottom}>
             <Glass>

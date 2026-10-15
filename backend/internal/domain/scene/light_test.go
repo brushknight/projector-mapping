@@ -53,11 +53,13 @@ func TestUpgradeV3Scene(t *testing.T) {
 		t.Fatalf("static %+v", st)
 	}
 	a := st.Attachments[0]
-	if a.ID != "lay_window" || a.Gobo != "window" || a.Rotation != -22 || a.Scale != 1.4 || !a.Visible || a.Opacity != 1 || a.Motion != nil {
+	// (§16) the removed 6-pane window moves to the grid window preset, keeping its panes
+	if a.ID != "lay_window" || a.Gobo != "plate-grid-window" || a.Params["cols"] != 2.0 || a.Params["rows"] != 3.0 || a.Params["sashes"] != 1.0 ||
+		a.Rotation != -22 || a.Scale != 1.4 || !a.Visible || a.Opacity != 1 || a.Motion != nil {
 		t.Fatalf("attachment %+v", a)
 	}
 	if l := st.Light; l.Focus < 0.379 || l.Focus > 0.381 || l.Intensity != 0.8 || l.Color.Kelvin != 3200 || l.Color.Tint != 0.04 ||
-		l.Fringe != 0.2 || l.Vignette != 0.3 || l.Haze != 0 || l.Slide != (Pt{}) || l.Motion != nil || l.ColorLayer != nil {
+		l.Fringe != 0.2 || l.Vignette != 0 || l.BackgroundFocus != 1 || l.Slide != (Pt{}) || l.Motion != nil || l.ColorLayer != nil {
 		t.Fatalf("static light %+v", l)
 	}
 	lv := sc.Backdrop.Live
@@ -125,14 +127,14 @@ func TestUpgradeV3Preset(t *testing.T) {
 	if !p.Upgrade() || p.Upgrade() {
 		t.Fatal("a v3 static preset upgrades once")
 	}
-	if len(p.Backdrop.Layers) != 0 || len(p.Backdrop.Attachments) != 1 || p.Backdrop.Light == nil || p.Backdrop.Attachments[0].Gobo != "window" {
+	if len(p.Backdrop.Layers) != 0 || len(p.Backdrop.Attachments) != 1 || p.Backdrop.Light == nil || p.Backdrop.Attachments[0].Gobo != "plate-grid-window" || p.Format != FormatVersion {
 		t.Fatalf("preset %+v", p.Backdrop)
 	}
 	b, _ := json.Marshal(p)
 	if !strings.Contains(string(b), `"backdrop":{"layers":[],"light":{`) {
 		t.Fatalf("preset json %s", b)
 	}
-	color := Preset{ID: "p", Name: "c", Mode: ModeColor, Backdrop: LayerStack{Layers: []Layer{}}}
+	color := Preset{ID: "p", Name: "c", Mode: ModeColor, Backdrop: LayerStack{Layers: []Layer{}}, Format: FormatVersion}
 	if color.Upgrade() {
 		t.Fatal("a color preset has nothing to upgrade")
 	}
@@ -177,16 +179,16 @@ func TestValidateLightModel(t *testing.T) {
 			s.Backdrop.Static.Attachments = []Attachment{{ID: "att_1", Gobo: "nope", Opacity: 1, Scale: 1, Params: map[string]any{}}}
 		},
 		"gobo param out of range": func(s *Scene) {
-			s.Backdrop.Static.Attachments = []Attachment{{ID: "att_1", Gobo: "window-4", Opacity: 1, Scale: 1, Params: map[string]any{"cols": 12.0}}}
+			s.Backdrop.Static.Attachments = []Attachment{{ID: "att_1", Gobo: "plate-grid-window", Opacity: 1, Scale: 1, Params: map[string]any{"cols": 13.0}}}
 		},
 		"gobo param from goboParams": func(s *Scene) {
-			s.Backdrop.Static.Attachments = []Attachment{{ID: "att_1", Gobo: "window-4", Opacity: 1, Scale: 1, Params: map[string]any{"throw": 2.0}}}
+			s.Backdrop.Static.Attachments = []Attachment{{ID: "att_1", Gobo: "plate-grid-window", Opacity: 1, Scale: 1, Params: map[string]any{"throw": 2.0}}}
 		},
 		"scale": func(s *Scene) {
-			s.Backdrop.Static.Attachments = []Attachment{{ID: "att_1", Gobo: "window-4", Opacity: 1, Scale: 20, Params: map[string]any{}}}
+			s.Backdrop.Static.Attachments = []Attachment{{ID: "att_1", Gobo: "plate-grid-window", Opacity: 1, Scale: 20, Params: map[string]any{}}}
 		},
 		"duplicate id with a layer": func(s *Scene) {
-			s.Backdrop.Static.Attachments = []Attachment{{ID: "lay_1", Gobo: "window-4", Opacity: 1, Scale: 1, Params: map[string]any{}}}
+			s.Backdrop.Static.Attachments = []Attachment{{ID: "lay_1", Gobo: "plate-grid-window", Opacity: 1, Scale: 1, Params: map[string]any{}}}
 			s.Backdrop.Color.Layers = []Layer{{ID: "lay_1", Kind: "gradient", Ref: "ember", Blend: "normal", Opacity: 1, Params: map[string]any{}}}
 		},
 		"focus":     func(s *Scene) { s.Backdrop.Static.Light.Focus = 1.2 },
@@ -231,7 +233,7 @@ func TestValidateLightModel(t *testing.T) {
 		},
 		"reveal clip on an attachment track": func(s *Scene) {
 			id := "att_1"
-			s.Backdrop.Static.Attachments = []Attachment{{ID: "att_1", Gobo: "window-4", Opacity: 1, Scale: 1, Params: map[string]any{}}}
+			s.Backdrop.Static.Attachments = []Attachment{{ID: "att_1", Gobo: "plate-grid-window", Opacity: 1, Scale: 1, Params: map[string]any{}}}
 			s.Timeline.Tracks = []Track{{ID: "trk_1", Name: "att", Target: Target{Kind: "layer", ID: &id}}}
 			s.Timeline.Clips = []Clip{{ID: "clp_1", TrackID: "trk_1", Effect: "reveal", Start: 0, End: 2, Params: map[string]any{}}}
 		},
@@ -253,9 +255,9 @@ func TestValidateLightModel(t *testing.T) {
 	m.KelvinFrom, m.KelvinTo = 2300, 4300
 	s.Backdrop.Static.Light.Motion = &m
 	s.Backdrop.Static.Light.ColorLayer = &ColorLayer{Kind: "generator", Ref: "hue-cycle", Params: map[string]any{"speed": 0.5}}
-	s.Backdrop.Static.Attachments = []Attachment{{ID: "att_1", Gobo: "window-4", Visible: true, Opacity: 0.6, Scale: 1.25, Rotation: -12,
-		Params: map[string]any{"cols": 3.0, "throw": 0.25}, Motion: &m}}
-	s.Backdrop.Live.Attachments = []Attachment{{ID: "att_2", Gobo: "blinds", Visible: true, Opacity: 1, Scale: 1, Params: map[string]any{}}}
+	s.Backdrop.Static.Attachments = []Attachment{{ID: "att_1", Gobo: "plate-arched-window", Visible: true, Opacity: 0.6, Scale: 1.25, Rotation: -12,
+		Params: map[string]any{"cols": 3.0, "throw": 0.25, "arch": false, "taper": -0.4, "field": "fill"}, Motion: &m}}
+	s.Backdrop.Live.Attachments = []Attachment{{ID: "att_2", Gobo: "plate-blinds", Visible: true, Opacity: 1, Scale: 1, Params: map[string]any{}}}
 	s.Backdrop.Color.Layers = []Layer{{ID: "lay_1", Kind: "generator", Ref: "pulse", Blend: "normal", Opacity: 1, Params: map[string]any{}}}
 	att, light := "att_2", LightLive
 	s.Timeline.Tracks = []Track{{ID: "trk_1", Name: "att", Target: Target{Kind: "layer", ID: &att}}, {ID: "trk_2", Name: "light", Target: Target{Kind: "layer", ID: &light}}}
@@ -286,8 +288,8 @@ func TestTemplates(t *testing.T) {
 	s, _ := FromTemplate(refs.c, "static-window", "scn_t", "set_t", "w")
 	a := s.Backdrop.Static.Attachments[0]
 	l := s.Backdrop.Static.Light
-	if a.Gobo != "window-4" || a.Params["throw"] != 0.25 || a.Params["cols"] != 2.0 || a.Scale != 1.25 || a.Motion == nil || a.Motion.On ||
-		a.Motion.Preset != "sun-lr" || a.Motion.Duration != 600 || a.Motion.Phase != 0.5 || l.Color.Kelvin != 3200 || l.Focus != 0.68 || l.Intensity != 0.85 {
+	if _, geo := a.Params["cols"]; a.Gobo != "plate-grid-window" || a.Params["throw"] != 0.25 || geo || a.Params["field"] != "round" || a.Scale != 1.25 || a.Motion == nil || a.Motion.On ||
+		a.Motion.Preset != "sun-lr" || a.Motion.Duration != 600 || a.Motion.Phase != 0.5 || l.Color.Kelvin != 3200 || l.Focus != 1 || l.BackgroundFocus != 1 || l.Intensity != 0.85 {
 		t.Fatalf("static-window %+v %+v", a, l)
 	}
 	if !strings.HasPrefix(a.ID, "att_") || len(a.ID) != 12 {

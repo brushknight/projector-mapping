@@ -27,6 +27,15 @@ type CameraService interface {
 // CalibrationService runs and uses calibrations.
 type CalibrationService interface {
 	Start(ctx context.Context, setupID string) (*camera.Calibration, error)
+	// StartROI limits the calibration to a region of interest (protocol §18).
+	StartROI(ctx context.Context, setupID string, roi camera.ROI) (*camera.Calibration, error)
+	// Aim shows (or takes down) the aiming image on the output while the phone is pointed; on expires after
+	// camerasvc.AimTTL without a renewal.
+	Aim(ctx context.Context, on bool, cameraROI *camera.Rect) error
+	// LightCheck projects white, black, white and measures on the preview how visible the projector is.
+	LightCheck(ctx context.Context) (*camera.LightCheck, error)
+	// Preflight says whether auto map can start: output, camera preview, server.
+	Preflight(ctx context.Context, setupID string) camera.Preflight
 	Get(ctx context.Context, id string) (*camera.Calibration, error)
 	Progress(ctx context.Context, id string) (*camera.Progress, error)
 	// Current is the setup's calibration (setup.calibrationId).

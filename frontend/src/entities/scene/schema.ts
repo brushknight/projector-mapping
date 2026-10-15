@@ -16,11 +16,11 @@ export const layerShape = obj({
   opacity: num, blend: lit('normal', 'multiply', 'screen', 'add'), light: nullable(lightShape), params: record(any), motion: nullable(motionShape),
 })
 export const stackLightShape = obj({
-  intensity: num, focus: num,
+  intensity: num, focus: num, backgroundFocus: optional(num),
   color: obj({ mode: lit('cct', 'hsi'), kelvin: num, tint: num, hue: num, sat: num }),
   fx: obj({ kind: lit('none', 'candle', 'fire', 'lightning', 'paparazzi', 'tv', 'breathe', 'strobe', 'police'), speed: num }),
   colorLayer: nullable(obj({ kind: lit('gradient', 'generator'), ref: str, params: record(any) })),
-  fringe: num, vignette: num, haze: num, slide: ptShape, motion: nullable(motionShape),
+  fringe: num, vignette: num, slide: ptShape, motion: nullable(motionShape),
 })
 export const attachmentShape = obj({
   id: str, gobo: str, name: str, visible: bool, opacity: num, rotation: num, offsetX: num, offsetY: num, scale: num, params: record(any), motion: nullable(motionShape),
@@ -63,7 +63,7 @@ export const padShape = obj({
 export const soundsShape = obj({ pads: arr(padShape) })
 export const timelineShape = obj({ duration: num, tracks: arr(trackShape), clips: arr(clipShape), cues: arr(cueShape) })
 export const sceneShape = obj({
-  id: str, setupId: str, name: str, version: int, mode: sceneModeShape, kind: optional(lit('static', 'live', 'color', 'scenery', 'mapping')), backdrop: backdropShape, underlay: optional(underlayShape), points: arr(pointShape), objects: arr(objectShape),
+  id: str, setupId: str, name: str, version: int, mode: sceneModeShape, kind: optional(lit('static', 'live', 'color', 'scenery', 'mapping')), format: optional(int), backdrop: backdropShape, underlay: optional(underlayShape), points: arr(pointShape), objects: arr(objectShape),
   sounds: optional(soundsShape), timeline: timelineShape,
 })
 export const sceneSummaryShape = obj({ id: str, name: str, setupId: str, version: int, kind: optional(lit('static', 'live', 'color', 'scenery', 'mapping')), mode: optional(sceneModeShape) })

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { openViewer } from '../../../output/viewer'
+import { PutOnProjector } from '../../../output/ui/putOnProjector'
 import { settingsApi, type AgentSettings } from '../../../settings'
 import { useServerSecond } from '../../../../shared/lib/useHub'
 import { Cap, FillSlider, Field, NumField, Pill, Row, Segmented, Switch } from '../../../../shared/components'
@@ -19,7 +20,7 @@ const SIZES: Array<[number, number]> = [
 ]
 
 /** Edits the active projector rig: output size, orientation, flips, master, blackout fade, test pattern, reference photo. */
-export function SetupPanel({ hub, setup, onError }: { hub: Hub; setup: Setup; onError: (m: string) => void }) {
+export function SetupPanel({ hub, setup, onError, onDone }: { hub: Hub; setup: Setup; onError: (m: string) => void; onDone?: (m: string) => void }) {
   const file = useRef<HTMLInputElement>(null)
   const update = (body: Parameters<typeof setupApi.update>[1]) => setupApi.update(setup.id, body).catch((e) => onError(e instanceof Error ? e.message : String(e)))
   const o = setup.output
@@ -46,6 +47,16 @@ export function SetupPanel({ hub, setup, onError }: { hub: Hub; setup: Setup; on
       <Pill icon="viewer" onClick={() => { if (!openViewer({ portrait: o.orientation !== 'landscape' })) onError('The browser blocked the viewer window. Allow pop-ups for this page.') }} title="open a window that shows exactly what the projector shows" data-testid="setup-open-viewer">
         open viewer
       </Pill>
+      <PutOnProjector
+        align="left"
+        onDone={onDone ?? (() => {})}
+        onError={onError}
+        trigger={({ toggle }) => (
+          <Pill icon="projector" onClick={toggle} title="open the output full screen on a display, with no browser bars" data-testid="setup-put-on-projector">
+            put on projector
+          </Pill>
+        )}
+      />
       <Field label="orientation">
         <Segmented<Orientation>
           ariaLabel="orientation"

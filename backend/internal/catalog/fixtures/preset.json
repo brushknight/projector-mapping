@@ -2,11 +2,13 @@
  "id": "pre_golden",
  "name": "golden hour",
  "mode": "static",
+ "format": 6,
  "backdrop": {
   "layers": [],
   "light": {
    "intensity": 0.85,
    "focus": 0.38,
+   "backgroundFocus": 1,
    "color": {
     "mode": "cct",
     "kelvin": 3200,
@@ -29,7 +31,6 @@
    },
    "fringe": 0.2,
    "vignette": 0.3,
-   "haze": 0.0,
    "slide": {
     "x": 0,
     "y": 0
@@ -39,8 +40,8 @@
   "attachments": [
    {
     "id": "att_window",
-    "gobo": "window-4",
-    "name": "window 4-pane",
+    "gobo": "plate-grid-window",
+    "name": "6-pane grid window",
     "visible": true,
     "opacity": 1.0,
     "rotation": -12,
@@ -48,6 +49,7 @@
     "offsetY": 0,
     "scale": 1.25,
     "params": {
+     "sashes": 1,
      "cols": 2,
      "rows": 2,
      "mullion": 0.35,

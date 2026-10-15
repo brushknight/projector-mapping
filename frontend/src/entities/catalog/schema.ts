@@ -11,8 +11,10 @@ export const catalogShape = obj({
   stackLight: optional(obj({ params: schema, kelvin: num, attachmentParams: schema })),
   goboParams: optional(schema),
   goboCategories: optional(arr(obj({ id: str, name: str }))),
-  gobos: arr(obj({ ...item, thumb: optional(str), metalThumb: optional(str), source: optional(str), params: optional(schema), attachment: optional(obj({ scale: num, rotation: num })), focus: optional(num), defaults: optional(record(num)) })),
-  procedural: arr(obj({ ...item, animated: bool, params: schema, thumb: optional(str) })),
+  /** (§16, catalog version 6) */
+  windowParamGroups: optional(arr(obj({ id: str, name: str, params: arr(str) }))),
+  gobos: arr(obj({ ...item, thumb: optional(str), metalThumb: optional(str), source: optional(str), family: optional(str), params: optional(schema), attachment: optional(obj({ scale: num, rotation: num })), focus: optional(num), defaults: optional(record(num)) })),
+  procedural: arr(obj({ ...item, animated: bool, params: schema, thumb: optional(str), blend: optional(str), animThumb: optional(str), animFrames: optional(num), animFps: optional(num) })),
   gradients: arr(obj({ ...item, defaults: obj({ stops: arr(obj({ color: str, pos: num })), angle: num, drift: num, grain: num, brightness: num }) })),
   gradientParams: schema,
   scenery: arr(obj({ ...item, asset: str, credit: str })),

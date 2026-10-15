@@ -5,12 +5,14 @@
  "version": 1,
  "mode": "static",
  "kind": "mapping",
+ "format": 6,
  "backdrop": {
   "static": {
    "layers": [],
    "light": {
     "intensity": 0.8,
     "focus": 0.38,
+    "backgroundFocus": 1,
     "color": {
      "mode": "cct",
      "kelvin": 3200,
@@ -25,7 +27,6 @@
     "colorLayer": null,
     "fringe": 0.2,
     "vignette": 0.3,
-    "haze": 0.0,
     "slide": {
      "x": 0,
      "y": 0
@@ -35,8 +36,8 @@
    "attachments": [
     {
      "id": "att_window",
-     "gobo": "window",
-     "name": "window 6-pane",
+     "gobo": "plate-grid-window",
+     "name": "6-pane grid window",
      "visible": true,
      "opacity": 1.0,
      "rotation": 0,
@@ -44,6 +45,7 @@
      "offsetY": 0,
      "scale": 1.1,
      "params": {
+      "sashes": 1,
       "cols": 2,
       "rows": 3,
       "mullion": 0.35,
@@ -120,6 +122,7 @@
    "light": {
     "intensity": 0.8,
     "focus": 0.45,
+    "backgroundFocus": 0.6,
     "color": {
      "mode": "cct",
      "kelvin": 3200,
@@ -134,7 +137,6 @@
     "colorLayer": null,
     "fringe": 0.2,
     "vignette": 0.3,
-    "haze": 0.0,
     "slide": {
      "x": 0,
      "y": 0
@@ -144,8 +146,8 @@
    "attachments": [
     {
      "id": "att_live_window",
-     "gobo": "window",
-     "name": "window 6-pane",
+     "gobo": "plate-grid-window",
+     "name": "6-pane grid window",
      "visible": true,
      "opacity": 1.0,
      "rotation": 0,
@@ -153,6 +155,7 @@
      "offsetY": 0,
      "scale": 1.1,
      "params": {
+      "sashes": 1,
       "cols": 2,
       "rows": 3,
       "mullion": 0.35,
@@ -226,7 +229,7 @@
      "light": null,
      "params": {
       "blur": 0.2,
-      "brightness": 0.8,
+      "brightness": 1,
       "warmth": 0,
       "drift": 0,
       "start": 12,
@@ -246,7 +249,7 @@
      "light": null,
      "params": {
       "blur": 0.74,
-      "brightness": 0.66,
+      "brightness": 0.92,
       "warmth": 0,
       "drift": 0.1
      },

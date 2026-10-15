@@ -158,40 +158,11 @@ means a faint, soft glow that follows the pattern, brighter toward the source an
 
 ## 7. What projmap replicates
 
-A curated library of 33 attachments drawn by the shader, plus the 43 metal plates of section 8. Each entry names
-the real-world analogue it imitates.
-
-| group | attachment | real analogue | extra parameters |
-| --- | --- | --- | --- |
-| windows | 4-pane | Rosco Double Hung 77703 / GAM 203 | panes x/y, mullion thickness, frame depth |
-| | 6-pane | Rosco Georgian Window 77142 | panes x/y, mullion thickness, frame depth |
-| | arched | Nanlite Set 1 arched [N6], Rosco Shuttered Arch 77759 | arch height, panes, mullion, frame depth |
-| | church / gothic | GAM Church Window 202, Aputure Church Window [A15] | tracery detail, mullion, frame depth |
-| | round porthole | Rosco Round Window 78254 / Circular Window 77136 | spokes, frame depth |
-| | French doors | Rosco French Doors 77976 | panes per leaf, mullion, frame depth |
-| | skylight | none found in stock lists (unverified) | panes x/y, frame depth (strong keystone by default) |
-| | barn | none found (GAM Large Bars 743 is closest) | board count, gap width |
-| blinds | venetian narrow / medium / wide | Rosco Venetian Blind 77702, Wide Louvre 79312, GAM 205 | slat width, slat tilt, sag |
-| | vertical blinds | GAM Vertical Blinds 519 | slat width, tilt |
-| | plantation shutters | Rosco Shuttered Arch 77759 (closest; unverified as a stock "plantation" name) | louvre width, tilt, panel count |
-| nature | leaves breakup light / medium / dense | Rosco Leaf Breakup Small / Medium / Large, GAM 370 | density, seed |
-| | palm | none found in the lists we read (unverified) | fronds, seed |
-| | branch | Rosco Bare Branches 77735 | density, seed |
-| | ivy | none found (unverified) | density, seed |
-| | bamboo | Rosco Bamboo Leaves 77782 | density, stem spacing |
-| patterns | dots | Rosco Dot Breakup Large 77808, Aputure Dot [A15] | dot size, density |
-| | lattice | Rosco Lattice Window 77124 | cell size, bar thickness |
-| | Moroccan | GAM Persian Window 918 (closest) | tile scale, bar thickness |
-| | honeycomb | none found (Rosco Glass Brick 77563 is a square analogue) | cell size, bar thickness |
-| | stripes | Rosco Linear 3 77501, Aputure Linear [A15] | stripe width, duty |
-| | grid | Rosco Diamond Grid 78443, Aputure Grille [A15] | cell size, bar thickness |
-| | star field | Rosco Night Sky 79001, Star Cluster 77514 | density, seed |
-| | water ripple | Rosco Ripple 78129/78130, Aputure Ripple [A15] | scale, phase (can animate) |
-| spots | round hard | every attachment, focused, no gobo | |
-| | round soft | every attachment, defocused | |
-| | oval | an ellipsoidal raked onto a wall (keystone) | aspect |
-| | framing shutters (4 blades) | Spotlight Mount / SE / Mini, Nanlite, Godox [A5][A11][A14][N2][G1] | per blade: depth and angle; barrel rotation |
-| | iris | 18-leaf irises [A7][A10][N1] | iris diameter |
+Since catalog 6 the library is only the plates of section 8: the designs on the user's reference photos, nothing
+invented. The shader-drawn attachments of catalog 4 (windows, blinds, leaves, patterns and spots, with the real
+analogues researched above) and the 23 original plates of catalog 5 were removed; stored scenes move to the closest
+plate or window preset (protocol §16, Migration). The windows, blinds and fine lines are one parametric window, so
+panes, mullions, arches, perspective, diamond lattices and slats stay adjustable as the shader windows were.
 
 Parameters every attachment exposes:
 
@@ -205,66 +176,93 @@ Parameters every attachment exposes:
 - **colour**: CCT presets from the sun table (sunrise 2000 K, golden hour 3200 K, noon 5600 K, blue hour 10000 K).
 - **frame depth**: second, wider penumbra edge per [W7][P1].
 
-## 8. The plate set (catalog 5)
+## 8. The plate library (catalog 6)
 
-The reference for the `plates` category is the amaran AS-GB-M SET1 and SET2 M-size metal plates (MO05 to MO24; the
-user's photos are in `design/refs/gobo-plates/`). M-size plates have about a 48 to 50 mm image area [R1][G2]; the
-plates draw that area as a round field of radius about 0.84 of the plate, so 1 plate unit is about 29 mm and the
-0.012 minimum opening and bridge width is about 0.35 mm, within what laser-cut steel holds. Steel needs bridges for
-islands [W2], so every design ties its islands to the rim: ring slots and woven rings break where one passes under
-another, the stained-glass bosses hang on four ties, bamboo node slits leave two side bridges, monstera slits stop
-short of the midrib, curtain folds stop short of the tie back. Scattered designs keep their openings apart (a merged
-ring of openings would drop a piece of metal), and the trails of the firework never cross.
+The references are the user's photos in `design/refs/gobo-plates/` (its README says which part of each photo is
+light): the amaran AS-GB-M SET1 and SET2 M-size metal plates (MO05 to MO24), a six-plate set (set A), three close-up
+sets (set 2, set 3, set 4 windows) and a 15-plate paper set (set B). Several designs repeat across sheets; each design
+appears once and its `source` names every sheet it is on (the sunburst is MO05, the set A sunburst and set B's
+radiant light; the scattered sticks are MO13 and set A's; the slit is set 3's line slit and set B's gap). Similar but
+different designs stay separate: the set A flames (a band of slender tongues, "bonfire") are not MO19 (big licking
+tongues), the set A breakup (big ragged patches, "leaf breakup") is not MO23 (small shards), set 2's breakup is
+small rounded blobs. Set 4's grid window shows 5 × 5 panes although the README calls it 4 × 6; the preset follows the
+photo.
+
+M-size plates have about a 48 to 50 mm image area [R1][G2]; the plates draw that area as a round field of radius
+about 0.84 of the plate, so 1 plate unit is about 29 mm and the 0.012 minimum opening and bridge width is about
+0.35 mm (window bars 0.006, about 0.17 mm, as on etched window gobos), within what laser-cut or etched steel holds.
+Steel needs bridges for islands [W2], so every design ties its islands to the rim: woven rings break where one passes
+under another, the swirl's slots run between curved bridges from the centre to the rim, the rainbow arch's bands end
+at the field edge so the metal between them stays tied, maze pieces sit in a metal web, the inner squares of window
+grid III hang on the four lattice bars that meet there. Scattered designs keep their openings apart (a merged ring of
+openings would drop a piece of metal), branches and cracks are placed so no two strokes cross (they always form a
+tree), and leaves keep clear of branches.
 
 The renderer projects the round field by default (the spotlight's aperture); `field: fill | stretch | tile` makes a
-plate cover a 16:9 frame like a wide projector. Scattered designs fill the whole square for that; designs that sit
-in the field (windows, sunburst) simply grow.
+plate cover a 16:9 frame like a wide projector.
 
-| id | name | follows | how it is drawn |
-| --- | --- | --- | --- |
-| `plate-sunburst` | sunburst | MO05 | 34 thin rays, long and short in turn, round an empty centre |
-| `plate-louvre` | louvre | MO06 | wide horizontal slats in a smaller field (0.74) |
-| `plate-rain-lines` | rain lines | MO07 | about 21 thin vertical streaks of random length |
-| `plate-fan-rays` | fan rays | MO08 | 9 wedges from a vanishing point below the plate, bars 30 % of each step |
-| `plate-skewed-window` | skewed window | MO09 | a 4 × 6 window in perspective, columns widening to the right |
-| `plate-grid-window` | 6-pane grid window | MO10 | two sashes of 2 × 4 panes |
-| `plate-arched-window` | arched window | MO11 | 3 × 4 panes under a round head with a fan light |
-| `plate-crossed-lines` | crossed lines | MO12 | an open field crossed by 58 thin wires, all tied to the rim |
-| `plate-scattered-sticks` | scattered sticks | MO13 | short sticks, a fifth of them forked |
-| `plate-pixel-cloud` | pixel cloud | MO14 | square pixels on a grid, a noisy cloud in a wide band |
-| `plate-water-ripples` | water ripples | MO15 | rows of tapered wavy slivers |
-| `plate-snowflakes` | snowflakes | MO16 | ten six-armed flakes in three styles |
-| `plate-lightning` | lightning | MO17 | two jagged bolts with side strikes that never loop back |
-| `plate-starfield` | starfield | MO18 | clustered dots, three sparkles and two little nebulae |
-| `plate-flames` | flames | MO19 | licking tongues kept apart, a big fire with a dark heart tied below |
-| `plate-firework-burst` | firework burst | MO20 | trails from a core, drooping with distance |
-| `plate-bare-branches` | bare branches | MO21 | an open field crossed by branching metal trees from the rim |
-| `plate-fern-leaves` | fern leaves | MO22 | five fronds of long narrow leaflets hanging from the top |
-| `plate-foliage-breakup` | foliage breakup | MO23 | a Voronoi breakup of ragged shards with a metal web |
-| `plate-rings` | rings | MO24 | three crescent rings woven over and under |
-| `plate-curved-venetian` | curved venetian | original | bowed slats opening up towards the bottom |
-| `plate-bamboo-stalks` | bamboo stalks | original | metal stalks with bridged node slits and leaf sprays |
-| `plate-palm-silhouette` | palm silhouette | original | two palms with feathered fronds against an open sky |
-| `plate-monstera` | monstera leaves | original | four split leaves on stalks from the rim |
-| `plate-jungle-breakup` | jungle breakup | original | vines from the rim carrying big leaves of three kinds |
-| `plate-stained-glass` | stained-glass grid | original | square panes, diamond cames, ringed bosses on four ties |
-| `plate-moroccan-arch` | Moroccan arch lattice | original | pointed horseshoe arches and eight pointed stars |
-| `plate-honeycomb` | honeycomb | original | hexagon cells with an even web |
-| `plate-concentric` | concentric circles | original | ring slots, each held by three staggered bridges |
-| `plate-spiral` | spiral | original | a double spiral slot |
-| `plate-skyline` | cityscape skyline | original | towers with lit windows and a water tower against an open sky |
-| `plate-starburst-fine` | starburst fine | original | 48 narrow wedge rays |
-| `plate-starburst-bold` | starburst bold | original | 16 wide wedge rays |
-| `plate-deco-fan` | Art Deco fan | original | a rising sun of cells in three bands, rays and stripes |
-| `plate-diagonal-blinds` | diagonal blinds | original | slats at 35 degrees |
-| `plate-portholes` | porthole grid | original | round holes in a hex grid with crossed bars |
-| `plate-god-rays` | god rays | original | shafts fanning down from a cloud band with a broken silver lining |
-| `plate-wave-lines` | wave lines | original | wavy slots |
-| `plate-triangles` | abstract triangles | original | scattered, turned triangles kept apart |
-| `plate-dapple-fine` | dappled light fine | original | many small soft spots clustered by noise |
-| `plate-dapple-bold` | dappled light bold | original | fewer, bigger spots |
-| `plate-mesh-fence` | mesh fence | original | a chain link of diamond holes |
-| `plate-curtain-window` | window with curtains | original | a 2 × 3 window, tied-back curtains with fold slits, a scalloped valance |
+The windows (category windows, `family: "window"`) are one generator (`frontend/src/render/plates/windows.ts`):
+sashes of panes, a frame and mullions, an arch head with spokes and a hub, a round outline, a perspective homography,
+diamond lattices with inner squares, and slats; each reference window is a preset of it (protocol §16 lists the
+params and presets).
+
+| id | name | category | source | design |
+| --- | --- | --- | --- | --- |
+| `plate-grid-window` | 6-pane grid window | windows | amaran-as-gb-m-set1.png, MO10 | two sashes side by side with a grid of panes |
+| `plate-arched-window` | arched window | windows | amaran-as-gb-m-set1.png, MO11 | a tall round-headed window with a fan light |
+| `plate-skewed-window` | skewed window | windows | amaran-as-gb-m-set1.png, MO09 | a window seen at an angle, panes in perspective |
+| `plate-palace-window` | palace window | windows | set-b-17-paper-plates.png, Palace Window (88) | an arched window: a head split by two spokes over a grid of panes |
+| `plate-setting-sun` | setting sun | windows | set-b-17-paper-plates.png, Setting sun (75) | a low window in perspective rising to the right, like light from a setting sun |
+| `plate-slanted-window` | slanted window | windows | set-4-windows-closeup.png, skewed grid window | a window cast at a slant, wide at the top |
+| `plate-tall-grid-window` | tall grid window | windows | set-4-windows-closeup.png, 4×6 grid window (the photo shows 5 × 5 panes) | a tall window of five by five panes |
+| `plate-diamond-window` | diamond lattice window | windows | set-4-windows-closeup.png, diamond-lattice triple window | three sashes of leaded diamond panes |
+| `plate-window-grid-iii` | window grid III | windows | set-b-17-paper-plates.png, Window grid III (56) | a round lattice of diamonds with framed inner squares |
+| `plate-blinds` | blinds | windows | set-b-17-paper-plates.png, Blinds (9) | horizontal blind slats held by two ladder tapes |
+| `plate-slat-blinds` | slat blinds | windows | set-4-windows-closeup.png, horizontal slat blinds | wide horizontal slats with thin bars between |
+| `plate-fine-vertical-lines` | fine vertical lines | windows | set-4-windows-closeup.png, fine vertical lines | a field of very fine vertical lines |
+| `plate-fine-horizontal-lines` | fine horizontal lines | windows | set-4-windows-closeup.png, fine horizontal lines | a field of very fine horizontal lines |
+| `plate-louvre` | louvre | windows | amaran-as-gb-m-set1.png, MO06 | wide horizontal slats in a round field |
+| `plate-scattered-sticks` | scattered sticks | nature | amaran-as-gb-m-set1.png, MO13; also set-a-six-plates.png, scattered sticks | short sticks scattered every way, some forked |
+| `plate-water-ripples` | water ripples | nature | amaran-as-gb-m-set2.png, MO15 | rows of thin wavy slivers, like light off water |
+| `plate-flames` | flames | nature | amaran-as-gb-m-set2.png, MO19 | licking flame tongues over a big fire |
+| `plate-bare-branches` | bare branches | nature | amaran-as-gb-m-set2.png, MO21 | trunks and twigs of a bare tree against the light |
+| `plate-fern-leaves` | fern leaves | nature | amaran-as-gb-m-set2.png, MO22 | fronds of long narrow leaflets hanging from the top |
+| `plate-foliage-breakup` | foliage breakup | nature | amaran-as-gb-m-set2.png, MO23 | a dense breakup of small leafy shards |
+| `plate-bonfire` | bonfire | nature | set-a-six-plates.png, flames | a wide fire of slender wavy flame tongues |
+| `plate-leaf-breakup` | leaf breakup | nature | set-a-six-plates.png, foliage breakup | big ragged patches of light, like sun through a canopy |
+| `plate-breakup` | breakup | nature | set-2-closeup.png, breakup blobs | small irregular blobs packed in a disc |
+| `plate-cracked-branches` | cracked branches | nature | set-2-closeup.png, cracked branches | jagged cracks branching out from a dense centre |
+| `plate-vine-leaves` | vine leaves | nature | set-2-closeup.png, vine leaves | short vine sprigs with small paired leaves |
+| `plate-tree-with-leaves` | tree with leaves | nature | set-3-closeup.png, tree with leaves | a branching tree with small oval leaves all round |
+| `plate-jungle` | jungle | nature | set-b-17-paper-plates.png, Jungle (10) | ragged palm fronds in a Y with loose slivers |
+| `plate-rain-lines` | rain lines | sky | amaran-as-gb-m-set1.png, MO07 | thin vertical streaks of many lengths |
+| `plate-snowflakes` | snowflakes | sky | amaran-as-gb-m-set2.png, MO16 | ten crisp snowflakes of three sizes |
+| `plate-lightning` | lightning | sky | amaran-as-gb-m-set2.png, MO17 | two forked lightning bolts |
+| `plate-starfield` | starfield | sky | amaran-as-gb-m-set2.png, MO18 | stars in loose clusters, sparkles and two little nebulae |
+| `plate-firework-burst` | firework burst | sky | amaran-as-gb-m-set2.png, MO20 | fine trails bursting from a point and drooping |
+| `plate-moon-and-stars` | moon and stars | sky | set-a-six-plates.png, moon and stars | a crescent moon among small stars |
+| `plate-eight-point-stars` | eight point stars | sky | set-a-six-plates.png, 8-point stars | a cluster of eight armed asterisk stars |
+| `plate-stardust` | stardust | sky | set-3-closeup.png, star and dot field | a dense cloud of dots and four point sparkles |
+| `plate-stars` | stars | sky | set-3-closeup.png, stars | five point stars of many sizes and two small crescents |
+| `plate-snowflake-field` | snowflake field | sky | set-b-17-paper-plates.png, Snowflake (42) | a loose cluster of small snowflakes |
+| `plate-big-snowflake` | big snowflake | sky | set-b-17-paper-plates.png, Big snowflake (110) | one big six-arm snowflake with chevron barbs |
+| `plate-crossed-lines` | crossed lines | patterns | amaran-as-gb-m-set1.png, MO12 | an open field crossed by thin wires |
+| `plate-pixel-cloud` | pixel cloud | patterns | amaran-as-gb-m-set1.png, MO14 | a cloud of square pixels |
+| `plate-rings` | rings | patterns | amaran-as-gb-m-set2.png, MO24 | three crescent rings woven over and under |
+| `plate-rainbow-arch` | rainbow arch | patterns | set-2-closeup.png, rainbow arch | five nested arch bands like a rainbow |
+| `plate-hearts` | hearts | patterns | set-2-closeup.png, hearts | a cluster of hearts of many sizes |
+| `plate-swirl` | swirl | patterns | set-3-closeup.png, swirl blades | a pinwheel of striped sectors, like a ball of yarn |
+| `plate-bubbles` | bubbles | patterns | set-b-17-paper-plates.png, Bubble (11) | round bubbles of many sizes packed in a disc |
+| `plate-squiggles` | squiggles | patterns | set-b-17-paper-plates.png, Dream (8) | worm-like squiggles packed in a disc |
+| `plate-dots` | dots | patterns | set-b-17-paper-plates.png, Dots (7) | a five by five grid of round holes |
+| `plate-maze` | maze | patterns | set-b-17-paper-plates.png, Wan (26) | a tall panel of meander keys and coin lattice |
+| `plate-sunburst` | sunburst | beams | amaran-as-gb-m-set1.png, MO05; also set-a-six-plates.png, sunburst and set-b-17-paper-plates.png, Radiant light (80) | thin rays round an empty centre, long and short in turn |
+| `plate-fan-rays` | fan rays | beams | amaran-as-gb-m-set1.png, MO08 | wedge rays fanning up from below |
+| `plate-radial-burst` | radial burst | beams | set-2-closeup.png, radial burst | tapered wedge rays on a ring round a dark centre |
+| `plate-starburst-cross` | starburst cross | beams | set-3-closeup.png, starburst cross | a long thin cross with a burst of spikes where the lines meet |
+| `plate-slit` | slit | beams | set-3-closeup.png, single line slit; also set-b-17-paper-plates.png, Gap (2) | one straight slit of light across the field |
+| `plate-circle` | circle | beams | set-b-17-paper-plates.png, Circle (3) | one round hole in the middle |
+| `plate-radial` | radial | beams | set-b-17-paper-plates.png, Radial (14) | fine lines converging on a small centre |
 
 ## Sources
 

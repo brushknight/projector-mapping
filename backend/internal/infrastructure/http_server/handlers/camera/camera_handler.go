@@ -9,6 +9,7 @@ import (
 	"projmap/internal/application/app_errors"
 	camerasvc "projmap/internal/application/services/camera"
 	showsvc "projmap/internal/application/services/show"
+	"projmap/internal/domain/camera"
 	assetshttp "projmap/internal/infrastructure/http_server/handlers/assets"
 	"projmap/internal/infrastructure/http_server/handlers/httpx"
 	"projmap/internal/infrastructure/http_server/middleware"
@@ -26,6 +27,9 @@ func (h *Handler) RegisterRoutes(api *echo.Group) {
 	api.POST("/camera/stills", h.still, middleware.Control)
 	api.GET("/camera/status", h.status)
 	api.GET("/camera/preview.jpg", h.preview)
+	api.GET("/camera/preflight", h.preflight)
+	api.POST("/calibrations/aim", h.aim, middleware.Control)
+	api.POST("/calibrations/lightcheck", h.lightCheck, middleware.Control)
 	api.POST("/calibrations", h.start, middleware.Control)
 	api.GET("/calibrations/:id", h.get)
 	api.GET("/calibrations/:id/candidates", h.candidates)
@@ -56,9 +60,37 @@ func (h *Handler) preview(c echo.Context) error {
 	return c.Blob(http.StatusOK, "image/jpeg", b)
 }
 
+func (h *Handler) preflight(c echo.Context) error {
+	ctx := c.Request().Context()
+	return c.JSON(http.StatusOK, h.Calibrations.Preflight(ctx, h.Show.Get(ctx).ActiveSetupID))
+}
+
+func (h *Handler) aim(c echo.Context) error {
+	var in struct {
+		On        bool         `json:"on"`
+		CameraROI *camera.Rect `json:"cameraRoi"`
+	}
+	if err := httpx.Bind(c, &in); err != nil {
+		return err
+	}
+	if err := h.Calibrations.Aim(c.Request().Context(), in.On, in.CameraROI); err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, map[string]bool{"on": in.On})
+}
+
+func (h *Handler) lightCheck(c echo.Context) error {
+	lc, err := h.Calibrations.LightCheck(c.Request().Context())
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, lc)
+}
+
 func (h *Handler) start(c echo.Context) error {
 	var in struct {
 		SetupID string `json:"setupId"`
+		camera.ROI
 	}
 	if err := httpx.Bind(c, &in); err != nil {
 		return err
@@ -66,7 +98,7 @@ func (h *Handler) start(c echo.Context) error {
 	if in.SetupID == "" {
 		in.SetupID = h.Show.Get(c.Request().Context()).ActiveSetupID
 	}
-	cal, err := h.Calibrations.Start(c.Request().Context(), in.SetupID)
+	cal, err := h.Calibrations.StartROI(c.Request().Context(), in.SetupID, in.ROI)
 	if err != nil {
 		return err
 	}

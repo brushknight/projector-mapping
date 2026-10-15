@@ -556,10 +556,13 @@ public struct Scene: Codable, Sendable, Hashable, Identifiable {
     public var timeline: Timeline
     /// The soundboard (protocol §14); absent decodes as no pads.
     public var sounds: SceneSounds
+    /// (§16) The document format the server wrote (6 since catalog 6); nil for older documents. Round-trips untouched.
+    public var format: Int?
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = c.v(.id, "")
+        format = c.opt(.format)
         setupId = c.v(.setupId, "")
         name = c.v(.name, "")
         version = c.v(.version, 0)
@@ -746,6 +749,8 @@ public struct Preset: Codable, Sendable, Hashable, Identifiable {
     public var backdrop: Backdrop
     public var thumbAsset: String?
     public var createdAt: String?
+    /// (§16) The document format the server wrote (6 since catalog 6); nil for older presets. Round-trips untouched.
+    public var format: Int?
 
     public init(id: String, name: String, mode: String, backdrop: Backdrop = .init(), thumbAsset: String? = nil, createdAt: String? = nil) {
         self.id = id; self.name = name; self.mode = mode; self.backdrop = backdrop; self.thumbAsset = thumbAsset; self.createdAt = createdAt
@@ -760,6 +765,7 @@ public struct Preset: Codable, Sendable, Hashable, Identifiable {
         backdrop = mode == "static" || mode == "live" ? b.upgradedLight(stack: mode) : b
         thumbAsset = c.opt(.thumbAsset)
         createdAt = c.opt(.createdAt)
+        format = c.opt(.format)
     }
 }
 
@@ -973,12 +979,29 @@ public struct CalibrationProgress: Codable, Sendable, Hashable {
 /// `objects`, normalised to 0…1 of the camera frame.
 public struct CalibrationResult: Codable, Sendable, Hashable {
     public struct Quality: Codable, Sendable, Hashable {
+        public struct Region: Codable, Sendable, Hashable {
+            public var mapped: Double
+            public var sharp: Double
+            public var errorPx: Double
+            public init(from decoder: Decoder) throws {
+                let c = try decoder.container(keyedBy: CodingKeys.self)
+                mapped = c.v(.mapped, 0); sharp = c.v(.sharp, 0); errorPx = c.v(.errorPx, 0)
+            }
+        }
         public var coverage: Double
         public var errorPx: Double
+        /// Share of mapped pixels in focus.
+        public var sharp: Double
+        /// Quality inside the region of interest (the whole lit view when none was marked).
+        public var roi: Region?
+        public var contrast: Contrast?
         public init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             coverage = c.v(.coverage, 0)
             errorPx = c.v(.errorPx, 0)
+            sharp = c.v(.sharp, 0)
+            roi = c.opt(.roi)
+            contrast = c.opt(.contrast)
         }
     }
 
@@ -1032,9 +1055,14 @@ public struct CalibrationResult: Codable, Sendable, Hashable {
     public var cameraWidth: Double
     public var cameraHeight: Double
     public var objects: [Candidate]
+    /// What the camera saw of the projector (|white − black|, PNG asset), also on failures.
+    public var diffAsset: String?
+    public var settleMs: Int
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
+        diffAsset = c.opt(.diffAsset)
+        settleMs = c.v(.settleMs, 0)
         id = c.v(.id, "")
         status = c.v(.status, "")
         message = c.v(.message, "")
@@ -1065,4 +1093,103 @@ public struct VersionResult: Codable, Sendable, Hashable {
 
 public struct ShaResult: Codable, Sendable, Hashable {
     public var sha: String
+}
+
+/// `GET /camera/preflight`: what auto map needs before it can start (protocol §18).
+public struct Preflight: Codable, Sendable, Hashable {
+    public struct Check: Codable, Sendable, Hashable {
+        public var ok: Bool
+        public var detail: String
+        public var fix: String
+        public var warning: String
+        public var connected: Bool
+        public var streaming: Bool
+        public var width: Int
+        public var height: Int
+        public var fps: Double
+
+        public init(ok: Bool, detail: String, fix: String = "", warning: String = "") {
+            self.ok = ok; self.detail = detail; self.fix = fix; self.warning = warning
+            connected = ok; streaming = ok; width = 0; height = 0; fps = 0
+        }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            ok = c.v(.ok, false)
+            detail = c.v(.detail, "")
+            fix = c.v(.fix, "")
+            warning = c.v(.warning, "")
+            connected = c.v(.connected, false)
+            streaming = c.v(.streaming, false)
+            width = c.v(.width, 0)
+            height = c.v(.height, 0)
+            fps = c.v(.fps, 0)
+        }
+    }
+
+    public var server: Check
+    public var output: Check
+    public var camera: Check
+    public var light: LightCheck?
+    public var ready: Bool
+    public var reason: String
+    public var aiming: Bool
+    public var running: String
+
+    public init(server: Check, output: Check, camera: Check, ready: Bool, reason: String = "", aiming: Bool = false, running: String = "") {
+        self.server = server; self.output = output; self.camera = camera; self.ready = ready; self.reason = reason
+        self.aiming = aiming; self.running = running
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        server = c.v(.server, Check(ok: true, detail: ""))
+        output = c.v(.output, Check(ok: false, detail: ""))
+        camera = c.v(.camera, Check(ok: false, detail: ""))
+        ready = c.v(.ready, false)
+        reason = c.v(.reason, "")
+        aiming = c.v(.aiming, false)
+        running = c.v(.running, "")
+        light = c.opt(.light)
+    }
+}
+
+/// How strongly the projector shows in the camera (white − black, 0–255 levels).
+public struct Contrast: Codable, Sendable, Hashable {
+    public var lit: Double
+    public var median: Double
+    public var peak: Double
+    public var brighterPct: Double
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        lit = c.v(.lit, 0); median = c.v(.median, 0); peak = c.v(.peak, 0); brighterPct = c.v(.brighterPct, 0)
+    }
+}
+
+/// `POST /calibrations/lightcheck`: white, black, white on the projector, compared on the phone's preview.
+public struct LightCheck: Codable, Sendable, Hashable {
+    /// strong | weak | none
+    public var level: String
+    public var message: String
+    public var contrast: Contrast?
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        level = c.v(.level, "none"); message = c.v(.message, ""); contrast = c.opt(.contrast)
+    }
+}
+
+/// `GET /agents/available`: one agent CLI on the server's Mac.
+public struct AgentAvailability: Codable, Sendable, Hashable {
+    public var agent: String
+    public var available: Bool
+    public var reason: String
+
+    public init(agent: String, available: Bool, reason: String = "") { self.agent = agent; self.available = available; self.reason = reason }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        agent = c.v(.agent, "")
+        available = c.v(.available, false)
+        reason = c.v(.reason, "")
+    }
 }

@@ -11,7 +11,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "thumbs": "node scripts/render-thumbs.mjs"
+    "thumbs": "node scripts/render-thumbs.mjs",
+    "catalog": "vite-node scripts/sync-catalog.ts"
   },
   "dependencies": {
     "@tanstack/react-router": "^1.120.0",

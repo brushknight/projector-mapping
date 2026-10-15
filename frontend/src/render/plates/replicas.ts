@@ -1,6 +1,7 @@
 /**
- * The 20 replica plates: our own vector versions of a common M-size metal gobo set (inspired by the amaran AS-GB-M
- * SET1 and SET2 plates, MO05 to MO24; `source` says which). Plate space: the unit circle, y down (see geom.ts).
+ * Replica plates: our own vector versions of the Amaran AS-GB-M SET1 and SET2 plates (amaran-as-gb-m-set1.png and
+ * amaran-as-gb-m-set2.png in design/refs/gobo-plates, MO05 to MO24; `source` says which). The window plates MO09 to
+ * MO11 are parametric window presets (windows.ts). Plate space: the unit circle, y down (see geom.ts).
  */
 import {
   blob, cells, circle, clearOfEdge, cut, cutLine, dist, jag, leaf, line, lerp, metal, metalLine, noise2, open, poly, polar,
@@ -70,62 +71,6 @@ function fanRays(): Shape[] {
     const a0 = -Math.PI / 2 - span + i * step + (step * bar) / 2
     const a1 = a0 + step * (1 - bar)
     out.push(cut(poly([polar(0.35, a0, vp), polar(4, a0, vp), polar(4, a1, vp), polar(0.35, a1, vp)])))
-  }
-  return out
-}
-
-/** Cuts a window opening and draws its glazing bars in metal. */
-function bars(pairs: Array<[Pt, Pt]>, w: number): Shape[] {
-  return pairs.map(([a, b]) => metalLine(line([a, b]), w, 'butt'))
-}
-
-/** MO09: a window seen at an angle, 4 × 6 panes in perspective. */
-function skewedWindow(): Shape[] {
-  const TL: Pt = [-0.55, -0.5], TR: Pt = [0.47, -0.33], BR: Pt = [0.47, 0.62], BL: Pt = [-0.55, 0.12]
-  const P = (s: number, t: number) => lerp(lerp(TL, TR, s), lerp(BL, BR, s), t)
-  // columns widen to the right, as in perspective
-  const cs = [0, 0.21, 0.45, 0.715, 1]
-  const out: Shape[] = [cut(poly([TL, TR, BR, BL]))]
-  const pairs: Array<[Pt, Pt]> = []
-  for (const s of cs.slice(1, -1)) pairs.push([P(s, -0.02), P(s, 1.02)])
-  for (let j = 1; j < 6; j++) pairs.push([P(-0.02, j / 6), P(1.02, j / 6)])
-  return [...out, ...bars(pairs, 0.026)]
-}
-
-/** MO10: two sashes side by side, each 2 × 4 panes. */
-function gridWindow(): Shape[] {
-  const out: Shape[] = []
-  const y0 = -0.44, y1 = 0.42
-  for (const [x0, x1] of [[-0.6, -0.02], [0.04, 0.62]] as const) {
-    out.push(cut(poly([[x0, y0], [x1, y0], [x1, y1], [x0, y1]])))
-    const xm = (x0 + x1) / 2
-    out.push(...bars([[[xm, y0 - 0.01], [xm, y1 + 0.01]]], 0.03))
-    for (let j = 1; j < 4; j++) {
-      const y = y0 + ((y1 - y0) * j) / 4
-      out.push(...bars([[[x0 - 0.01, y], [x1 + 0.01, y]]], 0.03))
-    }
-  }
-  return out
-}
-
-/** MO11: a tall round-headed window, 3 × 4 panes and a fan light. */
-function archedWindow(): Shape[] {
-  const w = 0.35, spring = -0.5, bottom = 0.6, m = 0.03
-  const head: Pt[] = []
-  for (let i = 0; i <= 40; i++) head.push(polar(w, Math.PI + (i / 40) * Math.PI, [0, spring]))
-  const out: Shape[] = [cut(poly([[-w, bottom], ...head, [w, bottom]]))]
-  const pairs: Array<[Pt, Pt]> = []
-  for (const x of [-w / 3, w / 3]) pairs.push([[x, spring], [x, bottom + 0.01]])
-  for (let j = 0; j < 4; j++) pairs.push([[-w - 0.01, spring + ((bottom - spring) * j) / 4], [w + 0.01, spring + ((bottom - spring) * j) / 4]])
-  out.push(...bars(pairs, m))
-  // the fan light: a small half wheel and four spokes
-  const inner = 0.13
-  const arc: Pt[] = []
-  for (let i = 0; i <= 24; i++) arc.push(polar(inner, Math.PI + (i / 24) * Math.PI, [0, spring]))
-  out.push(metalLine(line(arc), m, 'butt'))
-  for (let k = 1; k <= 4; k++) {
-    const a = Math.PI + (k / 5) * Math.PI
-    out.push(metalLine(line([polar(inner, a, [0, spring]), polar(w + 0.02, a, [0, spring])]), m * 0.85, 'butt'))
   }
   return out
 }
@@ -526,25 +471,25 @@ function rings(): Shape[] {
   return out
 }
 
+const S1 = 'amaran-as-gb-m-set1.png', S2 = 'amaran-as-gb-m-set2.png'
+
+/** The 17 replicas that are not windows (the three window replicas, MO09 to MO11, are presets in windows.ts). */
 export const REPLICAS: PlateDef[] = [
-  { id: 'plate-sunburst', name: 'sunburst', description: 'thin rays round an empty centre, long and short in turn', source: 'inspired by Amaran AS-GB-M MO05', seed: 5, draw: sunburst },
-  { id: 'plate-louvre', name: 'louvre', description: 'wide horizontal slats in a round field', source: 'inspired by Amaran AS-GB-M MO06', field: 0.74, draw: louvre },
-  { id: 'plate-rain-lines', name: 'rain lines', description: 'thin vertical streaks of many lengths', source: 'inspired by Amaran AS-GB-M MO07', seed: 7, draw: rainLines },
-  { id: 'plate-fan-rays', name: 'fan rays', description: 'wedge rays fanning up from below', source: 'inspired by Amaran AS-GB-M MO08', field: 0.82, draw: fanRays },
-  { id: 'plate-skewed-window', name: 'skewed window', description: 'a window seen at an angle, panes in perspective', source: 'inspired by Amaran AS-GB-M MO09', draw: skewedWindow },
-  { id: 'plate-grid-window', name: '6-pane grid window', description: 'two sashes side by side with a grid of panes', source: 'inspired by Amaran AS-GB-M MO10', draw: gridWindow },
-  { id: 'plate-arched-window', name: 'arched window', description: 'a tall round-headed window with a fan light', source: 'inspired by Amaran AS-GB-M MO11', field: 0.9, draw: archedWindow },
-  { id: 'plate-crossed-lines', name: 'crossed lines', description: 'an open field crossed by thin wires', source: 'inspired by Amaran AS-GB-M MO12', field: 0.78, seed: 12, draw: crossedLines },
-  { id: 'plate-scattered-sticks', name: 'scattered sticks', description: 'short sticks scattered every way, some forked', source: 'inspired by Amaran AS-GB-M MO13', seed: 13, draw: scatteredSticks },
-  { id: 'plate-pixel-cloud', name: 'pixel cloud', description: 'a cloud of square pixels', source: 'inspired by Amaran AS-GB-M MO14', seed: 14, draw: pixelCloud },
-  { id: 'plate-water-ripples', name: 'water ripples', description: 'rows of thin wavy slivers, like light off water', source: 'inspired by Amaran AS-GB-M MO15', field: 0.8, seed: 15, draw: waterRipples },
-  { id: 'plate-snowflakes', name: 'snowflakes', description: 'ten crisp snowflakes of three sizes', source: 'inspired by Amaran AS-GB-M MO16', draw: snowflakes },
-  { id: 'plate-lightning', name: 'lightning', description: 'two forked lightning bolts', source: 'inspired by Amaran AS-GB-M MO17', seed: 17, draw: lightning },
-  { id: 'plate-starfield', name: 'starfield', description: 'stars in loose clusters, sparkles and two little nebulae', source: 'inspired by Amaran AS-GB-M MO18', seed: 18, draw: starfield },
-  { id: 'plate-flames', name: 'flames', description: 'licking flame tongues over a big fire', source: 'inspired by Amaran AS-GB-M MO19', seed: 19, draw: flames },
-  { id: 'plate-firework-burst', name: 'firework burst', description: 'fine trails bursting from a point and drooping', source: 'inspired by Amaran AS-GB-M MO20', seed: 20, draw: fireworkBurst },
-  { id: 'plate-bare-branches', name: 'bare branches', description: 'trunks and twigs of a bare tree against the light', source: 'inspired by Amaran AS-GB-M MO21', field: 0.82, seed: 21, draw: bareBranches },
-  { id: 'plate-fern-leaves', name: 'fern leaves', description: 'fronds of long narrow leaflets hanging from the top', source: 'inspired by Amaran AS-GB-M MO22', seed: 22, draw: fernLeaves },
-  { id: 'plate-foliage-breakup', name: 'foliage breakup', description: 'a dense breakup of small leafy shards', source: 'inspired by Amaran AS-GB-M MO23', seed: 23, draw: foliageBreakup },
-  { id: 'plate-rings', name: 'rings', description: 'three crescent rings woven over and under', source: 'inspired by Amaran AS-GB-M MO24', draw: rings },
+  { id: 'plate-sunburst', name: 'sunburst', category: 'beams', description: 'thin rays round an empty centre, long and short in turn', source: `${S1}, MO05; also set-a-six-plates.png, sunburst and set-b-17-paper-plates.png, Radiant light (80)`, seed: 5, draw: sunburst },
+  { id: 'plate-louvre', name: 'louvre', category: 'windows', description: 'wide horizontal slats in a round field', source: `${S1}, MO06`, field: 0.74, draw: louvre },
+  { id: 'plate-rain-lines', name: 'rain lines', category: 'sky', description: 'thin vertical streaks of many lengths', source: `${S1}, MO07`, seed: 7, draw: rainLines },
+  { id: 'plate-fan-rays', name: 'fan rays', category: 'beams', description: 'wedge rays fanning up from below', source: `${S1}, MO08`, field: 0.82, draw: fanRays },
+  { id: 'plate-crossed-lines', name: 'crossed lines', category: 'patterns', description: 'an open field crossed by thin wires', source: `${S1}, MO12`, field: 0.78, seed: 12, draw: crossedLines },
+  { id: 'plate-scattered-sticks', name: 'scattered sticks', category: 'nature', description: 'short sticks scattered every way, some forked', source: `${S1}, MO13; also set-a-six-plates.png, scattered sticks`, seed: 13, draw: scatteredSticks },
+  { id: 'plate-pixel-cloud', name: 'pixel cloud', category: 'patterns', description: 'a cloud of square pixels', source: `${S1}, MO14`, seed: 14, draw: pixelCloud },
+  { id: 'plate-water-ripples', name: 'water ripples', category: 'nature', description: 'rows of thin wavy slivers, like light off water', source: `${S2}, MO15`, field: 0.8, seed: 15, draw: waterRipples },
+  { id: 'plate-snowflakes', name: 'snowflakes', category: 'sky', description: 'ten crisp snowflakes of three sizes', source: `${S2}, MO16`, draw: snowflakes },
+  { id: 'plate-lightning', name: 'lightning', category: 'sky', description: 'two forked lightning bolts', source: `${S2}, MO17`, seed: 17, draw: lightning },
+  { id: 'plate-starfield', name: 'starfield', category: 'sky', description: 'stars in loose clusters, sparkles and two little nebulae', source: `${S2}, MO18`, seed: 18, draw: starfield },
+  { id: 'plate-flames', name: 'flames', category: 'nature', description: 'licking flame tongues over a big fire', source: `${S2}, MO19`, seed: 19, draw: flames },
+  { id: 'plate-firework-burst', name: 'firework burst', category: 'sky', description: 'fine trails bursting from a point and drooping', source: `${S2}, MO20`, seed: 20, draw: fireworkBurst },
+  { id: 'plate-bare-branches', name: 'bare branches', category: 'nature', description: 'trunks and twigs of a bare tree against the light', source: `${S2}, MO21`, field: 0.82, seed: 21, draw: bareBranches },
+  { id: 'plate-fern-leaves', name: 'fern leaves', category: 'nature', description: 'fronds of long narrow leaflets hanging from the top', source: `${S2}, MO22`, seed: 22, draw: fernLeaves },
+  { id: 'plate-foliage-breakup', name: 'foliage breakup', category: 'nature', description: 'a dense breakup of small leafy shards', source: `${S2}, MO23`, seed: 23, draw: foliageBreakup },
+  { id: 'plate-rings', name: 'rings', category: 'patterns', description: 'three crescent rings woven over and under', source: `${S2}, MO24`, draw: rings },
 ]

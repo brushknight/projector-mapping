@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { activeYouTube, Renderer } from '../../../../render'
+import { youtubeVolume } from '../../../../render/youtube'
 import { useRaf } from '../../../../shared/lib/useRaf'
 import type { Hub } from '../../../../shared/lib/ws'
 import { useCatalog } from '../../../catalog/useCatalog'
@@ -9,6 +10,7 @@ import { activeSolo, ambientClock, playheadNow, useBlackout } from '../../../sho
 import { activeTestPattern, sceneSize } from '../../../setup/types'
 import { YouTubeBackdrop } from '../../../video/youtube'
 import { useWallDocs } from '../../wall'
+import type { Scene } from '../../../scene/types'
 import s from './styles.module.css'
 
 export interface LivePreviewProps {
@@ -21,8 +23,16 @@ export interface LivePreviewProps {
   children?: ReactNode
   className?: string
   'data-testid'?: string
-  /** (§14) volume × master for video layers' own sound; absent or 0 keeps every video muted */
+  /**
+   * (§14, §16) volume × master for video layers' own sound (files and YouTube); absent or 0 keeps every video muted.
+   * Pass it (even 0) only on a page that may play sound: the YouTube player then loads with the IFrame Player API.
+   */
   videoVolume?: number
+  /**
+   * (§16) draws this instead of the wall's scene (the Show's live gallery "try": the scene with a trial layer), or
+   * null to follow the wall. The wall itself does not change.
+   */
+  sceneOverride?: ((scene: Scene) => Scene) | null
 }
 
 /**
@@ -36,8 +46,9 @@ export interface LivePreviewProps {
  * Test hooks: `data-testid` on the wrapper (default "live-preview"), the canvas is `[data-testid=live-preview-canvas]`,
  * the player `[data-testid=youtube-backdrop]`.
  */
-export function LivePreview({ hub, maxWidth = 1280, fps = 30, children, className, 'data-testid': testId = 'live-preview', videoVolume = 0 }: LivePreviewProps) {
-  const { show, scene, setup, previewing } = useWallDocs(hub)
+export function LivePreview({ hub, maxWidth = 1280, fps = 30, children, className, 'data-testid': testId = 'live-preview', videoVolume, sceneOverride = null }: LivePreviewProps) {
+  const { show, scene: wallScene, setup, previewing } = useWallDocs(hub)
+  const scene = wallScene && sceneOverride && !previewing ? sceneOverride(wallScene) : wallScene
   const catalog = useCatalog(hub.welcome?.catalogVersion)
   const [effects, setEffects] = useState<EffectDef[]>([])
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -79,14 +90,18 @@ export function LivePreview({ hub, maxWidth = 1280, fps = 30, children, classNam
       testPattern: activeTestPattern(setup, hub.serverNow()),
       mode: previewing ? 'objects' : null,
       solo: activeSolo(show, hub.serverNow()),
-      videoVolume,
+      videoVolume: videoVolume ?? 0,
     })
+    // test hooks (§16 latency test): the scene this frame drew, and how many frames drew so far
+    const hook = c as HTMLCanvasElement & { __scene?: Scene | null; __frames?: number }
+    hook.__scene = scene
+    hook.__frames = (hook.__frames ?? 0) + 1
   }, fps)
 
   const yt = activeYouTube(scene, { mode: previewing ? 'objects' : null, solo: activeSolo(show, hub.serverNow()) })
   return (
     <div className={`${s.view} ${className ?? ''}`} style={{ aspectRatio: `${size.width} / ${size.height}` }} data-testid={testId}>
-      <YouTubeBackdrop active={yt} scene={size} />
+      <YouTubeBackdrop active={yt} scene={size} volume={videoVolume === undefined ? undefined : youtubeVolume(yt, videoVolume)} />
       <canvas ref={canvasRef} className={s.canvas} data-testid="live-preview-canvas" />
       {children}
     </div>

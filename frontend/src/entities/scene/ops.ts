@@ -238,11 +238,24 @@ export function pickSingle(scene: Scene, mode: BackdropMode, layer: Layer, keep:
   return ops
 }
 
-/** Applies a preset: replaces its mode's stack and puts that mode on air (protocol §1 Preset). */
-export function applyPresetOps(preset: { mode: BackdropMode; backdrop: LayerStack }): PatchOp[] {
+/** The light settings a preset never changes (§16): the scene keeps its focus rings, lens, slide and light motion. */
+export const KEPT_LIGHT_KEYS = ['focus', 'backgroundFocus', 'fringe', 'vignette', 'slide', 'motion'] as const
+
+/**
+ * Applies a preset: replaces its mode's stack and puts that mode on air (protocol §1 Preset). (§16) A preset changes
+ * only what it defines: given the scene, a static or live preset keeps the scene light's focus, background focus,
+ * fringe, vignette, slide and motion, and takes the preset's intensity, colour, fx and colour layer.
+ */
+export function applyPresetOps(preset: { mode: BackdropMode; backdrop: LayerStack }, scene?: Scene | null): PatchOp[] {
   // (§15) a static or live preset carries its light and attachments too: the whole stack
   const b = preset.backdrop
-  const value: LayerStack = preset.mode === 'static' || preset.mode === 'live' ? { layers: b.layers ?? [], light: b.light ?? null, attachments: b.attachments ?? [] } : { layers: b.layers }
+  let light = b.light ?? null
+  const cur = scene?.backdrop[preset.mode]?.light
+  if (light && cur) {
+    light = { ...light }
+    for (const k of KEPT_LIGHT_KEYS) if (cur[k] !== undefined) (light as unknown as Record<string, unknown>)[k] = cur[k]
+  }
+  const value: LayerStack = preset.mode === 'static' || preset.mode === 'live' ? { layers: b.layers ?? [], light, attachments: b.attachments ?? [] } : { layers: b.layers }
   return [{ op: 'replace', path: pointer('backdrop', preset.mode), value }, ...setMode(preset.mode)]
 }
 
@@ -424,7 +437,7 @@ export function gradientLayer(id: string, name = 'sweep', color = '#ffffff'): Co
 export const SCENERY_KEEP = ['blur', 'brightness', 'warmth', 'drift'] as const
 
 /** Default params of a video layer (catalog `videoParams`, §14). */
-export const VIDEO_DEFAULTS = { blur: 0.2, brightness: 0.8, warmth: 0, drift: 0, start: 0, end: 0, audio: false, volume: 1 }
+export const VIDEO_DEFAULTS = { blur: 0.2, brightness: 0.9, warmth: 0, drift: 0, start: 0, end: 0, audio: false, volume: 1 }
 
 /** A new video backdrop layer (`asset:<sha>` or `youtube:<id>`). */
 export function videoLayer(id: string, ref: string, name: string, params: Partial<typeof VIDEO_DEFAULTS> = {}): Layer {
@@ -580,11 +593,17 @@ export function setAttachments(scene: Scene, mode: LightStack, list: Attachment[
 }
 
 /**
- * Picks one attachment: replaces the list with it, keeping the place, size and turn of the one it replaces when it is
- * the same kind of shape (so swapping windows keeps the composition).
+ * Picks one attachment: replaces the list with it. (§16) The pick keeps the place of the one it replaces (`replace`,
+ * else the first): its id (timeline tracks follow it), rotation, scale, offsets, opacity, visibility and motion; only
+ * the plate and its own params change. The light is never touched.
  */
-export function pickAttachment(scene: Scene, mode: LightStack, att: Attachment): PatchOp[] {
-  return setAttachments(scene, mode, [att])
+export function pickAttachment(scene: Scene, mode: LightStack, att: Attachment, replace?: string | null): PatchOp[] {
+  const list = scene.backdrop[mode]?.attachments ?? []
+  const old = list.find((a) => a.id === replace) ?? list[0]
+  const next: Attachment = old
+    ? { ...att, id: old.id, rotation: old.rotation, scale: old.scale, offsetX: old.offsetX, offsetY: old.offsetY, opacity: old.opacity, visible: old.visible, motion: old.motion ?? null }
+    : att
+  return setAttachments(scene, mode, [next])
 }
 
 /** Adds an attachment on top (masks multiply: more attachments block more light). */

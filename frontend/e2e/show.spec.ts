@@ -44,7 +44,7 @@ test('the editor lands on Show, which follows the scene on the wall', async ({ p
   // the fixture scene is in static mode: the static tab is open and on air
   await expect(page.getByTestId('mode-tab-static')).toHaveAttribute('aria-selected', 'true')
   await expect(page.getByTestId('mode-tab-static')).toHaveAttribute('data-on-air', 'true')
-  await expect(page.getByTestId('on-air-label')).toContainText('on air · window')
+  await expect(page.getByTestId('on-air-label')).toContainText('on air · 6-pane grid window')
   await expect(page.getByTestId('pad-pad_thunder')).toContainText('thunder')
   // /editor redirects to show too, and map still opens
   await page.goto('/editor')
@@ -143,7 +143,7 @@ test('the scene browser creates from templates, renames, duplicates, activates a
   await expect.poll(async () => (await show(request)).activeSceneId).toBe(created.id)
   const sc = await scene(request, created.id)
   expect(sc.kind).toBe('static')
-  expect(sc.backdrop.static.attachments[0].gobo).toBe('window-4')
+  expect(sc.backdrop.static.attachments[0].gobo).toBe('plate-grid-window')
   expect(sc.backdrop.static.attachments[0].motion).toMatchObject({ preset: 'sun-lr', on: false })
   await expect(list.getByTestId('scene-group-static')).toContainText(created.name)
   await expect(page.getByTestId('mode-tab-static')).toHaveAttribute('data-on-air', 'true')
@@ -220,7 +220,7 @@ test('add from YouTube checks the link, falls back to an embed and puts it on ai
     })
     .toEqual({ mode: 'scenery', layers: ['video:youtube:dQw4w9WgXcQ'] })
   // the photo controls were kept and the video ones are there
-  await expect(page.getByTestId('scenery-controls')).toContainText('play its sound')
+  await expect(page.getByTestId('scenery-controls')).toContainText('sound')
   await expect(page.getByTestId('show-live-preview').getByTestId('youtube-backdrop')).toHaveCount(1)
 })
 

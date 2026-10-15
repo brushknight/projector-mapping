@@ -6,14 +6,21 @@ import UIKit
 
 /// A sideways drag for controls that live inside a vertical ScrollView (sliders, colour strips, the frame slide).
 ///
-/// SwiftUI's `DragGesture(minimumDistance: 0)` claims a touch on touch-down, before the scroll view can decide, so a
-/// vertical swipe that starts on a slider adjusted it. This is a UIKit pan whose `gestureRecognizerShouldBegin` asks
-/// `DragIntent.shouldBegin`: it begins only on a clearly horizontal start and fails otherwise, and the page's scroll
-/// pan waits for it to fail, so vertical swipes scroll and sideways ones adjust.
+/// Root cause of controls reacting to scrolling (2026-10-15): the earlier version was a plain `UIPanGestureRecognizer`
+/// whose `gestureRecognizerShouldBegin` fell back to the finger's *velocity* while the travel was still inside the
+/// dead zone. UIKit asks that question after a few points of movement, so a vertical flick that started with a little
+/// sideways jitter (or a finger that caught a still-decelerating page) began the slider, and the page then waited for
+/// it. The decision also lived in a delegate, which SwiftUI's representable wiring does not guarantee to keep.
+///
+/// Now a `DirectionLockPan` recognizer decides by itself, once per gesture, from the travel only (`DirectionLock`):
+/// nothing inside the dead zone, the control only on a clearly sideways start, the page on anything else (ties go to
+/// the page) and on any touch that lands while the page is still moving. The enclosing scroll view's pan waits for it
+/// to fail, so a sideways drag is never stolen and a vertical one never adjusts a control. A touch that never leaves
+/// the dead zone ends as `.tap`.
 public struct HorizontalPanValue: Sendable, Equatable {
-    public enum Phase: Sendable, Equatable { case began, changed, ended, cancelled }
+    public enum Phase: Sendable, Equatable { case began, changed, ended, cancelled, tap }
     public var phase: Phase
-    /// Translation since the touch went down, in the view's points.
+    /// Translation since the lock went to the control (sideways intent), in the view's points.
     public var translation: CGSize
     /// Where the finger is, in the view's local space.
     public var location: CGPoint
@@ -22,6 +29,97 @@ public struct HorizontalPanValue: Sendable, Equatable {
 }
 
 #if canImport(UIKit)
+/// A one-finger pan that locks its direction once per touch (`DirectionLock`).
+public final class DirectionLockPan: UIGestureRecognizer {
+    public private(set) var lock = DirectionLock()
+    private var start: CGPoint = .zero
+    private(set) var current: CGPoint = .zero
+    /// The touch ended inside the dead zone (state `.ended` without a drag).
+    public private(set) var tapped = false
+
+    /// Translation since the lock went to the control.
+    public var translation: CGPoint {
+        CGPoint(x: current.x - start.x - lock.origin.0, y: current.y - start.y - lock.origin.1)
+    }
+    public var startLocation: CGPoint { start }
+
+    public override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
+        guard touches.count == 1, (event.allTouches?.count ?? 1) == 1, let t = touches.first else {
+            state = .failed
+            return
+        }
+        start = t.location(in: view)
+        current = start
+        tapped = false
+        lock.begin(pageMoving: Self.pageMoving(view))
+        if lock.decision == .page { state = .failed }
+    }
+
+    public override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {
+        guard let t = touches.first else { return }
+        current = t.location(in: view)
+        switch state {
+        case .possible:
+            switch lock.move(dx: current.x - start.x, dy: current.y - start.y) {
+            case .control: state = .began
+            case .page: state = .failed
+            case .undecided: break
+            }
+        case .began, .changed:
+            state = .changed
+        default:
+            break
+        }
+    }
+
+    public override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {
+        if let t = touches.first { current = t.location(in: view) }
+        switch state {
+        case .began, .changed: state = .ended
+        case .possible:
+            if lock.isTap {
+                tapped = true
+                state = .ended
+            } else {
+                state = .failed
+            }
+        default: state = .failed
+        }
+    }
+
+    public override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) {
+        state = state == .began || state == .changed ? .cancelled : .failed
+    }
+
+    public override func reset() {
+        super.reset()
+        lock = DirectionLock()
+        tapped = false
+    }
+
+    /// The page (any enclosing scroll view's pan) waits for this one to fail, so a sideways drag is never stolen.
+    public override func shouldBeRequiredToFail(by other: UIGestureRecognizer) -> Bool {
+        if let scroll = other.view as? UIScrollView, other === scroll.panGestureRecognizer { return true }
+        return false
+    }
+
+    /// Never waits for another recognizer, and nothing runs together with it.
+    public override func canBePrevented(by other: UIGestureRecognizer) -> Bool {
+        if let scroll = other.view as? UIScrollView, other === scroll.panGestureRecognizer { return false }
+        return super.canBePrevented(by: other)
+    }
+
+    /// Whether a scroll view above `view` is still moving (decelerating or being dragged by another touch).
+    static func pageMoving(_ view: UIView?) -> Bool {
+        var v = view?.superview
+        while let s = v {
+            if let scroll = s as? UIScrollView, scroll.isDecelerating || scroll.isDragging { return true }
+            v = s.superview
+        }
+        return false
+    }
+}
+
 public struct HorizontalPan: UIGestureRecognizerRepresentable {
     var enabled: Bool
     var action: (HorizontalPanValue) -> Void
@@ -31,49 +129,30 @@ public struct HorizontalPan: UIGestureRecognizerRepresentable {
         self.action = action
     }
 
-    public func makeCoordinator(converter: CoordinateSpaceConverter) -> Coordinator { Coordinator() }
-
-    public func makeUIGestureRecognizer(context: Context) -> UIPanGestureRecognizer {
-        let pan = UIPanGestureRecognizer()
-        pan.maximumNumberOfTouches = 1
-        pan.delegate = context.coordinator
+    public func makeUIGestureRecognizer(context: Context) -> DirectionLockPan {
+        let pan = DirectionLockPan()
         pan.isEnabled = enabled
+        pan.cancelsTouchesInView = true
         return pan
     }
 
-    public func updateUIGestureRecognizer(_ recognizer: UIPanGestureRecognizer, context: Context) {
+    public func updateUIGestureRecognizer(_ recognizer: DirectionLockPan, context: Context) {
         recognizer.isEnabled = enabled
     }
 
-    public func handleUIGestureRecognizerAction(_ recognizer: UIPanGestureRecognizer, context: Context) {
-        let t = recognizer.translation(in: recognizer.view)
+    public func handleUIGestureRecognizerAction(_ recognizer: DirectionLockPan, context: Context) {
+        let t = recognizer.translation
         let loc = context.converter.localLocation
-        let start = CGPoint(x: loc.x - t.x, y: loc.y - t.y)
         let phase: HorizontalPanValue.Phase
         switch recognizer.state {
         case .began: phase = .began
         case .changed: phase = .changed
-        case .ended: phase = .ended
+        case .ended: phase = recognizer.tapped ? .tap : .ended
         case .cancelled, .failed: phase = .cancelled
         default: return
         }
+        let start = CGPoint(x: loc.x - (recognizer.current.x - recognizer.startLocation.x), y: loc.y - (recognizer.current.y - recognizer.startLocation.y))
         action(HorizontalPanValue(phase: phase, translation: CGSize(width: t.x, height: t.y), location: loc, startLocation: start))
-    }
-
-    public final class Coordinator: NSObject, UIGestureRecognizerDelegate {
-        public func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
-            guard let pan = g as? UIPanGestureRecognizer else { return true }
-            let t = pan.translation(in: pan.view), v = pan.velocity(in: pan.view)
-            return DragIntent.shouldBegin(dx: t.x, dy: t.y, vx: v.x, vy: v.y)
-        }
-
-        /// The page's scroll pan waits for this one to fail (a vertical start), so it never steals a sideways drag.
-        public func gestureRecognizer(_ g: UIGestureRecognizer, shouldBeRequiredToFailBy other: UIGestureRecognizer) -> Bool {
-            if let scroll = other.view as? UIScrollView, other === scroll.panGestureRecognizer { return true }
-            return false
-        }
-
-        public func gestureRecognizer(_ g: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { false }
     }
 }
 #endif

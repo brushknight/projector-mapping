@@ -18,8 +18,12 @@ struct LightCard: View {
             Card {
                 CapRow("light", padding: 2) { CapText(light.colorLayer == nil ? Fmt.kelvin(light.color.kelvin) : "colour layer") }
                 FillSlider("intensity", icon: .sun, value: light.intensity, enabled: live) { model.lightParam(mode, ["intensity"], .number(round2($0))) }
-                FillSlider("focus", icon: .softness, value: light.focus, enabled: live, format: Fmt.focus) {
+                FillSlider(model.catalog.stackLight.params["focus"]?.label ?? "attachment focus", icon: .softness, value: light.focus, enabled: live, format: Fmt.focus) {
                     model.lightParam(mode, ["focus"], .number(round2($0)))
+                }
+                // (§16) a second ring: the background under the attachments, or the live layers
+                FillSlider(mode == "live" ? "live layer focus" : "background focus", icon: .softness, value: light.backgroundFocus, enabled: live, format: Fmt.focus) {
+                    model.lightParam(mode, ["backgroundFocus"], .number(round2($0)))
                 }
             }
         } else {
@@ -177,7 +181,7 @@ struct LightColorCard: View {
     }
 }
 
-/// The lens: colour fringe, vignette, dust and haze.
+/// The lens: colour fringe and vignette (§16 dropped dust and haze).
 struct LensCard: View {
     var mode: String
     @Environment(AppModel.self) private var model
@@ -186,10 +190,11 @@ struct LensCard: View {
         if let light = model.light(mode) {
             let live = model.hub.isLive
             let specs = model.catalog.stackLight.params
+            let rows = [("fringe", light.fringe), ("vignette", light.vignette)]
             Card {
                 CapRow("lens", padding: 2) { CapText("like a real spotlight") }
-                ForEach([("fringe", light.fringe), ("vignette", light.vignette), ("haze", light.haze)], id: \.0) { key, v in
-                    FillSlider(specs[key]?.label ?? key, icon: key == "haze" ? .grain : .softness, value: v, enabled: live) {
+                ForEach(rows, id: \.0) { key, v in
+                    FillSlider(specs[key]?.label ?? key, icon: .softness, value: v, enabled: live) {
                         model.lightParam(mode, [key], .number(round2($0)))
                     }
                 }
@@ -200,9 +205,9 @@ struct LensCard: View {
 
 // MARK: - Attachments
 
-/// The categorized attachment browser: windows, blinds, nature, patterns, spots, plates. A tap puts that one attachment
-/// in front of the light; "add on top" stacks another (masks multiply). Plate tiles show the metal plate itself, or
-/// the light it projects.
+/// The categorized attachment browser (catalog 6: every attachment is a metal plate, grouped as the catalog's
+/// `goboCategories` say: windows, nature, sky, patterns, beams). A tap puts that one attachment in front of the light;
+/// "add on top" stacks another (masks multiply). Plate tiles show the metal plate itself, or the light it projects.
 struct AttachmentBrowser: View {
     var mode: String
     @Binding var selected: String?
@@ -262,20 +267,19 @@ struct AttachmentBrowser: View {
         }
     }
 
+    /// A tap swaps what is in front of the light and keeps the user's settings: the light (focus, intensity, colour,
+    /// fringe, slide) is never touched, and the new attachment takes the replaced one's placement (rotation, scale,
+    /// offsets), how much it blocks and its motion. Only the gobo, its name and its own params change (§16).
     func pick(_ g: GoboItem, add: Bool) {
         guard model.sceneId != nil else { model.flash("No scene is active on the projector."); return }
-        let a = model.catalog.newAttachment(g)
-        guard let json = try? JSONValue(encoding: a) else { return }
         let list = model.attachments(mode)
+        let a = add ? model.catalog.newAttachment(g) : AttachmentSwap.replacing(list.first { $0.id == selected } ?? list.last, with: g, catalog: model.catalog)
+        guard let json = try? JSONValue(encoding: a) else { return }
         if add {
             model.edit(.addAttachment(mode: mode, attachment: json))
         } else {
             if list.count == 1, list[0].gobo == g.id { selected = list[0].id; return }
             model.edit(.replaceAttachments(mode: mode, attachments: [json]))
-            // A fresh light keeps the focus that suits this gobo when the light is still at its default.
-            if let f = g.focus, let light = model.light(mode), list.isEmpty, abs(light.focus - 0.7) < 0.001 {
-                model.edit(.setLight(mode: mode, field: ["focus"], value: .number(f)))
-            }
         }
         selected = a.id
         addOnTop = false
@@ -356,6 +360,8 @@ struct AttachmentControls: View {
     var attachment: Attachment
     @Environment(AppModel.self) private var model
     @State private var showShape = false
+    @State private var showWindow = true
+    @State private var windowGroup: String?
 
     static let fallback: [String: ParamSpec] = [
         "opacity": ParamSpec(type: "number", min: 0, max: 1, label: "blocks"),
@@ -369,7 +375,9 @@ struct AttachmentControls: View {
         let a = attachment
         let live = model.hub.isLive
         let specs = model.catalog.stackLight.attachmentParams
-        let shape = model.catalog.shapeParams(a.gobo).filter { $0.spec.isNumeric }
+        // (§16) a window preset's geometry gets its own grouped section; "shape" keeps throw, keystone and depth
+        let windowKeys = Set(model.catalog.windowKeys(a.gobo))
+        let shape = model.catalog.shapeParams(a.gobo).filter { $0.spec.isNumeric && !windowKeys.contains($0.key) }
         let choices = model.catalog.shapeParams(a.gobo).filter { $0.spec.type == "enum" && !($0.spec.options ?? []).isEmpty }
         Card {
             HStack {
@@ -405,6 +413,7 @@ struct AttachmentControls: View {
                     .accessibilityLabel(p.spec.label ?? p.key)
                 }
             }
+            if !windowKeys.isEmpty { windowSection(a, live: live) }
             if !shape.isEmpty {
                 Button { withAnimation(.snappy) { showShape.toggle() } } label: {
                     HStack {
@@ -431,6 +440,85 @@ struct AttachmentControls: View {
                 }
             }
         }
+    }
+
+    /// (§16) A parametric window's geometry: its groups (grid, frame, arch, shape, lattice, blinds) as pills, then that
+    /// group's sliders (direction locked, so vertical scrolling never moves them) and switches, and "reset to preset".
+    @ViewBuilder
+    func windowSection(_ a: Attachment, live: Bool) -> some View {
+        let groups = model.catalog.windowGroups(a.gobo)
+        let current = groups.first { $0.group.id == windowGroup } ?? groups.first
+        // a new attachment of a preset carries no window keys (§16): any key present is a change
+        let changed = model.catalog.windowKeys(a.gobo).filter { a.params[$0] != nil }
+        Button { withAnimation(.snappy) { showWindow.toggle() } } label: {
+            HStack {
+                Text("window").capStyle()
+                Spacer()
+                Text(showWindow ? "hide" : changed.isEmpty ? "as the preset" : "\(changed.count) changed").font(.pm(12)).foregroundStyle(Palette.dim)
+                Icon(.chevronRight, size: 14).foregroundStyle(Palette.dim).rotationEffect(.degrees(showWindow ? 90 : 0))
+            }
+            .padding(.horizontal, 2).padding(.top, 4)
+            .frame(minHeight: 36)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(showWindow ? "hide the window geometry" : "show the window geometry")
+        if showWindow, let current {
+            ScrollView(.horizontal) {
+                HStack(spacing: 8) {
+                    ForEach(groups, id: \.group.id) { g in
+                        PillButton(g.group.name, on: g.group.id == current.group.id) { windowGroup = g.group.id }
+                    }
+                }
+                .padding(.horizontal, 16)
+            }
+            .scrollIndicators(.hidden)
+            .padding(.horizontal, -16)
+            ForEach(current.params) { p in
+                if p.spec.type == "boolean" {
+                    let on = a.params[p.key]?.bool ?? p.spec.default?.bool ?? false
+                    Toggle(p.spec.label ?? p.key, isOn: Binding(get: { on }, set: { model.attachmentParam(mode, a.id, ["params", p.key], .bool($0)) }))
+                        .toggleStyle(PMSwitchStyle())
+                        .disabled(!live)
+                        .padding(.horizontal, 2)
+                } else if p.spec.isNumeric {
+                    let v = a.param(p.key) ?? p.spec.default?.double ?? p.spec.lower
+                    FillSlider(p.spec.label ?? p.key, icon: .param(p.key), value: p.spec.fraction(v), enabled: live,
+                               format: { Self.windowFormat(p.spec, p.spec.value(at: $0)) }) { f in
+                        let next = p.spec.value(at: f)
+                        model.attachmentParam(mode, a.id, ["params", p.key], .number(p.spec.type == "integer" ? next : round2(next)))
+                    }
+                }
+            }
+            if !changed.isEmpty {
+                Button { resetWindow(a, keys: changed) } label: {
+                    HStack(spacing: 8) {
+                        Icon(.rotate, size: 14)
+                        Text("reset to preset").font(.pm(13))
+                    }
+                    .foregroundStyle(Palette.ink)
+                    .frame(maxWidth: .infinity, minHeight: 40)
+                    .background(Palette.pill, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .disabled(!live)
+                .accessibilityHint("puts the window back to the \(model.catalog.gobo(a.gobo)?.name ?? "preset") geometry")
+            }
+        }
+    }
+
+    /// Integers as they are, signed params with a sign, the rest as a percent.
+    static func windowFormat(_ spec: ParamSpec, _ v: Double) -> String {
+        if spec.type == "integer" { return String(Int(v.rounded())) }
+        if spec.lower < 0 { return Fmt.signed(round2(v) * 100, unit: "%") }
+        return Fmt.percent(v)
+    }
+
+    /// Removes the window keys from the attachment's params: the preset's values apply again.
+    func resetWindow(_ a: Attachment, keys: [String]) {
+        guard let i = model.attachments(mode).firstIndex(where: { $0.id == a.id }) else { return }
+        let base = ScenePath.attachments(mode) + "/\(i)/params/"
+        model.edit(.raw(keys.map { PatchOp.remove(base + JSONPointer.escape($0)) }))
     }
 
     /// Friendlier words for a few enum values: a plate's `fill` light field fills the frame.
@@ -525,6 +613,8 @@ struct HeroSlide: ViewModifier {
                     if start == nil { start = axis == "x" ? light?.slide.x ?? 0 : light?.slide.y ?? 0 }
                     let next = min(1, max(-1, (start ?? 0) + Double(p.translation.width / width)))
                     model.lightParam(mode, ["slide", axis], .number(round2(next)))
+                case .tap:
+                    break
                 case .ended, .cancelled:
                     start = nil
                 }

@@ -136,12 +136,19 @@ public final class LiveHub {
         outgoing = cont
         Task {
             for await text in stream {
-                do { try await c.send(text) } catch { break }
+                do { try await c.send(text) } catch {
+                    // A failed send used to end this pump silently: the socket stayed open (camera frames, which go
+                    // out on their own path, kept arriving) while every later status, sub and cmd was dropped.
+                    // Closing makes receive() fail, so run() reconnects and resubscribes.
+                    c.close()
+                    break
+                }
             }
         }
     }
 
     private func dropConnection() {
+        frameSlot = nil
         outgoing?.finish()
         outgoing = nil
         conn?.close()
@@ -559,15 +566,26 @@ public final class LiveHub {
 
     /// Sends the newest preview frame; a frame that arrives while one is still going out replaces the waiting one.
     public func sendCameraFrame(_ frame: CameraFrame) {
-        guard status == .online, let conn, let text = try? Envelope(t: MessageType.cameraFrame, ch: Channel.camera, d: JSONValue(encoding: frame)).text else { return }
+        guard status == .online, let text = try? Envelope(t: MessageType.cameraFrame, ch: Channel.camera, d: JSONValue(encoding: frame)).text else { return }
+        sendCameraFrameText(text)
+    }
+
+    /// Sends a `camera.frame` envelope already encoded (off the main actor) by the camera.
+    public func sendCameraFrameText(_ text: String) {
+        guard status == .online, conn != nil else { return }
         frameSlot = text
         guard !frameBusy else { return }
         frameBusy = true
         Task {
-            while let next = frameSlot {
+            // always the current connection: after a reconnect the frames go to the new socket, not the dead one
+            while let next = frameSlot, let c = self.conn {
                 frameSlot = nil
-                try? await conn.send(next)
+                do { try await c.send(next) } catch {
+                    c.close()
+                    break
+                }
             }
+            frameSlot = nil
             frameBusy = false
         }
     }
@@ -595,10 +613,10 @@ public final class LiveHub {
         unsubscribe(Channel.agent(id))
     }
 
-    public func startCalibration(setupId: String) async throws -> String {
+    public func startCalibration(setupId: String, cameraRoi: ROIRect? = nil) async throws -> String {
         if status == .demo { return demoCalibration() }
         guard let api, status == .online else { throw LiveError.notConnected }
-        let id = try await api.startCalibration(setupId: setupId)
+        let id = try await api.startCalibration(setupId: setupId, cameraRoi: cameraRoi)
         subscribe(Channel.calib(id))
         return id
     }

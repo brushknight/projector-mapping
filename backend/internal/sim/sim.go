@@ -37,7 +37,10 @@ type Options struct {
 	FPS float64
 	// CamW, CamH are the still size (default 1280x960).
 	CamW, CamH int
-	Log        *slog.Logger
+	// ShowDelay is how long after output.pattern answers "presented" the projector really shows the pattern (a slow
+	// projector or AirPlay); a capture before that sees the previous pattern.
+	ShowDelay time.Duration
+	Log       *slog.Logger
 }
 
 // Sim holds the shared state: what the projector shows.
@@ -49,6 +52,8 @@ type Sim struct {
 	set      setup.Setup
 	sc       *scene.Scene
 	pattern  map[string]any
+	prevPat  map[string]any // what the projector still shows until patAt + ShowDelay
+	patAt    time.Time
 	outline  []string
 	outUntil time.Time
 	dirty    bool
@@ -202,7 +207,10 @@ func (s *Sim) runOutput(ctx context.Context) error {
 				var p map[string]any
 				_ = json.Unmarshal(r.Args, &p)
 				s.mu.Lock()
-				s.pattern, s.dirty = p, true
+				if time.Since(s.patAt) >= s.o.ShowDelay {
+					s.prevPat = s.pattern
+				}
+				s.pattern, s.patAt, s.dirty = p, time.Now(), true
 				w, h := s.set.Output.Width, s.set.Output.Height
 				s.mu.Unlock()
 				time.Sleep(50 * time.Millisecond) // "3 presented frames"
@@ -274,13 +282,31 @@ func (s *Sim) runPhone(ctx context.Context) error {
 func (s *Sim) projector() func(px, py float64) float64 {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	kind, _ := s.pattern["kind"].(string)
+	pat := s.pattern
+	if s.o.ShowDelay > 0 && time.Since(s.patAt) < s.o.ShowDelay && s.prevPat != nil {
+		pat = s.prevPat
+	}
+	kind, _ := pat["kind"].(string)
 	w, h := s.set.Output.Width, s.set.Output.Height
 	if kind == "gray" || kind == "white" || kind == "black" {
-		axis, _ := s.pattern["axis"].(string)
-		bit, _ := s.pattern["bit"].(float64)
-		inv, _ := s.pattern["inverse"].(bool)
+		axis, _ := pat["axis"].(string)
+		bit, _ := pat["bit"].(float64)
+		inv, _ := pat["inverse"].(bool)
 		base := vision.PatternFunc(kind, axis, int(bit), inv, w, h)
+		if roi, ok := pat["roi"].(map[string]any); ok {
+			// the output draws the pattern inside the ROI and black outside (protocol §18)
+			rx, _ := roi["x"].(float64)
+			ry, _ := roi["y"].(float64)
+			rw, _ := roi["w"].(float64)
+			rh, _ := roi["h"].(float64)
+			inner := base
+			base = func(px, py float64) float64 {
+				if px < rx || py < ry || px >= rx+rw || py >= ry+rh {
+					return 0
+				}
+				return inner(px, py)
+			}
+		}
 		if len(s.outline) == 0 || time.Now().After(s.outUntil) {
 			return base
 		}

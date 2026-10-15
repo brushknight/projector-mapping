@@ -27,6 +27,7 @@ import (
 	"projmap/internal/infrastructure/database/sqlite"
 	"projmap/internal/infrastructure/discovery"
 	httpserver "projmap/internal/infrastructure/http_server"
+	outputshttp "projmap/internal/infrastructure/http_server/handlers/outputs"
 	"projmap/internal/infrastructure/http_server/middleware"
 	"projmap/internal/infrastructure/mcp"
 	"projmap/internal/infrastructure/mcp/tools"
@@ -150,6 +151,8 @@ func New(ctx context.Context, o Options) (*App, error) {
 	a.Videos.Register(api)
 	a.Camera.Register(api, a.Show.Service)
 	a.Agents.Register(api)
+	// §17: put the output on a display as a kiosk window (local requests only)
+	(&outputshttp.Handler{DataDir: cfg.DataDir, Port: cfg.Port, Devices: a.Devices.Service}).RegisterRoutes(api)
 	a.e.Any("/ws", echo.WrapHandler(a.Hub))
 	mh := mcp.Handler(&tools.Deps{Scenes: a.Scenes.Service, Drafts: a.Scenes.Drafts, Presets: a.Scenes.Presets, Setups: a.Setups.Service,
 		Show: a.Show.Service, Catalog: a.Catalog.Service, Assets: a.Assets.Service, Sounds: a.Sounds.Service, Videos: a.Videos.Service, Agents: a.Agents.Service, Camera: a.Camera.Camera,

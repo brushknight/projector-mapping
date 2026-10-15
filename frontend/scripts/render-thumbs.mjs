@@ -2,8 +2,10 @@
  * Renders the catalog thumbnails (protocol §15 "Thumbnails") with the real engine in headless Chromium and writes
  * them to backend/internal/catalog/assets/thumbs/<id>.png, which the server embeds and serves at
  * /catalog/thumbs/<id>.png; a metal plate also gets <id>-metal.png, the plate itself (dev/plate-harness.html).
+ * (§16) A procedural layer with `animThumb` also gets <id>-anim.jpg, a looping strip of `animFrames` frames
+ * (dev/anim-harness.html) that the phone's live gallery animates.
  * Run after changing a gobo, a plate or a procedural layer: `npm run thumbs` (or `npm run thumbs -- plate-` for the
- * ids that contain `plate-`).
+ * ids that contain `plate-`, `npm run thumbs -- -anim` for the strips only, `=<id>` for exactly one id).
  * Never opens a window (headless only).
  */
 import { spawn } from 'node:child_process'
@@ -39,12 +41,19 @@ try {
     ...catalog.gobos.filter((g) => g.metalThumb).map((g) => ({ id: g.metalThumb.replace(/^thumbs\/|\.png$/g, ''), q: `plate=${g.id}`, page: 'plate-harness' })),
     // lightning flashes at 6.55 s; everything else is mid-motion at 7.5 s
     ...catalog.procedural.map((p) => ({ id: p.id, q: `proc=${p.id}&clock=${p.id === 'lightning' ? 6.55 : 7.5}` })),
+    // (§16) the animated strips: a 3 s loop around the still's moment (lightning: a window with a flash in it)
+    ...catalog.procedural
+      .filter((p) => p.animThumb)
+      .map((p) => ({ id: `${p.id}-anim`, file: p.animThumb.replace(/^thumbs\//, ''), q: `proc=${p.id}&frames=${p.animFrames ?? 36}&fps=${p.animFps ?? 12}&w=192&h=108&clock=${p.id === 'lightning' ? 5.2 : 7.5}`, page: 'anim-harness', strip: true })),
   ]
   const only = process.argv.slice(2)
-  for (const j of jobs.filter((j) => !only.length || only.some((o) => j.id.includes(o)))) {
-    await page.goto(`http://localhost:${port}/dev/${j.page ?? 'render-harness'}.html?w=${W}&h=${H}&${j.q}`)
-    await page.waitForFunction(() => window.__done === true, null, { timeout: 60000 })
-    writeFileSync(resolve(out, `${j.id}.png`), await page.locator('#c').screenshot({ omitBackground: !!j.page }))
+  for (const j of jobs.filter((j) => !only.length || only.some((o) => (o.startsWith('=') ? j.id === o.slice(1) : j.id.includes(o))))) {
+    await page.goto(`http://localhost:${port}/dev/${j.page ?? 'render-harness'}.html?${j.strip ? '' : `w=${W}&h=${H}&`}${j.q}`)
+    await page.waitForFunction(() => window.__done === true, null, { timeout: 120000 })
+    if (j.strip) {
+      const url = await page.evaluate(() => window.__strip)
+      writeFileSync(resolve(out, j.file), Buffer.from(url.split(',')[1], 'base64'))
+    } else writeFileSync(resolve(out, `${j.id}.png`), await page.locator('#c').screenshot({ omitBackground: !!j.page }))
     console.log('thumb', j.id)
   }
   await browser.close()

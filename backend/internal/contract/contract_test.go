@@ -5,6 +5,7 @@ package contract
 import (
 	"encoding/json"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -259,7 +260,7 @@ func TestCatalogV4(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cat.Version < 5 || len(cat.Gobos) < 76 || cat.StackLight.Kelvin != 5600 || cat.GoboParams["throw"].Type != "number" {
+	if cat.Version < 6 || len(cat.Gobos) < 45 || cat.StackLight.Kelvin != 5600 || cat.GoboParams["throw"].Type != "number" {
 		t.Fatalf("catalog %d: %d gobos, stackLight %+v", cat.Version, len(cat.Gobos), cat.StackLight)
 	}
 	for _, g := range cat.Gobos {
@@ -270,18 +271,41 @@ func TestCatalogV4(t *testing.T) {
 		if _, ok := cat.GoboSchema(g.ID); !ok {
 			t.Errorf("gobo %s has no schema", g.ID)
 		}
-		// (catalog 5) a metal plate has its metal thumbnail and a round, fill, stretch or tile light field
-		if gb != nil && gb.Category == "plates" {
-			if gb.MetalThumb != "thumbs/"+g.ID+"-metal.png" || gb.Params["field"].Type != "enum" || gb.Params["field"].Default != "round" {
+		// (catalog 6) every gobo is a metal plate: its metal thumbnail, a reference photo and a round, fill, stretch or
+		// tile light field, in one of the catalog's categories
+		if gb != nil {
+			if gb.MetalThumb != "thumbs/"+g.ID+"-metal.png" || gb.Source == "" || gb.Params["field"].Type != "enum" || gb.Params["field"].Default != "round" {
 				t.Errorf("plate %s: %+v", g.ID, gb)
+			}
+			if !strings.HasPrefix(g.ID, "plate-") || !slices.ContainsFunc(cat.GoboCategories, func(c domcatalog.Named) bool { return c.ID == gb.Category }) {
+				t.Errorf("plate %s category %q", g.ID, gb.Category)
 			}
 		}
 	}
+	// (catalog 6, §16) the window presets: every window param in a group, the preset's geometry as defaults
+	windows := 0
+	for _, g := range cat.Gobos {
+		gb := cat.Gobo(g.ID)
+		if gb.Family != "window" {
+			continue
+		}
+		windows++
+		for _, grp := range cat.WindowParamGroups {
+			for _, k := range grp.Params {
+				if _, ok := gb.Params[k]; !ok {
+					t.Errorf("window %s misses %s", g.ID, k)
+				}
+			}
+		}
+	}
+	if windows != 13 || len(cat.WindowParamGroups) != 6 {
+		t.Fatalf("%d window presets, %d groups", windows, len(cat.WindowParamGroups))
+	}
 	// the merged schema: goboParams, the gobo's own params, the gobo's defaults over goboParams defaults
-	s, _ := cat.GoboSchema("window-4")
-	g := cat.Gobo("window-4")
-	if s["cols"].Type != "integer" || s["throw"].Type != "number" {
-		t.Fatalf("window-4 merged schema %+v", s)
+	s, _ := cat.GoboSchema("plate-arched-window")
+	g := cat.Gobo("plate-arched-window")
+	if s["cols"].Type != "integer" || s["arch"].Type != "boolean" || s["arch"].Default != true || s["throw"].Type != "number" {
+		t.Fatalf("plate-arched-window merged schema %+v", s)
 	}
 	for k := range cat.GoboParams {
 		want := cat.GoboParams[k].Default
@@ -289,7 +313,13 @@ func TestCatalogV4(t *testing.T) {
 			want = v
 		}
 		if s[k].Default != want {
-			t.Errorf("window-4 %s default %v, want %v", k, s[k].Default, want)
+			t.Errorf("plate-arched-window %s default %v, want %v", k, s[k].Default, want)
+		}
+	}
+	// (§16) every removed gobo maps to a plate that exists
+	for _, id := range scene.RemovedGoboIDs() {
+		if cat.Gobo(id) != nil || cat.Gobo(scene.PlateFor(id)) == nil {
+			t.Errorf("removed %s maps to %s", id, scene.PlateFor(id))
 		}
 	}
 	for _, id := range []string{"hue-cycle", "color-flow", "pulse", "aurora", "kelvin-cycle"} {

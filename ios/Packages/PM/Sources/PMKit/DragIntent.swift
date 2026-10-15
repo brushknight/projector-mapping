@@ -37,3 +37,55 @@ public enum DragIntent: Equatable, Sendable {
         }
     }
 }
+
+/// The direction lock of one touch on a horizontal control (protocol-free, UI-free, so it is unit tested): the
+/// decision is made once per gesture from the finger's own travel, never from velocity, and never changes after.
+///
+/// - A touch that lands while the page is still scrolling (decelerating) belongs to the page: it stops the scroll and
+///   never adjusts the control.
+/// - Inside the dead zone nothing happens (a tap stays a tap).
+/// - Past it, the control takes the drag only when it is clearly sideways (`|dx| > ratio × |dy|`); a tie or anything
+///   steeper goes to the page, for the rest of the gesture.
+public struct DirectionLock: Equatable, Sendable {
+    public enum Decision: Equatable, Sendable { case undecided, control, page }
+
+    public var deadZone: Double
+    public var ratio: Double
+    public private(set) var decision: Decision = .undecided
+    /// Where the control's drag starts counting from: the travel at the moment the lock went to the control, so the
+    /// value does not jump by the dead zone.
+    public private(set) var origin: (Double, Double) = (0, 0)
+
+    public init(deadZone: Double = DragIntent.threshold, ratio: Double = DragIntent.ratio) {
+        self.deadZone = deadZone; self.ratio = ratio
+    }
+
+    public static func == (a: DirectionLock, b: DirectionLock) -> Bool {
+        a.deadZone == b.deadZone && a.ratio == b.ratio && a.decision == b.decision && a.origin == b.origin
+    }
+
+    /// A finger went down. `pageMoving`: the enclosing scroll view is still decelerating.
+    public mutating func begin(pageMoving: Bool) {
+        decision = pageMoving ? .page : .undecided
+        origin = (0, 0)
+    }
+
+    /// The finger moved to (dx, dy) from where it went down; returns the (sticky) decision.
+    @discardableResult
+    public mutating func move(dx: Double, dy: Double) -> Decision {
+        guard decision == .undecided else { return decision }
+        switch DragIntent.decide(dx: dx, dy: dy, threshold: deadZone, ratio: ratio) {
+        case .horizontal:
+            decision = .control
+            origin = (dx, dy)
+        case .vertical:
+            decision = .page
+        case .undecided:
+            break
+        }
+        return decision
+    }
+
+    /// The finger lifted without leaving the dead zone and the page was not moving: a tap on the control.
+    public var isTap: Bool { decision == .undecided }
+}

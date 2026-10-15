@@ -60,8 +60,25 @@ targets:
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         GENERATE_INFOPLIST_FILE: NO
 
+  # Headless XCUITests (no Simulator.app needed: xcodebuild test boots the simulator without a window).
+  projmapUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: UITests
+    dependencies:
+      - target: projmap
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.brushknight.projmap.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: projmap
+
 schemes:
   projmap:
     build:
       targets:
         projmap: all
+    test:
+      targets:
+        - projmapUITests

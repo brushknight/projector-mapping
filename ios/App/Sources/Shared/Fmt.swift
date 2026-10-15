@@ -62,6 +62,8 @@ enum Fmt {
         case "blur": return aperture(value)
         case "drift" where spec.label == "slow drift": return speedWord(value)
         case "warmth": return plusMinus(Int((value * 50).rounded()))
+        // (§16) gain 1.0 at 100 %: the picture as it is
+        case "brightness": return value >= 0.995 ? "100% · original" : percent(value)
         default: break
         }
         if spec.type == "integer" { return "\(Int(value.rounded()))" + (spec.unit.map { " \($0)" } ?? "") }

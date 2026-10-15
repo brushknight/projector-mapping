@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -24,7 +25,10 @@ func TestStillsAndStatus(t *testing.T) {
 		t.Fatalf("still %s", r.Body)
 	}
 	apitest.ExpectErr(t, h.Do("GET", "/api/v1/camera/preview.jpg", nil), http.StatusNotFound, "not_found")
-	apitest.ExpectErr(t, h.Do("POST", "/api/v1/calibrations", map[string]any{}), http.StatusServiceUnavailable, "unavailable")
+	e := apitest.ExpectErr(t, h.Do("POST", "/api/v1/calibrations", map[string]any{}), http.StatusConflict, "no_output")
+	if !strings.Contains(e["message"].(string), "put on projector") {
+		t.Fatalf("the no-output message says how to fix it: %v", e["message"])
+	}
 	apitest.ExpectErr(t, h.Do("GET", "/api/v1/calibrations/cal_nope", nil), http.StatusNotFound, "not_found")
 }
 

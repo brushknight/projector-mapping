@@ -13,9 +13,19 @@ export interface ProceduralItem extends CatalogItem {
   params: ParamSchema
   /** (§15) relative to /catalog/assets/ */
   thumb?: string
+  /** (§16) the blend a new layer of it gets: `multiply` makes it a mask over the light, like an attachment */
+  blend?: 'normal' | 'multiply' | 'screen' | 'add'
+  /**
+   * (§16) relative to /catalog/assets/: a vertical JPEG strip of `animFrames` frames (192 × 108 each, top to bottom)
+   * that loops seamlessly at `animFps`; the phone's live gallery animates it
+   */
+  animThumb?: string
+  animFrames?: number
+  animFps?: number
 }
 
-export type GoboCategory = 'windows' | 'blinds' | 'nature' | 'patterns' | 'spots' | 'plates'
+/** (catalog 6) every attachment is a plate, in these groups */
+export type GoboCategory = 'windows' | 'nature' | 'sky' | 'patterns' | 'beams'
 
 /** (§15) a projection attachment: a gobo that blocks light */
 export interface GoboItem extends CatalogItem {
@@ -24,8 +34,10 @@ export interface GoboItem extends CatalogItem {
   thumb?: string
   /** (catalog 5, plates) the metal plate itself, relative to /catalog/assets/ */
   metalThumb?: string
-  /** (catalog 5, plates) the real plate a design follows */
+  /** (catalog 5, plates) the reference photo a design follows (§16: `<file>, <label>`) */
   source?: string
+  /** (§16) `window`: a parametric window preset; its params hold the window geometry with the preset as defaults */
+  family?: 'window' | string
   /** the gobo's own params (panes, slats, density, blades…) */
   params?: ParamSchema
   /** where a new attachment of it starts */
@@ -77,6 +89,8 @@ export interface Catalog {
   stackLight?: { params: ParamSchema; kelvin: number; attachmentParams: ParamSchema }
   goboParams?: ParamSchema
   goboCategories?: Array<{ id: GoboCategory; name: string }>
+  /** (§16, catalog 6) the window params in groups, in display order */
+  windowParamGroups?: Array<{ id: string; name: string; params: string[] }>
   gobos: GoboItem[]
   procedural: ProceduralItem[]
   gradients: GradientItem[]

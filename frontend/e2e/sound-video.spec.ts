@@ -123,7 +123,7 @@ test('a video file layer draws its frames like a photo on /out', async ({ page, 
   // make a 1 s red WebM (MediaRecorder) in a quiet page of the same origin, so the busy output can't starve the
   // recording, and upload it as a library video
   const quiet = await context.newPage()
-  await quiet.goto('/catalog/thumbs/window-4.png')
+  await quiet.goto('/catalog/thumbs/plate-grid-window.png')
   await quiet.bringToFront()
   const video = await quiet.evaluate(async () => {
     const c = document.createElement('canvas')

@@ -48,23 +48,26 @@ public struct StackLight: Codable, Sendable, Hashable {
     public var colorLayer: ColorLayer?
     public var fringe: Double
     public var vignette: Double
-    public var haze: Double
+    /// (§16) the background focus in `static`, the live layer focus in `live`; 1 is sharp (absent decodes to 1)
+    public var backgroundFocus: Double
     public var slide: FramePoint
     public var motion: Motion?
 
-    enum CodingKeys: String, CodingKey { case intensity, focus, color, fx, colorLayer, fringe, vignette, haze, slide, motion }
+    enum CodingKeys: String, CodingKey { case intensity, focus, backgroundFocus, color, fx, colorLayer, fringe, vignette, slide, motion }
 
-    public init(intensity: Double = 0.85, focus: Double = 0.7, color: LightColor = LightColor(kelvin: StackLight.defaultKelvin),
-                fx: LightFX = .init(), colorLayer: ColorLayer? = nil, fringe: Double = 0.2, vignette: Double = 0.3, haze: Double = 0,
+    /// §16 defaults: attachment focus and background focus 1 (sharp), vignette 0; haze is gone.
+    public init(intensity: Double = 0.85, focus: Double = 1, color: LightColor = LightColor(kelvin: StackLight.defaultKelvin),
+                fx: LightFX = .init(), colorLayer: ColorLayer? = nil, fringe: Double = 0.2, vignette: Double = 0, backgroundFocus: Double = 1,
                 slide: FramePoint = .zero, motion: Motion? = nil) {
         self.intensity = intensity; self.focus = focus; self.color = color; self.fx = fx; self.colorLayer = colorLayer
-        self.fringe = fringe; self.vignette = vignette; self.haze = haze; self.slide = slide; self.motion = motion
+        self.fringe = fringe; self.vignette = vignette; self.backgroundFocus = backgroundFocus; self.slide = slide; self.motion = motion
     }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         intensity = c.v(.intensity, 0.85)
-        focus = c.v(.focus, 0.7)
+        focus = c.v(.focus, 1)
+        backgroundFocus = c.v(.backgroundFocus, 1)
         if c.contains(.color), let color: LightColor = c.opt(.color) {
             // A colour object without a kelvin takes the stack light's 5600 K, not a layer light's 3200 K.
             let raw: JSONValue? = c.opt(.color)
@@ -77,8 +80,8 @@ public struct StackLight: Codable, Sendable, Hashable {
         fx = c.v(.fx, LightFX())
         colorLayer = c.opt(.colorLayer)
         fringe = c.v(.fringe, 0.2)
-        vignette = c.v(.vignette, 0.3)
-        haze = c.v(.haze, 0)
+        vignette = c.v(.vignette, 0)
+        // `haze` (before §16) is ignored
         slide = c.v(.slide, FramePoint())
         motion = c.opt(.motion)
     }
@@ -87,12 +90,12 @@ public struct StackLight: Codable, Sendable, Hashable {
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(intensity, forKey: .intensity)
         try c.encode(focus, forKey: .focus)
+        try c.encode(backgroundFocus, forKey: .backgroundFocus)
         try c.encode(color, forKey: .color)
         try c.encode(fx, forKey: .fx)
         try c.encode(colorLayer, forKey: .colorLayer)
         try c.encode(fringe, forKey: .fringe)
         try c.encode(vignette, forKey: .vignette)
-        try c.encode(haze, forKey: .haze)
         try c.encode(slide, forKey: .slide)
         try c.encode(motion, forKey: .motion)
     }
@@ -435,14 +438,17 @@ public enum SceneTemplates {
     /// A new scene document built as the server builds it from a kind's default template (demo mode, offline).
     public static func document(kind: String, id: String, name: String, setupId: String, catalog: Catalog) -> JSONValue {
         func enc<T: Encodable>(_ v: T) -> JSONValue { (try? JSONValue(encoding: v)) ?? .null }
-        var warm = StackLight(intensity: 0.85, focus: 0.68, color: LightColor(kelvin: 3200))
+        let warm = StackLight(intensity: 0.85, focus: 0.68, color: LightColor(kelvin: 3200))
+        // the live template's light takes the focus that suits its window (§15); the static one stays at 0.68
+        var liveLight = warm
         var window: JSONValue = .null
-        if let item = catalog.gobo("window-4") ?? catalog.gobos.first {
+        // catalog 6 (§16): the 6-pane grid window preset; older catalogs had window-4
+        if let item = catalog.gobo("plate-grid-window") ?? catalog.gobo("window-4") ?? catalog.gobos.first {
             var a = catalog.newAttachment(item)
-            a.params["throw"] = 0.25
-            if let sun = catalog.motionPreset("sun-lr")?.motion { var m = sun; m.on = false; a.motion = m }
+            // parked mid-path: at phase 0 the window would sit at `from`, off the frame
+            if let sun = catalog.motionPreset("sun-lr")?.motion { var m = sun; m.on = false; m.phase = 0.5; a.motion = m }
             window = enc(a)
-            warm.focus = item.focus ?? 0.68
+            liveLight.focus = item.focus ?? 0.68
         }
         var still: JSONValue = ["layers": [], "light": enc(StackLight()), "attachments": []]
         var live: JSONValue = ["layers": [], "light": nil, "attachments": []]
@@ -459,7 +465,7 @@ public enum SceneTemplates {
             }
             var w = window
             if case .object(var o) = w { o["id"] = .string(ClientID.make("att")); o["motion"] = .null; w = .object(o) }
-            live = ["layers": tree == .null ? [] : [tree], "light": enc(warm), "attachments": w == .null ? [] : [w]]
+            live = ["layers": tree == .null ? [] : [tree], "light": enc(liveLight), "attachments": w == .null ? [] : [w]]
         case "color":
             let g = catalog.gradient("ember")
             color = ["layers": [["id": .string(ClientID.make("lay")), "kind": "gradient", "ref": "ember", "name": .string(g?.name ?? "ember"),
@@ -477,5 +483,27 @@ public enum SceneTemplates {
                 "backdrop": ["static": still, "live": live, "color": color, "scenery": scenery],
                 "underlay": ["on": false, "from": "static", "level": 0.35], "points": [], "objects": [],
                 "timeline": ["duration": 20, "tracks": [], "clips": [], "cues": []], "sounds": ["pads": []]]
+    }
+}
+
+// MARK: - Swapping an attachment (§16)
+
+/// Picking another attachment keeps what the user set: the new one takes the replaced attachment's placement
+/// (rotation, scale, offsets), how much it blocks (opacity), visibility and motion; only the gobo, its name and its
+/// own params come from the catalog. The light is never touched by a pick.
+public enum AttachmentSwap {
+    public static func replacing(_ old: Attachment?, with item: GoboItem, catalog: Catalog, id: String = ClientID.make("att")) -> Attachment {
+        var a = catalog.newAttachment(item, id: id)
+        guard let old else { return a }
+        a.rotation = old.rotation
+        a.scale = old.scale
+        a.offsetX = old.offsetX
+        a.offsetY = old.offsetY
+        a.opacity = old.opacity
+        a.visible = old.visible
+        a.motion = old.motion
+        // the wall params (throw, keystone, depth) are placement too
+        for k in catalog.goboParams.items.map(\.key) { if let v = old.params[k] { a.params[k] = v } }
+        return a
     }
 }

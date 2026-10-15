@@ -31,8 +31,8 @@ func TestSceneKinds(t *testing.T) {
 	sun := create(map[string]any{"name": "sun", "kind": "static"})
 	att := backdrop(sun, "static")["attachments"].([]any)[0].(map[string]any)
 	light := backdrop(sun, "static")["light"].(map[string]any)
-	if sun["kind"] != "static" || att["gobo"] != "window-4" || att["motion"].(map[string]any)["on"] != false || att["motion"].(map[string]any)["preset"] != "sun-lr" || att["motion"].(map[string]any)["phase"] != 0.5 ||
-		att["params"].(map[string]any)["throw"] != 0.25 || light["color"].(map[string]any)["kelvin"] != float64(3200) || light["focus"] != 0.68 {
+	if sun["kind"] != "static" || att["gobo"] != "plate-grid-window" || att["motion"].(map[string]any)["on"] != false || att["motion"].(map[string]any)["preset"] != "sun-lr" || att["motion"].(map[string]any)["phase"] != 0.5 ||
+		att["params"].(map[string]any)["throw"] != 0.25 || light["color"].(map[string]any)["kelvin"] != float64(3200) || light["focus"] != float64(1) || light["backgroundFocus"] != float64(1) {
 		t.Fatalf("static-window %v", sun["backdrop"])
 	}
 	if !strings.HasPrefix(att["id"].(string), "att_") {

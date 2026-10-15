@@ -197,11 +197,20 @@ struct SceneryTab: View {
         if embed {
             Text("an embedded youtube player: blur and brightness apply over it, drift does not. it needs the internet.")
                 .font(.pm(12)).tracking(0.2).foregroundStyle(Palette.dim).lineSpacing(4).padding(.horizontal, 2)
-        } else {
-            Toggle("play its sound", isOn: Binding(get: { layer.params["audio"]?.bool ?? false },
+        }
+        // (§16) the video's own sound plays on the audio output (the projector by default), at volume × master
+        let sound = layer.params["audio"]?.bool ?? false
+        Toggle(model.catalog.videoParams["audio"]?.label ?? "sound", isOn: Binding(get: { sound },
                                                   set: { model.edit(.setLayerField(layerId: layer.id, field: ["params", "audio"], value: .bool($0))) }))
-                .toggleStyle(PMSwitchStyle())
-                .disabled(!live)
+            .toggleStyle(PMSwitchStyle())
+            .disabled(!live)
+            .accessibilityHint("plays the video's sound on the audio output")
+        if sound {
+            let spec = model.catalog.videoParams["volume"] ?? ParamSpec(type: "number", min: 0, max: 1, label: "volume")
+            let v = layer.param("volume") ?? spec.default?.double ?? 1
+            FillSlider(spec.label ?? "volume", icon: .speaker, value: spec.fraction(v), enabled: live, format: { Fmt.percent(spec.value(at: $0)) }) { f in
+                model.param(ScenePath.param("scenery", i, "volume"), .number((spec.value(at: f) * 100).rounded() / 100))
+            }
         }
     }
 

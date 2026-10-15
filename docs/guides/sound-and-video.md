@@ -66,7 +66,21 @@ editor, on the phone or over MCP), or playback running into an auto-follow cue, 
 
 The scenery mode can loop a video instead of a photo. Pick it from the **videos** category next to the photo
 categories, in the editor's Show space or the phone's Scenery tab. Blur, brightness, warmth and drift work like they
-do for photos; a video also has a loop window (from, to) and can play its own sound on the projector.
+do for photos (brightness 100 % shows the original picture, new layers start at 90 %); a video also has a loop window
+(from, to).
+
+### A video's own sound
+
+Turn on **sound** on the video layer and set its **volume**. The sound plays on the audio output only, at the layer's
+volume times the master volume, and master mute silences it:
+
+- **projector** (the default): the `/out` page plays it. If the browser has not had a click yet, `/out` shows "click
+  to enable sound"; click it once. `projmap open --out` starts the browser so it needs no click.
+- **editor**: the editor's wall preview in the Show space plays it.
+- **phone**: nothing plays video sound in this version; pick the projector or the editor.
+
+Previews, thumbnails and the editor's other views stay muted. The viewer (`/view`) plays it only when you turn on its
+own sound toggle. This works for video files and for embedded YouTube players.
 
 ### Add a video file
 
@@ -80,8 +94,8 @@ and a quality (up to 1080p by default).
 - **With yt-dlp on the server's Mac** (`brew install yt-dlp`), the server downloads the video, trims it with ffmpeg
   and keeps it as a local file. It shows progress while it works. The loop then plays offline, sharp, and takes any
   amount of blur like a photo.
-- **Without yt-dlp**, the loop plays as an embedded YouTube player behind the picture: muted, looping, without
-  controls, from the trim start. It needs the internet, stays at the bottom of its stack, and its blur and warmth are
+- **Without yt-dlp**, the loop plays as an embedded YouTube player behind the picture: looping, without controls,
+  from the trim start, muted unless its **sound** is on and the page is the audio output. It needs the internet, stays at the bottom of its stack, and its blur and warmth are
   approximations. The import dialog says so and offers the install command.
 
 Videos are yours to use: download only what you have the right to show.
@@ -97,5 +111,7 @@ timeline with `clip_add` (`sound`, `offset`, `volume`). `sound_play` only works 
   check master volume and mute, and check the computer's own output device.
 - **"Nothing plays sound right now":** no screen is set up to play. Open `/out` on the projector computer and click
   it, or pick another audio output.
+- **A video plays without sound:** turn on **sound** on the video layer, check the audio output and master mute, and
+  click `/out` once if it shows "click to enable sound".
 - **A YouTube loop stays black:** the embed needs the internet, and some videos do not allow embedding. Install
   yt-dlp and import it again to keep a local copy.

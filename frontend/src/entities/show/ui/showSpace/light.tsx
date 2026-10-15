@@ -5,6 +5,7 @@
 import { useMemo, useRef, useState, type PointerEvent as RPointerEvent } from 'react'
 import { Cap, EmptyState, FillSlider, Icon, Pill, Segmented, Switch, Tile } from '../../../../shared/components'
 import { cx } from '../../../../shared/lib/cx'
+import { pressed } from '../../../../shared/lib/pointer'
 import { newId } from '../../../../shared/lib/ids'
 import { useRaf } from '../../../../shared/lib/useRaf'
 import { metalThumbUrl, thumbUrl, type GoboItem } from '../../../catalog'
@@ -17,6 +18,7 @@ import { MOTION_EASINGS, MOTION_LOOPS, type Attachment, type FramePt, type Light
 import { gradientCss } from '../../../scene/ui/library'
 import { durationFromSpeed, pauseMotion, playMotion, retimeMotion, sampleMotion, speedFromDuration } from '../../../../render/motion'
 import { Card } from './card'
+import { focusLabel, StaticGallery, StaticStack } from './staticGallery'
 import { useShow } from './context'
 import s from './styles.module.css'
 
@@ -24,15 +26,6 @@ const r2 = (v: number) => Math.round(v * 100) / 100
 const r3 = (v: number) => Math.round(v * 1000) / 1000
 const pct = (v: number) => `${Math.round(v * 100)}%`
 const FX: LightFxKind[] = ['none', 'candle', 'fire', 'lightning', 'paparazzi', 'tv', 'breathe', 'strobe', 'police']
-const CATS = [
-  { id: 'all', name: 'all' },
-  { id: 'windows', name: 'windows' },
-  { id: 'blinds', name: 'blinds' },
-  { id: 'nature', name: 'nature' },
-  { id: 'patterns', name: 'patterns' },
-  { id: 'spots', name: 'spots' },
-  { id: 'plates', name: 'plates' },
-]
 
 /** A human duration: 45 s, 10 min, 1 h 30. */
 export function formatSpan(sec: number): string {
@@ -70,22 +63,29 @@ export function AttachmentBrowser({ mode, selected, onSelect }: { mode: LightSta
   const [plateView, setPlateView] = useState<'metal' | 'light'>('metal')
   const { atts } = useStack(mode)
   const gobos = sh.catalog?.gobos ?? []
+  // (catalog 6) the groups come from the catalog: windows, nature, sky, patterns, beams
+  const cats = [{ id: 'all', name: 'all' }, ...(sh.catalog?.goboCategories ?? [])]
   const shown = cat === 'all' ? gobos : gobos.filter((g) => g.category === cat)
   const hasPlates = shown.some((g) => g.metalThumb)
   const tileUrl = (g: GoboItem) => (plateView === 'metal' && g.metalThumb ? metalThumbUrl(g) : thumbUrl(g.id))
   const on = new Set(atts.map((a) => a.gobo))
+  const trying = sh.staticTry?.kind === 'attachment' ? sh.staticTry.gobo : null
 
   const pick = (g: GoboItem) => {
     if (!sh.scene) return
+    // (§16) in static a tap tries the plate in the hero first; the bar over the hero puts it on
+    if (mode === 'static') {
+      sh.setStaticTry(sh.staticTry?.kind === 'attachment' && sh.staticTry.gobo === g.id ? null : { kind: 'attachment', gobo: g.id })
+      return
+    }
     const att = newAttachment(sh.catalog, g.id, newId('att'))
+    // (§16) a pick keeps the light as it is (focus, colour, lens) and the place of the attachment it replaces
     void sh.editing.edit((sc) => {
       const ops = pickAttachment(sc, mode, att)
-      // a fresh pick takes the focus that suits it
-      if (g.focus !== undefined && sc.backdrop[mode]?.light) ops.push({ op: 'replace', path: lightPath(mode, 'focus'), value: g.focus })
-      if (!sc.backdrop[mode]?.light) ops.push(...setStackLight(sc, mode, defaultStackLight(sh.catalog, { focus: g.focus ?? 0.7 })))
+      if (!sc.backdrop[mode]?.light) ops.push(...setStackLight(sc, mode, defaultStackLight(sh.catalog)))
       return ops
     })
-    onSelect(att.id)
+    onSelect(sh.scene.backdrop[mode]?.attachments?.[0]?.id ?? att.id)
   }
   const stack = (g: GoboItem) => {
     if (!sh.scene) return
@@ -96,9 +96,9 @@ export function AttachmentBrowser({ mode, selected, onSelect }: { mode: LightSta
   }
 
   return (
-    <Card cap="attachments" aside={<span className={s.count}>{gobos.length}</span>} testId={`attachments-${mode}`}>
+    <Card cap={mode === 'static' ? 'attachments · tap to try' : 'attachments'} aside={<span className={s.count}>{gobos.length}</span>} testId={`attachments-${mode}`}>
       <div className={s.catRow} role="tablist" aria-label="attachment category">
-        {CATS.map((c) => (
+        {cats.map((c) => (
           <Pill key={c.id} size="sm" on={cat === c.id} onClick={() => setCat(c.id)} role="tab" aria-selected={cat === c.id} data-testid={`att-cat-${c.id}`}>
             {c.name}
           </Pill>
@@ -122,27 +122,36 @@ export function AttachmentBrowser({ mode, selected, onSelect }: { mode: LightSta
       <div className={s.attGrid} data-testid="attachment-grid">
         {shown.map((g) => (
           <div key={g.id} className={s.attTile}>
-            <Tile label={g.name} aspect={16 / 9} on={on.has(g.id)} background={`center / cover no-repeat url("${tileUrl(g)}"), var(--bg)`} onClick={() => pick(g)} testId={`gobo-${g.id}`} title={`${g.name}: ${g.description ?? ''}${g.source ? ` (${g.source})` : ''}. Put it in front of the light (replaces the others).`} />
+            <Tile label={trying === g.id ? `trying ${g.name}` : g.name} aspect={16 / 9} on={on.has(g.id) || trying === g.id} background={`center / cover no-repeat url("${tileUrl(g)}"), var(--bg)`} onClick={() => pick(g)} testId={`gobo-${g.id}`} title={`${g.name}: ${g.description ?? ''}${g.source ? ` (${g.source})` : ''}. ${mode === 'static' ? 'Try it in the preview.' : 'Put it in front of the light (replaces the others).'}`} />
             <button type="button" className={s.attAdd} onClick={() => stack(g)} aria-label={`add ${g.name} on top`} title={`add ${g.name} on top of what is there: masks multiply`} data-testid={`gobo-add-${g.id}`}>
               <Icon name="plus" size={12} />
             </button>
           </div>
         ))}
       </div>
-      <AttachmentList mode={mode} selected={selected} onSelect={onSelect} />
+      {mode !== 'static' && <AttachmentList mode={mode} selected={selected} onSelect={onSelect} />}
     </Card>
   )
 }
 
 /** What is in front of the light now: select, hide, remove. */
 function AttachmentList({ mode, selected, onSelect }: { mode: LightStack; selected: string | null; onSelect: (id: string) => void }) {
+  return (
+    <div className={s.attList} data-testid="attachment-list">
+      <Cap>in front of the light</Cap>
+      <AttachmentRows mode={mode} selected={selected} onSelect={onSelect} />
+    </div>
+  )
+}
+
+/** The attachments in front of the light, one row each: select, hide, remove. */
+export function AttachmentRows({ mode, selected, onSelect }: { mode: LightStack; selected: string | null; onSelect: (id: string) => void }) {
   const sh = useShow()
   const set = useSet()
   const { atts } = useStack(mode)
   return (
-    <div className={s.attList} data-testid="attachment-list">
-      <Cap>in front of the light</Cap>
-      {atts.length === 0 && <span className={s.dim}>nothing: the whole frame is lit. pick an attachment above.</span>}
+    <div className={s.attList} data-testid={mode === 'static' ? 'attachment-list' : undefined}>
+      {atts.length === 0 && <span className={s.dim}>nothing: the whole frame is lit. {mode === 'static' ? 'try an attachment in the gallery.' : 'pick an attachment above.'}</span>}
       {atts.map((a) => (
         <div key={a.id} className={cx(s.lrow, selected === a.id && s.lsel, !a.visible && s.lhidden)} onClick={() => onSelect(a.id)} data-testid={`att-row-${a.id}`}>
           <span className={s.thumb} style={{ background: `center / cover no-repeat url("${thumbUrl(a.gobo)}")` }} />
@@ -169,7 +178,7 @@ function AttachmentList({ mode, selected, onSelect }: { mode: LightStack; select
 
 // ── the light ────────────────────────────────────────────────────────────────
 
-/** Intensity, the focus ring, colour (CCT, HSI, a gradient or an animated colour), fx and the lens. */
+/** Intensity, colour (CCT, HSI, a gradient or an animated colour), fx and the lens; in live also both focus rings. */
 export function LightCard({ mode }: { mode: LightStack }) {
   const sh = useShow()
   const set = useSet()
@@ -205,7 +214,13 @@ export function LightCard({ mode }: { mode: LightStack }) {
     <Card cap="light" aside={<span className={s.dim}>{mode === 'static' ? 'lights the whole frame' : 'under the live layers'}</span>} testId={`light-${mode}`}>
       <div className={s.controls} data-testid="light-controls">
         <FillSlider label="intensity" value={light.intensity} display={pct(light.intensity)} onChange={(v, ph) => set(lp('intensity'), r2(v), ph)} />
-        <FillSlider label="focus" value={light.focus} display={light.focus > 0.95 ? 'sharp' : light.focus < 0.1 ? 'very soft' : pct(light.focus)} onChange={(v, ph) => set(lp('focus'), r2(v), ph)} />
+        {/* (§16) in static the two focus rings sit in the stack card, at their level; live shows them here */}
+        {mode === 'live' && (
+          <div className={s.two}>
+            <FillSlider label="attachment focus" value={light.focus} display={focusLabel(light.focus)} onChange={(v, ph) => set(lp('focus'), r2(v), ph)} />
+            <FillSlider label="live layer focus" value={light.backgroundFocus ?? 1} display={focusLabel(light.backgroundFocus ?? 1)} onChange={(v, ph) => set(lp('backgroundFocus'), r2(v), ph)} />
+          </div>
+        )}
         <div className={s.capRow}>
           <Cap>colour</Cap>
           <Segmented
@@ -278,7 +293,6 @@ export function LightCard({ mode }: { mode: LightStack }) {
           <FillSlider label="colour fringe" value={light.fringe} display={pct(light.fringe)} onChange={(v, ph) => set(lp('fringe'), r2(v), ph)} />
           <FillSlider label="vignette" value={light.vignette} display={pct(light.vignette)} onChange={(v, ph) => set(lp('vignette'), r2(v), ph)} />
         </div>
-        <FillSlider label="dust and haze" value={light.haze} display={pct(light.haze)} onChange={(v, ph) => set(lp('haze'), r2(v), ph)} />
         <SlideControl mode={mode} light={light} />
       </div>
     </Card>
@@ -313,8 +327,10 @@ export function AttachmentCard({ attachment }: { attachment: Attachment | null }
   const item = sh.catalog?.gobos.find((g) => g.id === a.gobo)
   const ap = (...rest: Array<string | number>) => (sh.scene ? attachmentPath(sh.scene, a.id, ...rest) : null)
   const own: ParamSchema = { ...(item?.params ?? {}) }
-  const blades = a.gobo === 'shutter'
-  const shape: ParamSchema = blades ? {} : own
+  // (§16) a window preset's geometry params get their own grouped section
+  const groups = item?.family === 'window' ? (sh.catalog?.windowParamGroups ?? []) : []
+  const geometryKeys = new Set(groups.flatMap((g) => g.params))
+  const shape: ParamSchema = Object.fromEntries(Object.entries(own).filter(([k]) => !geometryKeys.has(k)))
   const wall: ParamSchema = sh.catalog?.goboParams ?? {}
   const defaults: Record<string, unknown> = { ...Object.fromEntries(Object.entries(wall).map(([k, v]) => [k, v.default])), ...(item?.defaults ?? {}) }
   const values = { ...defaults, ...resolveParams({ ...wall, ...own }, { ...defaults, ...a.params } as Record<string, unknown>) }
@@ -330,8 +346,21 @@ export function AttachmentCard({ attachment }: { attachment: Attachment | null }
           <FillSlider label="up / down" value={a.offsetY} min={-1} max={1} step={0.01} display={`${Math.round(a.offsetY * 100)}%`} onChange={(v, ph) => set(ap('offsetY'), r3(v), ph)} />
         </div>
         <FillSlider label="blocks" value={a.opacity} display={a.opacity >= 1 ? 'all of it' : pct(a.opacity)} onChange={(v, ph) => set(ap('opacity'), r2(v), ph)} />
-        {blades && <ShutterBlades values={values} onChange={(k, v, ph) => set(ap('params', k), v, ph)} />}
         {Object.keys(shape).length > 0 && <ParamControls schema={shape} values={values} onChange={(k, v, ph) => set(ap('params', k), v, ph)} skip={['seed']} />}
+        {groups.length > 0 && (
+          <WindowGeometry
+            groups={groups}
+            schema={own}
+            values={values}
+            changed={Object.keys(a.params ?? {}).some((k) => geometryKeys.has(k))}
+            onChange={(k, v, ph) => set(ap('params', k), v, ph)}
+            onReset={() => {
+              if (!sh.scene) return
+              const params = Object.fromEntries(Object.entries(a.params ?? {}).filter(([k]) => !geometryKeys.has(k)))
+              set(ap('params'), params)
+            }}
+          />
+        )}
         <Cap>on the wall</Cap>
         <ParamControls schema={wall} values={values} onChange={(k, v, ph) => set(ap('params', k), v, ph)} />
       </div>
@@ -339,102 +368,48 @@ export function AttachmentCard({ attachment }: { attachment: Attachment | null }
   )
 }
 
-const BLADES = [
-  { key: 'top', angle: 'topAngle', n: [0, -1] },
-  { key: 'bottom', angle: 'bottomAngle', n: [0, 1] },
-  { key: 'left', angle: 'leftAngle', n: [-1, 0] },
-  { key: 'right', angle: 'rightAngle', n: [1, 0] },
-] as const
+/** (§16) which toggle a dependent window param waits for */
+const WINDOW_NEEDS: Record<string, (v: Record<string, unknown>) => boolean> = {
+  archHeight: (v) => v.arch === true,
+  spokes: (v) => v.arch === true,
+  hub: (v) => v.arch === true && Number(v.spokes) > 0,
+  diamonds: (v) => v.diamond === true,
+  jewels: (v) => v.diamond === true,
+  slatWidth: (v) => Number(v.slats) > 0,
+  vertical: (v) => Number(v.slats) > 0,
+}
 
 /**
- * The framing shutter's four blades, like on an ellipsoidal spot: drag a blade into the beam to cut it, drag its round
- * knob to angle it.
+ * (§16) A window preset's geometry, in the catalog's groups: grid, frame, arch, shape (round and perspective), lattice
+ * and blinds. A param that only matters with a toggle on (arch height with the arch) shows when the toggle is on.
  */
-export function ShutterBlades({ values, onChange }: { values: Record<string, unknown>; onChange: (k: string, v: number, ph: 'live' | 'final') => void }) {
-  const svg = useRef<SVGSVGElement>(null)
-  const drag = useRef<{ key: string; kind: 'in' | 'angle' } | null>(null)
-  const R = 40
-  const num = (k: string) => Number(values[k] ?? 0)
-  const toLocal = (e: RPointerEvent) => {
-    const r = svg.current!.getBoundingClientRect()
-    return { x: ((e.clientX - r.left) / r.width) * 120 - 60, y: ((e.clientY - r.top) / r.height) * 120 - 60 }
-  }
-  const move = (e: RPointerEvent, phase: 'live' | 'final') => {
-    const d = drag.current
-    if (!d) return
-    const p = toLocal(e)
-    const b = BLADES.find((x) => x.key === d.key)!
-    if (d.kind === 'in') {
-      const along = p.x * b.n[0] + p.y * b.n[1]
-      onChange(b.key, Math.round(Math.max(0, Math.min(0.95, (R - along) / R)) * 100) / 100, phase)
-    } else {
-      const t = b.n[0] === 0 ? p.x : p.y
-      const ang = Math.max(-45, Math.min(45, Math.round((Math.atan2(t, R) * 180) / Math.PI) * (b.n[0] + b.n[1] > 0 ? -1 : 1)))
-      onChange(b.angle, ang, phase)
-    }
-  }
+export function WindowGeometry({ groups, schema, values, changed, onChange, onReset }: {
+  groups: Array<{ id: string; name: string; params: string[] }>
+  schema: ParamSchema
+  values: Record<string, unknown>
+  changed: boolean
+  onChange: (k: string, v: unknown, ph: 'live' | 'final') => void
+  onReset: () => void
+}) {
+  const [open, setOpen] = useState(groups[0]?.id ?? '')
+  const group = groups.find((g) => g.id === open) ?? groups[0]
+  const keys = (group?.params ?? []).filter((k) => schema[k] && (WINDOW_NEEDS[k]?.(values) ?? true))
   return (
-    <div className={s.blades}>
-      <svg
-        ref={svg}
-        viewBox="-60 -60 120 120"
-        className={s.bladeSvg}
-        onPointerMove={(e) => move(e, 'live')}
-        onPointerUp={(e) => {
-          move(e, 'final')
-          drag.current = null
-        }}
-        data-testid="shutter-blades"
-        aria-label="framing shutter blades: drag a blade into the beam, drag its knob to angle it"
-      >
-        <circle cx={0} cy={0} r={R} className={s.beam} />
-        {BLADES.map((b) => {
-          const into = num(b.key)
-          const ang = (num(b.angle) * Math.PI) / 180
-          const edge = R - into * R
-          // the blade: a wide plate whose inner edge sits `edge` from the centre, turned about the centre by its angle
-          const c = Math.cos(ang), sn = Math.sin(ang)
-          const rot = (x: number, y: number) => `${x * c - y * sn},${x * sn + y * c}`
-          const n = b.n
-          const t = [-n[1], n[0]]
-          const pts = [
-            [n[0] * edge + t[0] * 70, n[1] * edge + t[1] * 70],
-            [n[0] * edge - t[0] * 70, n[1] * edge - t[1] * 70],
-            [n[0] * 80 - t[0] * 70, n[1] * 80 - t[1] * 70],
-            [n[0] * 80 + t[0] * 70, n[1] * 80 + t[1] * 70],
-          ]
-          const knob = [n[0] * (edge + 6) + t[0] * 34, n[1] * (edge + 6) + t[1] * 34]
-          const [kx, ky] = rot(knob[0], knob[1]).split(',').map(Number)
-          return (
-            <g key={b.key}>
-              <polygon
-                points={pts.map(([x, y]) => rot(x, y)).join(' ')}
-                className={s.blade}
-                onPointerDown={(e) => {
-                  ;(e.currentTarget.ownerSVGElement as SVGSVGElement).setPointerCapture(e.pointerId)
-                  drag.current = { key: b.key, kind: 'in' }
-                }}
-                data-testid={`blade-${b.key}`}
-              >
-                <title>{`${b.key} blade: drag it into the beam`}</title>
-              </polygon>
-              <circle
-                cx={kx}
-                cy={ky}
-                r={4}
-                className={s.knob}
-                onPointerDown={(e) => {
-                  ;(e.currentTarget.ownerSVGElement as SVGSVGElement).setPointerCapture(e.pointerId)
-                  drag.current = { key: b.key, kind: 'angle' }
-                }}
-              >
-                <title>{`${b.key} blade angle: drag to tilt it`}</title>
-              </circle>
-            </g>
-          )
-        })}
-      </svg>
-      <span className={s.dim}>drag a blade into the beam, drag its knob to angle it</span>
+    <div className={s.windowGeo} data-testid="window-geometry">
+      <div className={s.windowHead}>
+        <Cap>window</Cap>
+        <Pill size="sm" onClick={onReset} disabled={!changed} title="put the preset's geometry back" data-testid="window-reset">
+          reset to preset
+        </Pill>
+      </div>
+      <div className={s.catRow} role="tablist" aria-label="window geometry">
+        {groups.map((g) => (
+          <Pill key={g.id} size="sm" on={g.id === group?.id} onClick={() => setOpen(g.id)} role="tab" aria-selected={g.id === group?.id} data-testid={`window-group-${g.id}`}>
+            {g.name}
+          </Pill>
+        ))}
+      </div>
+      <ParamControls schema={Object.fromEntries(keys.map((k) => [k, schema[k]]))} values={values} onChange={onChange} />
     </div>
   )
 }
@@ -469,6 +444,11 @@ export function PathEditor({ motion, portrait, onChange, now }: { motion: Motion
   const move = (e: RPointerEvent, ph: 'live' | 'final') => {
     const k = drag.current
     if (!k) return
+    // a move without a button (a wheel scroll under a still pointer) ends the drag instead of moving a handle
+    if (ph === 'live' && !pressed(e)) {
+      drag.current = null
+      return
+    }
     onChange({ ...cur.current, preset: '', [k]: at(e) }, ph)
   }
   const f = toPx(motion.from), t = toPx(motion.to)
@@ -501,6 +481,8 @@ export function PathEditor({ motion, portrait, onChange, now }: { motion: Motion
         move(e, 'final')
         drag.current = null
       }}
+      onPointerCancel={() => (drag.current = null)}
+      onLostPointerCapture={() => (drag.current = null)}
       onDoubleClick={() => onChange({ ...cur.current, preset: '', via: cur.current.via ? null : { x: (cur.current.from.x + cur.current.to.x) / 2, y: (cur.current.from.y + cur.current.to.y) / 2 - 0.1 } }, 'final')}
       data-testid="path-editor"
       aria-label="the motion path: drag from and to, drag the middle point to curve it, double click to add or remove it"
@@ -618,8 +600,9 @@ export function StaticLightPanel() {
   const att = atts.find((a) => a.id === sel) ?? atts[atts.length - 1] ?? null
   return (
     <div className={s.split}>
-      <AttachmentBrowser mode="static" selected={att?.id ?? null} onSelect={setSel} />
+      <StaticGallery selected={att?.id ?? null} onSelect={setSel} />
       <div className={s.stackCol}>
+        <StaticStack selected={att?.id ?? null} onSelect={setSel} />
         <LightCard mode="static" />
         {att && <AttachmentCard attachment={att} />}
         {sh.scene && <MotionCard key={att?.id ?? 'light'} mode="static" attachment={att} />}

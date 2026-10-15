@@ -70,7 +70,7 @@ import PMTestSupport
         try db.enqueue(sceneId: "scn_desk", .applyPreset(mode: "static", backdrop: try JSONValue(encoding: p.backdrop)))
         let s = try db.read(Queries.active)
         #expect(s.scene?.mode == "static")
-        #expect(s.scene?.attachments("static").map(\.gobo) == ["window-4"])
+        #expect(s.scene?.attachments("static").map(\.gobo) == ["plate-grid-window"])
         #expect(s.scene?.light("static")?.colorLayer?.ref == "kelvin-cycle")
         #expect(s.sceneDoc?.value(at: "/backdrop/static/layers") == [])
         #expect(try db.confirmedScene("scn_desk")?.value(at: "/mode") == "static")

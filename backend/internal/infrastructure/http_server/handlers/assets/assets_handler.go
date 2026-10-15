@@ -136,14 +136,20 @@ func (h *Handler) catalogFile(c echo.Context) error {
 }
 
 // catalogThumb serves /catalog/thumbs/<id>.png: the built-in thumbnail of a gobo or procedural layer (protocol §15),
-// the same file as /catalog/assets/thumbs/<id>.png.
+// the same file as /catalog/assets/thumbs/<id>.png, and (§16) /catalog/thumbs/<id>-anim.jpg, a live layer's
+// animated strip.
 func (h *Handler) catalogThumb(c echo.Context) error {
 	file := c.Param("file")
-	id, ok := strings.CutSuffix(file, ".png")
+	ext := ".png"
+	id, ok := strings.CutSuffix(file, ext)
+	if !ok {
+		ext = "-anim.jpg"
+		id, ok = strings.CutSuffix(file, ext)
+	}
 	if !ok || id == "" || strings.ContainsAny(id, "/\\") || strings.HasPrefix(id, ".") {
 		return app_errors.NotFound("Thumbnail %s does not exist.", file)
 	}
-	name := "thumbs/" + id + ".png"
+	name := "thumbs/" + id + ext
 	if !fs.ValidPath(name) {
 		return app_errors.NotFound("Thumbnail %s does not exist.", file)
 	}

@@ -26,23 +26,23 @@ const outRoute = createRoute({
   validateSearch: (s: Record<string, unknown>): OutSearch => ({ ...(str(s.headless) ? { headless: str(s.headless) } : {}), ...(str(s.token) ? { token: str(s.token) } : {}) }),
 })
 
-export type ViewSearch = { token?: string }
+export type ViewSearch = { token?: string; headless?: string }
 // (§15) the viewer: what the projector shows, read only, in its own window
 const viewRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/view',
   component: ViewPage,
-  validateSearch: (s: Record<string, unknown>): ViewSearch => (str(s.token) ? { token: str(s.token) } : {}),
+  validateSearch: (s: Record<string, unknown>): ViewSearch => ({ ...(str(s.token) ? { token: str(s.token) } : {}), ...(str(s.headless) ? { headless: str(s.headless) } : {}) }),
 })
 
-export type PreviewSearch = { token?: string; w?: string; mode?: string; layer?: string; scene?: string }
+export type PreviewSearch = { token?: string; w?: string; mode?: string; layer?: string; scene?: string; try?: string }
 const previewRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/preview',
   component: PreviewPage,
   validateSearch: (s: Record<string, unknown>): PreviewSearch => {
     const out: PreviewSearch = {}
-    for (const k of ['token', 'w', 'mode', 'layer', 'scene'] as const) {
+    for (const k of ['token', 'w', 'mode', 'layer', 'scene', 'try'] as const) {
       const v = str(s[k])
       if (v) out[k] = v
     }

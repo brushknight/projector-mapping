@@ -204,7 +204,7 @@ function SetUpMenu() {
       {(close) => (
         <div className={s.setup} data-testid="setup-menu">
           <Cap>1 · reference: a photo from the lens, or the test grid</Cap>
-          {setup ? <SetupPanel hub={ed.hub} setup={setup} onError={(m) => ed.toast(m, { bad: true })} /> : <span className={s.dim}>no setup</span>}
+          {setup ? <SetupPanel hub={ed.hub} setup={setup} onError={(m) => ed.toast(m, { bad: true })} onDone={(m) => ed.toast(m)} /> : <span className={s.dim}>no setup</span>}
           <Cap>calibration</Cap>
           <div className={s.setupRow}>
             <Pill

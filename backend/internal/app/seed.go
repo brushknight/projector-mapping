@@ -97,17 +97,17 @@ func StarterPresets(cat *catalog.Catalog) []scene.Preset {
 		if (mode == scene.ModeStatic || mode == scene.ModeLive) && st.Attachments == nil {
 			st.Attachments = []scene.Attachment{}
 		}
-		return scene.Preset{ID: id, Name: name, Mode: mode, Backdrop: st, CreatedAt: t.Add(time.Duration(i) * time.Second)}
+		return scene.Preset{ID: id, Name: name, Mode: mode, Backdrop: st, CreatedAt: t.Add(time.Duration(i) * time.Second), Format: scene.FormatVersion}
 	}
 	return []scene.Preset{
 		mk("pre_golden", "golden hour", "static", 0, scene.LayerStack{Light: stackLight(0.85, 0.38, 3200, 0.04),
-			Attachments: []scene.Attachment{att("att_golden", "window", -22)}}),
+			Attachments: []scene.Attachment{att("att_golden", "plate-grid-window", -22)}}),
 		mk("pre_office", "office am", "static", 1, scene.LayerStack{Light: stackLight(0.75, 0.55, 5600, 0),
-			Attachments: []scene.Attachment{att("att_office", "blinds", -10)}}),
+			Attachments: []scene.Attachment{att("att_office", "plate-slat-blinds", -10)}}),
 		mk("pre_noir", "noir blinds", "static", 2, scene.LayerStack{Light: stackLight(0.9, 0.85, 4300, -0.05),
-			Attachments: []scene.Attachment{att("att_noir", "blinds", -30)}}),
+			Attachments: []scene.Attachment{att("att_noir", "plate-blinds", -30)}}),
 		mk("pre_breezy", "breezy window", "live", 3, scene.LayerStack{Light: stackLight(0.8, 0.45, 4000, 0),
-			Attachments: []scene.Attachment{att("att_breezy", "window", -18)},
+			Attachments: []scene.Attachment{att("att_breezy", "plate-tall-grid-window", -18)},
 			Layers:      []scene.Layer{layer("lay_breezy_tree", "procedural", "tree-sway", "tree sway", "multiply", 0.88, light(0.8, 0.62, -22, 1.4, 3200, "none"), proc("tree-sway"))}}),
 		mk("pre_storm", "storm", "live", 4, scene.LayerStack{Layers: []scene.Layer{
 			layer("lay_clouds", "procedural", "clouds", "clouds", "normal", 0.9, light(0.5, 0.7, 0, 1, 7000, "none"), proc("clouds")),

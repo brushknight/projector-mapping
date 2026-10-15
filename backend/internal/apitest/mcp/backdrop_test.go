@@ -41,14 +41,17 @@ func TestBackdropToolsList(t *testing.T) {
 	}
 
 	text, res := call(t, s, "catalog_get", nil)
-	for _, want := range []string{"window-4", "sun-lr", "static-window", "hue-cycle", "tree-sway", "flowers", `"videos": []`, `"sounds": []`, "throw"} {
+	for _, want := range []string{"plate-grid-window", "sun-lr", "static-window", "hue-cycle", "tree-sway", "flowers", `"videos": []`, `"sounds": []`, "throw"} {
 		if res.IsError || !strings.Contains(text, want) {
 			t.Fatalf("catalog_get misses %s: %s", want, text[:min(len(text), 400)])
 		}
 	}
 	text, res = call(t, s, "catalog_get", map[string]any{"section": "gobos"})
-	if res.IsError || !strings.Contains(text, "blinds-fine") || strings.Contains(text, "hue-cycle") {
-		t.Fatalf("catalog_get gobos %s", text[:min(len(text), 300)])
+	// (§16) plates with their reference photo; the window params once, the window presets with their geometry
+	for _, want := range []string{"plate-fine-horizontal-lines", "set-b-17-paper-plates.png", `"family": "window"`, `"windowParamGroups"`, `"slatWidth"`, `"categories"`} {
+		if res.IsError || !strings.Contains(text, want) || strings.Contains(text, "hue-cycle") {
+			t.Fatalf("catalog_get gobos misses %s: %s", want, text[:min(len(text), 300)])
+		}
 	}
 	if text, res = call(t, s, "catalog_get", map[string]any{"section": "lasers"}); !res.IsError || !strings.Contains(text, "section must be") {
 		t.Fatalf("bad section %s", text)
@@ -91,7 +94,7 @@ func TestBackdropToolsDraft(t *testing.T) {
 		"in your draft", "focus 0.50", "generator kelvin-cycle")
 	bad("light_set", map[string]any{"focus": 3}, "focus")
 	bad("light_set", map[string]any{"colorLayer": map[string]any{"kind": "generator", "ref": "disco"}}, "colorGenerators")
-	text := ok("attachment_add", map[string]any{"gobo": "blinds", "opacity": 0.6, "motion": "drift", "params": map[string]any{"throw": 0.4}}, "in your draft")
+	text := ok("attachment_add", map[string]any{"gobo": "plate-blinds", "opacity": 0.6, "motion": "drift", "params": map[string]any{"throw": 0.4}}, "in your draft")
 	id := attID.FindString(text)
 	if id == "" {
 		t.Fatalf("no attachment id in %s", text)
@@ -100,10 +103,10 @@ func TestBackdropToolsDraft(t *testing.T) {
 	plate := attID.FindString(ok("attachment_add", map[string]any{"gobo": "plate-snowflakes", "params": map[string]any{"field": "tile"}}, "in your draft"))
 	ok("attachment_remove", map[string]any{"id": plate}, plate)
 	bad("attachment_add", map[string]any{"gobo": "plate-snowflakes", "params": map[string]any{"field": "square"}}, "field")
-	ok("catalog_get", map[string]any{"section": "gobos"}, "plate-sunburst", "inspired by Amaran AS-GB-M MO05", "\"plates\"")
+	ok("catalog_get", map[string]any{"section": "gobos"}, "plate-sunburst", "amaran-as-gb-m-set1.png, MO05", "\"beams\"")
 	bad("attachment_add", map[string]any{"gobo": "lasers"}, "catalog_get gobos")
-	bad("attachment_add", map[string]any{"gobo": "blinds", "scale": 50}, "scale")
-	bad("attachment_add", map[string]any{"gobo": "blinds", "motion": "spin"}, "sun-lr")
+	bad("attachment_add", map[string]any{"gobo": "plate-blinds", "scale": 50}, "scale")
+	bad("attachment_add", map[string]any{"gobo": "plate-blinds", "motion": "spin"}, "sun-lr")
 	ok("attachment_update", map[string]any{"id": id, "rotation": 15, "params": map[string]any{"skew": -0.3}}, "Updated attachment "+id)
 	bad("attachment_update", map[string]any{"id": "att_nope"}, "does not exist")
 	ok("motion_set", map[string]any{"target": "light", "preset": "sun-lr"}, "The static light moves (sun-lr, 600 s per pass")
@@ -113,7 +116,8 @@ func TestBackdropToolsDraft(t *testing.T) {
 	bad("motion_set", map[string]any{"target": "light", "easing": "bounce"}, "easing")
 	ok("backdrop_set", map[string]any{"mode": "color", "layers": []any{map[string]any{"kind": "generator", "ref": "aurora"}, map[string]any{"kind": "gradient", "ref": "ember", "opacity": 0.5}}},
 		"The color stack is aurora")
-	bad("backdrop_set", map[string]any{"mode": "static", "layers": []any{}}, "gobo_set")
+	// (§16) the static stack takes background layers under the attachments, but no photo
+	bad("backdrop_set", map[string]any{"mode": "static", "layers": []any{map[string]any{"kind": "photo", "ref": "flowers"}}}, "background layers")
 	bad("backdrop_set", map[string]any{"mode": "live", "layers": []any{map[string]any{"kind": "gobo", "ref": "window"}}}, "attachment_add")
 	bad("backdrop_set", map[string]any{"mode": "live", "layers": []any{map[string]any{"kind": "procedural", "ref": "volcano"}}}, "catalog")
 	ok("mode_set", map[string]any{"mode": "color"}, "color mode, in your draft")
@@ -138,7 +142,7 @@ func TestBackdropToolsDraft(t *testing.T) {
 		t.Fatalf("draft static %v mode %v", st, view["mode"])
 	}
 	a := atts[1].(map[string]any)
-	if a["id"] != id || a["gobo"] != "blinds" || a["opacity"] != 0.6 || a["rotation"] != float64(15) || a["params"].(map[string]any)["throw"] != 0.4 ||
+	if a["id"] != id || a["gobo"] != "plate-blinds" || a["opacity"] != 0.6 || a["rotation"] != float64(15) || a["params"].(map[string]any)["throw"] != 0.4 ||
 		a["params"].(map[string]any)["skew"] != -0.3 || a["motion"].(map[string]any)["on"] != false || a["motion"].(map[string]any)["preset"] != "drift" {
 		t.Fatalf("attachment %v", a)
 	}
@@ -157,14 +161,15 @@ func TestBackdropToolsDraft(t *testing.T) {
 	}
 
 	// the quick pick keeps the first attachment's id and motion; remove takes one away
-	ok("gobo_set", map[string]any{"gobo": "window-4"}, "one window 4-pane (att_window)")
+	ok("gobo_set", map[string]any{"gobo": "plate-arched-window", "params": map[string]any{"rows": 6, "arch": false}}, "one arched window (att_window)")
 	view = h.Do("GET", "/api/v1/drafts/"+draftID+"/scene", nil).Map(t)
 	atts = backdropOf(t, view, "static")["attachments"].([]any)
-	if len(atts) != 1 || atts[0].(map[string]any)["gobo"] != "window-4" || atts[0].(map[string]any)["motion"].(map[string]any)["preset"] != "sun-lr" {
+	if len(atts) != 1 || atts[0].(map[string]any)["gobo"] != "plate-arched-window" || atts[0].(map[string]any)["motion"].(map[string]any)["preset"] != "sun-lr" ||
+		atts[0].(map[string]any)["params"].(map[string]any)["rows"] != float64(6) || atts[0].(map[string]any)["params"].(map[string]any)["arch"] != false {
 		t.Fatalf("after gobo_set %v", atts)
 	}
 	ok("attachment_remove", map[string]any{"id": "att_window"}, "Removed attachment att_window")
-	ok("attachment_add", map[string]any{"stack": "live", "gobo": "leaves-light"}, "to the live light")
+	ok("attachment_add", map[string]any{"stack": "live", "gobo": "plate-vine-leaves"}, "to the live light")
 	ok("preset_apply", map[string]any{"preset": "Ember"}, "color mode is on air, in your draft")
 	bad("preset_apply", map[string]any{"preset": "disco"}, "golden hour")
 	bad("mode_set", map[string]any{"mode": "loud"}, "mode must be")
@@ -223,7 +228,7 @@ func TestBackdropToolsLive(t *testing.T) {
 		t.Fatalf("motion %v (before %d)", m, before)
 	}
 	// a stack in another mode says how to show it
-	text, _ = call(t, s, "attachment_add", map[string]any{"stack": "live", "gobo": "blinds"})
+	text, _ = call(t, s, "attachment_add", map[string]any{"stack": "live", "gobo": "plate-blinds"})
 	if !strings.Contains(text, "the wall shows static mode, mode_set live shows it") {
 		t.Fatalf("attachment_add live %s", text)
 	}
@@ -240,7 +245,7 @@ func TestBackdropToolsLive(t *testing.T) {
 		t.Fatalf("drafts %v", l)
 	}
 	evs := string(h.Do("GET", "/api/v1/agents/sessions/"+sessID+"/events", nil).Body)
-	for _, w := range []string{"light_set", "motion_set · att_window", "attachment_add · live · blinds", "preset_apply · storm"} {
+	for _, w := range []string{"light_set", "motion_set · att_window", "attachment_add · live · plate-blinds", "preset_apply · storm"} {
 		if !strings.Contains(evs, w) {
 			t.Fatalf("events miss %q: %s", w, evs)
 		}

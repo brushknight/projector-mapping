@@ -11,11 +11,11 @@ import { resolveParams } from '../entities/effect/params'
 import type { EffectDef, ParamSchema } from '../entities/effect/types'
 import { allLayers, onAirPlan } from '../entities/scene/lib'
 import type { Attachment, ContentLayer, Layer, LayerStack, Point, Scene, SceneObject, StackLight, Surface } from '../entities/scene/types'
-import { attachmentUniforms } from './attachments'
+import { attachmentParams, attachmentUniforms } from './attachments'
 import { GENERATOR_IDS, GENERATORS } from './generators'
 import { sampleMotion } from './motion'
 import { COLOR_FS, LIGHT_FS, MASK_FS, SHAPE } from './shaders/light'
-import { plateCanvas, plateDef } from './plates'
+import { PLATE_TEXTURE, plateCanvas, plateDef, plateKey } from './plates'
 import { atlasAffines, resolveAtlas, type Affine } from './atlas'
 import { CONTENT_FS, MAX_STOPS } from './shaders/content'
 import { BUILTINS } from './effects/builtins'
@@ -24,6 +24,7 @@ import { BUILTIN_SCHEMAS } from './effects/builtinSchemas'
 import { JsEffects } from './effects/jsRuntime'
 import { cleanLog, MAX_OUTLINE, paramUniforms, paramValue, wrapEffect, type ParamUniform } from './effects/wrap'
 import { fbm1 } from './math/hash'
+import { windState } from './wind'
 import { lightFx } from './fx'
 import { bindTarget, createProgram, DynMesh, fullscreenVao, GLProgram, ShaderError, TargetPool, type Target } from './gl/gl'
 import { hexToRgb, kelvinToRgb, lightRgb, type RGB } from './math/color'
@@ -39,6 +40,12 @@ import type { EffectError, RenderInput, RendererOptions } from './types'
 import { activeYouTube, youtubeIdOfRef, type YouTubeActive } from './youtube'
 
 const BLEND_CODE = { normal: 0, multiply: 1, screen: 2, add: 3 } as const
+/** (§16) how many parametric window drawings keep a texture */
+const WINDOW_TEXTURES = 6
+/** (plates) how many fixed plates keep a texture */
+const PLATE_TEXTURES = 12
+/** (§16) frames a window geometry holds before its draft is redrawn at full size */
+const DRAFT_FRAMES = 8
 
 /** (§15) a static or live stack drawn with the light model: its light and attachments. */
 interface LightPlan {
@@ -98,6 +105,15 @@ export function photoUrl(ref: string, resolve?: (ref: string) => string): string
   return `/catalog/assets/scenery/${ref}.jpg`
 }
 
+/**
+ * The blur radius in px of a focus ring (0 sharp … 1 sharp is focus 1): `(1 − focus)^1.5 × 60` px at 1080 p (`k` is the
+ * target's short side / 1080). Focus 1 is exactly 0: no blur pass at all.
+ */
+export function focusRadius(focus: number, k: number): number {
+  const f = Math.max(0, Math.min(1, focus))
+  return (1 - f) ** 1.5 * 60 * k
+}
+
 /** The scene framebuffer size: the authored size, capped on the longest side. */
 export function sceneTargetSize(input: Pick<RenderInput, 'setup'>, maxSceneSize?: number): { width: number; height: number } {
   const s = sceneSizeOf(input.setup)
@@ -130,7 +146,9 @@ export class Renderer {
   private videos: VideoCache
   private gridCanvases = new Map<string, OffscreenCanvas | HTMLCanvasElement>()
   /** (plates) mask textures of metal plates, rasterized once per plate */
-  private plateTex = new Map<string, WebGLTexture>()
+  private plateTex = new Map<string, { tex: WebGLTexture; size: number; frame: number }>()
+  /** frames rendered, for the window drafts (the engine reads no clock) */
+  private frames = 0
   /** object atlas targets drawn in this render call */
   private objFrame = new Map<string, SurfaceExtra['atlas'] | null>()
   private effectProgs = new Map<string, EffectProgram>()
@@ -216,6 +234,7 @@ export class Renderer {
 
   render(input: RenderInput) {
     const gl = this.gl
+    this.frames++
     const S = sceneTargetSize(input, this.opts.maxSceneSize)
     const scene = this.pool.get('scene', S.width, S.height, true)
     gl.disable(gl.DEPTH_TEST)
@@ -403,7 +422,7 @@ export class Renderer {
     this.images.dispose()
     this.videos.dispose()
     this.dyn.dispose()
-    for (const t of this.plateTex.values()) gl.deleteTexture(t)
+    for (const t of this.plateTex.values()) gl.deleteTexture(t.tex)
     this.plateTex.clear()
     this.js.dispose()
     this.mesh.dispose()
@@ -448,6 +467,14 @@ export class Renderer {
         // a see-through frame keeps the coverage in alpha, so the player behind shows only where nothing is drawn
         gl.blendFuncSeparate(gl.ONE, gl.ONE_MINUS_SRC_ALPHA, this.alphaAcc ? gl.ONE : gl.ZERO, this.alphaAcc ? gl.ONE_MINUS_SRC_ALPHA : gl.ONE)
     }
+  }
+
+  /**
+   * A focus blur of `src` by `radius` px (see focusRadius): none at sharp focus, so a sharp mask reaches the output at
+   * full resolution. Kept apart so every focus ring (attachments, background) blurs the same way.
+   */
+  focusBlur(src: Target, radius: number, key: string): Target {
+    return radius < 0.75 ? src : this.blur(src, radius, key)
   }
 
   /** Dual-Kawase blur of `src` by roughly `radius` px; returns the blurred target (or src when tiny). */
@@ -511,13 +538,17 @@ export class Renderer {
     this.alphaAcc = this.seeThrough
     // (§15) the light and its attachments first; live shadows (multiply) join the mask
     const masks = light ? layers.filter((l) => l.visible && l.opacity > 0 && l.blend === 'multiply' && l.kind === 'procedural') : []
+    // (§16) the static stack's layers are its background: they colour the light under the attachments, inside it
+    const background = light?.which === 'static' ? layers : []
     if (light) {
       this.drawLightStack(input, light, masks, target, k)
       drew = true
     }
+    // (§16) in live, the live layer focus (backgroundFocus) softens the layers drawn over the light too
+    const liveRadius = light?.which === 'live' ? focusRadius(light.light.backgroundFocus ?? 1, k) : 0
     for (const layer of layers) {
       if (input.layerOnly ? layer.id !== input.layerOnly : !layer.visible) continue
-      if (masks.includes(layer)) continue
+      if (masks.includes(layer) || background.includes(layer)) continue
       if (layer.opacity <= 0) continue
       const lt = this.pool.get('layer', target.width, target.height)
       bindTarget(gl, lt)
@@ -526,7 +557,7 @@ export class Renderer {
       this.setBlend('none')
       const radius = this.drawLayer(input, layer, lt, k)
       if (radius === null) continue
-      const out = this.blur(lt, radius, 'blur')
+      const out = this.blur(lt, Math.max(radius, liveRadius), 'blur')
       bindTarget(gl, target)
       this.setBlend(layer.blend)
       this.blit(out.tex)
@@ -552,8 +583,9 @@ export class Renderer {
   }
 
   /**
-   * (§15) Draws a light stack into `target`: the colour layer, times the mask of every attachment (and the live
-   * shadows), blurred by the one focus ring, with lens fringe, vignette, dust and haze, slid inside the frame.
+   * (§15, §16) Draws a light stack into `target`: the colour (the static background layers, the colour layer or the
+   * light's colour, softened by the background focus) times the mask of every attachment (softened by the attachment
+   * focus) and the live shadows (softened by the live layer focus), with lens fringe and vignette, slid in the frame.
    */
   private drawLightStack(input: RenderInput, plan: LightPlan, shadows: Layer[], target: Target, k: number) {
     const gl = this.gl
@@ -565,8 +597,9 @@ export class Renderer {
     const W = target.width, H = target.height
     const aspect = W / H
     const seed = hashString01(scene.id + plan.which)
-    // the mask is blurred anyway: past 1280 px it renders smaller (cheaper on big outputs), the blur scales with it
-    const ms = Math.min(1, 1280 / Math.max(W, H))
+    // the mask renders at the target's full size (a smaller mask, upscaled, is what made sharp plates look pixelated on
+    // a 1080p projector); only past 4096 px does it render smaller, and the blur scales with it
+    const ms = Math.min(1, 4096 / Math.max(W, H))
     const MW = Math.max(1, Math.round(W * ms)), MH = Math.max(1, Math.round(H * ms))
 
     // 1. the mask: white, times each attachment
@@ -581,36 +614,49 @@ export class Renderer {
       if (kelvin === null && am.kelvin !== null) kelvin = am.kelvin
       this.drawAttachment(input, att, mask, aspect, lm, am, seed)
     }
-    // the live shadows (tree sway, clouds…) block light the same way
-    for (const layer of shadows) {
-      const lt = this.pool.get('lshadow', MW, MH)
-      bindTarget(gl, lt)
-      gl.clearColor(0, 0, 0, 0)
-      gl.clear(gl.COLOR_BUFFER_BIT)
-      this.setBlend('none')
-      const own = this.drawLayer(input, layer, lt, k * ms)
-      if (own === null) continue
-      // the focus ring blurs the whole mask below; a shadow keeps a little of its own softness only
-      const out = this.blur(lt, own * 0.35, 'lshadowblur')
-      bindTarget(gl, mask)
-      this.setBlend('multiply')
-      this.blit(out.tex)
-    }
     this.setBlend('none')
 
-    // 2. one focus ring for the whole picture
-    const focus = Math.max(0, Math.min(1, light.focus ?? 0.7))
-    const radius = ((1 - focus) ** 1.5 * 60 + 0.6) * k
-    const focused = this.blur(mask, radius * ms, 'lfocus')
-    const haze = Math.max(0, Math.min(1, light.haze ?? 0))
+    // 2. the attachment focus ring (§16: 1, the default, is sharp: no blur at all)
+    const focus = Math.max(0, Math.min(1, light.focus ?? 1))
+    const radius = focusRadius(focus, k)
+    const focused = this.focusBlur(mask, radius * ms, 'lfocus')
     const fringe = Math.max(0, Math.min(1, light.fringe ?? 0))
-    // the wide blur feeds haze's scattered light; without haze the fringe's soft term uses the focused mask
-    const scatter = haze > 0.001 ? this.blur(mask, Math.max(radius * 2.5, 70 * k) * ms, 'lscatter') : focused
+    // (§16) the live shadows (tree sway, clouds…) block light the same way, softened by the live layer focus
+    // (backgroundFocus) on their own and multiplied over the focused attachments, so each ring is independent
+    const bgRadius = focusRadius(light.backgroundFocus ?? 1, k)
+    let maskOut = focused
+    if (shadows.length) {
+      if (maskOut === mask) {
+        // the sharp mask is the pooled mask itself: copy it so the shadows multiply into a target of their own
+        maskOut = this.pool.get('lmaskout', MW, MH)
+        bindTarget(gl, maskOut)
+        this.setBlend('none')
+        this.blit(mask.tex)
+      }
+      for (const layer of shadows) {
+        const lt = this.pool.get('lshadow', MW, MH)
+        bindTarget(gl, lt)
+        gl.clearColor(0, 0, 0, 0)
+        gl.clear(gl.COLOR_BUFFER_BIT)
+        this.setBlend('none')
+        const own = this.drawLayer(input, layer, lt, k * ms)
+        if (own === null) continue
+        const out = this.focusBlur(lt, Math.max(own * 0.35, bgRadius) * ms, 'lshadowblur')
+        bindTarget(gl, maskOut)
+        this.setBlend('multiply')
+        this.blit(out.tex)
+      }
+      this.setBlend('none')
+    }
 
-    // 3. the colour layer
+    // 3. the colour: (§16) the static stack's background layers when it has any, else the colour layer or the
+    // light's own colour; the static background is softened by the background focus
     const color = this.pool.get('lcolor', W, H)
+    const bg = plan.which === 'static' ? (plan.stack.layers ?? []).filter((l) => l.visible && l.opacity > 0) : []
     bindTarget(gl, color)
-    this.drawColorLayer(input, light, kelvin, W, H)
+    if (bg.length) this.drawBackgroundLayers(input, bg, color, k)
+    else this.drawColorLayer(input, light, kelvin, W, H)
+    const colorOut = plan.which === 'static' ? this.focusBlur(color, bgRadius, 'lcolorblur') : color
 
     // 4. compose onto the target, slid inside the frame
     const fx = lightFx(light.fx?.kind, input.clock, light.fx?.speed ?? 0.35, Math.floor(seed * 1000))
@@ -618,18 +664,14 @@ export class Renderer {
     bindTarget(gl, target)
     this.setBlend('normal')
     const p = this.lightProg.use()
-    p.tex('u_mask', 0, focused.tex)
-    p.tex('u_scatter', 1, scatter.tex)
-    p.tex('u_color', 2, color.tex)
+    p.tex('u_mask', 0, maskOut.tex)
+    p.tex('u_color', 2, colorOut.tex)
     p.f2('u_res', W, H)
     p.f2('u_slide', (light.slide?.x ?? 0) + lm.x, (light.slide?.y ?? 0) + lm.y)
     p.f1('u_slideSoft', (radius * 0.5) / H)
     p.f3('u_gain', inten * fx.rgb[0], inten * fx.rgb[1], inten * fx.rgb[2])
     p.f1('u_fringe', fringe)
     p.f1('u_vignette', Math.max(0, Math.min(1, light.vignette ?? 0)))
-    p.f1('u_haze', haze)
-    p.f1('u_clock', input.clock)
-    p.f1('u_seed', seed * 10)
     p.f1('u_opacity', 1)
     this.drawFullscreen()
     gl.activeTexture(gl.TEXTURE2)
@@ -670,10 +712,14 @@ export class Renderer {
     p.f1('u_seed', (hashString01(att.id) + seed) * 10)
     p.f4('u_gp1', ...u.gp1)
     p.f4('u_gp2', ...u.gp2)
-    const plate = u.shape === SHAPE.plate ? this.plateTexture(att.gobo) : null
+    const plate = u.shape === SHAPE.plate ? this.plateTexture(att.gobo, attachmentParams(input.catalog, att)) : null
     if (u.shape === SHAPE.plate) {
       if (!plate) return
       p.tex('u_plate', 0, plate)
+      // only a tiled plate repeats: any other plate clamps, so its edge never pulls texels from the opposite side
+      const wrap = u.gp0[0] === 3 ? gl.REPEAT : gl.CLAMP_TO_EDGE
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wrap)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, wrap)
       p.f4('u_gp0', u.gp0[0], u.gp0[1], aspect, u.gp0[3])
     } else {
       p.f4('u_gp0', ...u.gp0)
@@ -685,33 +731,88 @@ export class Renderer {
   }
 
   /**
-   * (plates) A plate's mask texture: its vector cut-outs rasterized once (2048 px, one channel, mipmapped, repeating
-   * for tile mode). Null for an unknown plate. Kept for the renderer's life (a few MB each).
+   * (plates) A plate's mask texture: its vector cut-outs rasterized into one channel, mipmapped, trilinear and
+   * anisotropic. PLATE_TEXTURE (4096) px on outputs of 1200 px and up (a projector), 2048 below (previews, tiles), never
+   * past the GPU's limit. Null for an unknown plate. The newest PLATE_TEXTURES fixed plates and WINDOW_TEXTURES window
+   * geometries keep a texture (each is about 21 MB at 4096 with its mipmaps). While a window's geometry changes from
+   * frame to frame (a slider drag) it draws a quick 1024 px draft, then redraws at full size once the geometry has held
+   * for DRAFT_FRAMES frames.
    */
-  private plateTexture(id: string): WebGLTexture | null {
-    const have = this.plateTex.get(id)
-    if (have) return have
+  private plateTexture(id: string, params: Record<string, unknown>): WebGLTexture | null {
     const def = plateDef(id)
     if (!def) return null
+    const key = plateKey(def, params)
+    const full = this.plateSize()
+    const have = this.plateTex.get(key)
+    if (have && have.size === full) {
+      this.plateTex.delete(key)
+      this.plateTex.set(key, have)
+      return have.tex
+    }
+    if (have && this.frames - have.frame < DRAFT_FRAMES) {
+      // a draft that has not held long enough yet: keep it, ask for another frame to finish it
+      this.onInvalidate?.()
+      return have.tex
+    }
     const gl = this.gl
-    const tex = gl.createTexture()!
+    // a window whose geometry changed within the last few frames is being dragged: draft it small and fast
+    const dragging = !!def.window && !have && [...this.plateTex.entries()].some(([k, v]) => k.startsWith(`${def.id}|`) && this.frames - v.frame < DRAFT_FRAMES)
+    const size = dragging ? Math.min(1024, full) : full
+    const tex = have?.tex ?? gl.createTexture()!
     gl.bindTexture(gl.TEXTURE_2D, tex)
     gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false)
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1)
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, gl.RED, gl.UNSIGNED_BYTE, plateCanvas(def) as TexImageSource)
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, gl.RED, gl.UNSIGNED_BYTE, plateCanvas(def, size, params) as TexImageSource)
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4)
     gl.generateMipmap(gl.TEXTURE_2D)
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR)
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT)
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT)
     const aniso = gl.getExtension('EXT_texture_filter_anisotropic')
-    if (aniso) gl.texParameterf(gl.TEXTURE_2D, aniso.TEXTURE_MAX_ANISOTROPY_EXT, 4)
-    this.plateTex.set(id, tex)
+    if (aniso) gl.texParameterf(gl.TEXTURE_2D, aniso.TEXTURE_MAX_ANISOTROPY_EXT, Math.min(16, gl.getParameter(aniso.MAX_TEXTURE_MAX_ANISOTROPY_EXT) as number))
+    this.plateTex.delete(key)
+    this.plateTex.set(key, { tex, size, frame: this.frames })
+    if (size < full) this.onInvalidate?.()
+    // keep the newest few of each kind
+    const windows = def.window ? [...this.plateTex.keys()].filter((k) => k.includes('|')) : [...this.plateTex.keys()].filter((k) => !k.includes('|'))
+    for (const k of windows.slice(0, Math.max(0, windows.length - (def.window ? WINDOW_TEXTURES : PLATE_TEXTURES)))) {
+      gl.deleteTexture(this.plateTex.get(k)!.tex)
+      this.plateTex.delete(k)
+    }
     return tex
   }
 
+  /** (plates) the full mask size for this renderer's output: 4096 for a projector, 2048 for a preview or a tile */
+  private plateSize(): number {
+    const big = Math.max(this.canvas.width, this.canvas.height) >= 1200
+    const max = this.gl.getParameter(this.gl.MAX_TEXTURE_SIZE) as number
+    return Math.min(big ? PLATE_TEXTURE : PLATE_TEXTURE / 2, max)
+  }
+
   /** Draws a light's colour (its own CCT or HSI colour, a gradient or a generator) into the bound target. */
+  /**
+   * (§16) The static stack's background layers (solid, gradient, generator, procedural effects) composed bottom to top
+   * into the bound `target`, over black: the light's colour under the attachments.
+   */
+  private drawBackgroundLayers(input: RenderInput, layers: Layer[], target: Target, k: number) {
+    const gl = this.gl
+    gl.clearColor(0, 0, 0, 1)
+    gl.clear(gl.COLOR_BUFFER_BIT)
+    for (const layer of layers) {
+      const lt = this.pool.get('lbglayer', target.width, target.height)
+      bindTarget(gl, lt)
+      gl.clearColor(0, 0, 0, 0)
+      gl.clear(gl.COLOR_BUFFER_BIT)
+      this.setBlend('none')
+      const radius = this.drawLayer(input, layer, lt, k)
+      if (radius === null) continue
+      const out = this.focusBlur(lt, radius, 'lbgblur')
+      bindTarget(gl, target)
+      this.setBlend(layer.blend === 'normal' || !layer.blend ? 'over' : layer.blend)
+      this.blit(out.tex)
+    }
+    this.setBlend('none')
+  }
+
   private drawColorLayer(input: RenderInput, light: StackLight, kelvin: number | null, W: number, H: number) {
     const p = this.colorProg.use()
     p.f2('u_res', W, H)
@@ -853,7 +954,7 @@ export class Renderer {
       if (!img) return null
       p.tex('u_tex', 0, img.tex)
       p.f2('u_texSize', img.width, img.height)
-      p.f1('u_pBright', num('brightness', 0.66))
+      p.f1('u_pBright', num('brightness', 0.9))
       p.f1('u_pWarm', num('warmth', 0))
       p.f1('u_pDrift', num('drift', 0.1))
       this.pictureMotion(p, input, layer)
@@ -866,7 +967,7 @@ export class Renderer {
       if (!img) return null
       p.tex('u_tex', 0, img.tex)
       p.f2('u_texSize', img.width, img.height)
-      p.f1('u_pBright', num('brightness', 0.8))
+      p.f1('u_pBright', num('brightness', 0.9))
       p.f1('u_pWarm', num('warmth', 0))
       p.f1('u_pDrift', num('drift', 0))
       this.pictureMotion(p, input, layer)
@@ -894,17 +995,18 @@ export class Renderer {
 
   private proceduralUniforms(p: GLProgram, ref: string, clock: number, base: RGB, num: (k: string, d?: number) => number) {
     let pa: [number, number, number, number] = [0, 0, 0, 0]
+    let pb: [number, number, number, number] = [0, 0, 0, 0]
     let pgain = 1
     let pcolor: RGB = [1, 1, 1]
     switch (ref) {
       case 'tree-sway':
+      case 'palm-sway': {
+        // (§16) the wind is one smooth state per frame (render/wind.ts): sway, gusts, leaf flutter
         pa = [num('wind', 0.4), num('gust', 0.18), num('focus', 0.7), num('seed', 7)]
-        p.f4('u_gp0', 0.5, 0.5, num('seed', 7) * 0.137, 0)
+        const w = windState(clock, pa[0], pa[1], (pa[3] % 97) * 0.173)
+        pb = [w.sway, w.gust, w.flutter, 0]
         break
-      case 'palm-sway':
-        pa = [num('wind', 0.4), num('gust', 0.18), num('focus', 0.7), num('seed', 7)]
-        p.f4('u_gp0', 9, num('seed', 7) * 0.137, 0, 0)
-        break
+      }
       case 'clouds':
         pa = [num('speed', 0.2), num('density', 0.5), num('softness', 0.8), 0]
         break
@@ -951,7 +1053,7 @@ export class Renderer {
         break
     }
     p.f4('u_pa', pa[0], pa[1], pa[2], pa[3])
-    p.f4('u_pb', 0, 0, 0, 0)
+    p.f4('u_pb', pb[0], pb[1], pb[2], pb[3])
     p.f1('u_pgain', pgain)
     p.f3('u_pcolor', pcolor[0], pcolor[1], pcolor[2])
   }
@@ -1383,6 +1485,7 @@ export class Renderer {
         p.i1('u_inverse', pat.inverse ? 1 : 0)
       } else code = pat.kind === 'white' ? 2 : pat.kind === 'black' ? 3 : 0
     }
+    p.f2('u_outPx', Math.max(1, out.width), Math.max(1, out.height))
     p.i1('u_pattern', code)
     p.i1('u_seeThrough', this.seeThrough ? 1 : 0)
     this.drawFullscreen()

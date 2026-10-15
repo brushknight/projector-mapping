@@ -46,7 +46,7 @@ func TestModeSwitch(t *testing.T) {
 	// a static pick replaces the attachments and leaves the others
 	sc = h.Do("GET", "/api/v1/scenes/scn_desk", nil).Map(t)
 	att := sc["backdrop"].(map[string]any)["static"].(map[string]any)["attachments"].([]any)[0].(map[string]any)
-	att["gobo"], att["name"] = "blinds", "blinds"
+	att["gobo"], att["name"] = "plate-slat-blinds", "slat blinds"
 	att["params"] = map[string]any{"slats": 14}
 	r = h.Do("POST", "/api/v1/scenes/scn_desk/patch", map[string]any{"base": sc["version"], "ops": []any{op("replace", "/backdrop/static/attachments", []any{att}), op("replace", "/mode", "static")}})
 	apitest.Expect(t, r, http.StatusOK)
@@ -226,8 +226,8 @@ func TestUpgradeLightModelOnStart(t *testing.T) {
 	st := sc["backdrop"].(map[string]any)["static"].(map[string]any)
 	att := st["attachments"].([]any)[0].(map[string]any)
 	light := st["light"].(map[string]any)
-	if sc["kind"] != "mapping" || sc["mode"] != "static" || len(st["layers"].([]any)) != 0 || att["id"] != "lay_window" || att["gobo"] != "window" ||
-		att["rotation"] != float64(-22) || att["scale"] != 1.4 || light["focus"].(float64) < 0.379 || light["focus"].(float64) > 0.381 || light["vignette"] != 0.3 {
+	if sc["kind"] != "mapping" || sc["mode"] != "static" || len(st["layers"].([]any)) != 0 || att["id"] != "lay_window" || att["gobo"] != "plate-grid-window" ||
+		att["rotation"] != float64(-22) || att["scale"] != 1.4 || light["focus"].(float64) < 0.379 || light["focus"].(float64) > 0.381 || light["vignette"] != float64(0) {
 		t.Fatalf("upgraded static %v kind %v", st, sc["kind"])
 	}
 	if l := h.Do("GET", "/api/v1/scenes", nil).List(t)[0].(map[string]any); l["kind"] != "mapping" || l["mode"] != "static" {

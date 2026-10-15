@@ -3,6 +3,7 @@
  * embedded player behind the canvas. Pure helpers shared by the engine (when to clear transparent) and the pages.
  */
 import { onAirPlan, allLayers } from '../entities/scene/lib'
+import { photoGain } from './photoLook'
 import type { Layer, Scene, SceneMode } from '../entities/scene/types'
 
 /** The YouTube layer that shows: what the iframe plays and how it looks. */
@@ -17,6 +18,9 @@ export interface YouTubeActive {
   brightness: number
   warmth: number
   opacity: number
+  /** (§14, §16) the layer's own sound: `params.audio` (shown as "sound") and `params.volume` 0..1 */
+  audio: boolean
+  volume: number
   /** the underlay's brightness level in objects mode (1 in a backdrop mode); the canvas dims the player by it */
   level: number
 }
@@ -63,17 +67,23 @@ export function activeYouTube(
       start: Math.max(0, num(p.start, 0)),
       end: Math.max(0, num(p.end, 0)),
       blur: Math.max(0, Math.min(1, num(p.blur, 0.2))),
-      brightness: Math.max(0, Math.min(1, num(p.brightness, 0.8))),
+      brightness: Math.max(0, Math.min(1, num(p.brightness, 0.9))),
       warmth: Math.max(-1, Math.min(1, num(p.warmth, 0))),
       opacity: Math.max(0, Math.min(1, l.opacity)),
+      audio: p.audio === true,
+      volume: Math.max(0, Math.min(1, num(p.volume, 1))),
       level: Math.max(0, Math.min(1, level)),
     }
   }
   return null
 }
 
-/** The embed URL (§14): muted, looping, no controls, from `start`, to `end` when set. */
-export function youtubeEmbedUrl(videoId: string, start = 0, end = 0): string {
+/**
+ * The embed URL (§14, §16): it always starts muted (muted autoplay is never blocked), looping, no controls, from
+ * `start`, to `end` when set. With `api` (the page is the audio output client) it also enables the IFrame Player API
+ * (`enablejsapi=1` and the page's `origin`), so the page can unmute it and set its volume over postMessage.
+ */
+export function youtubeEmbedUrl(videoId: string, start = 0, end = 0, api: { origin: string } | null = null): string {
   const q = new URLSearchParams({
     autoplay: '1',
     mute: '1',
@@ -84,21 +94,40 @@ export function youtubeEmbedUrl(videoId: string, start = 0, end = 0): string {
   })
   if (end > start) q.set('end', String(Math.ceil(end)))
   for (const [k, v] of [['playsinline', '1'], ['modestbranding', '1'], ['rel', '0'], ['iv_load_policy', '3'], ['disablekb', '1']]) q.set(k, v)
+  if (api) {
+    q.set('enablejsapi', '1')
+    q.set('origin', api.origin)
+  }
   return `https://www.youtube-nocookie.com/embed/${videoId}?${q.toString()}`
 }
 
 /**
- * How the photo controls look in CSS for a frame `minSidePx` on its short side: the shader's brightness (× 1.4) and
- * warmth (per-channel gains) become a CSS brightness and a multiply tint, the blur radius a CSS blur. Master, blackout
- * and the underlay level dim the player through the canvas above it (its alpha), not here.
+ * The YouTube player's volume 0..100 (§16): the layer's volume × the client's gain (show.audio volume × master on the
+ * audio output client, 0 while muted, inactive or locked; the viewer's own toggle on /view). 0 keeps it muted: the
+ * layer's sound is off, or this client plays no sound.
+ */
+export function youtubeVolume(a: Pick<YouTubeActive, 'audio' | 'volume'> | null, gain: number): number {
+  if (!a || !a.audio || !(gain > 0)) return 0
+  return Math.round(Math.max(0, Math.min(1, a.volume * gain)) * 100)
+}
+
+/** One IFrame Player API command, as the player expects it over postMessage. */
+export function youtubeCommand(func: 'mute' | 'unMute' | 'setVolume' | 'playVideo', args: unknown[] = []): string {
+  return JSON.stringify({ event: 'command', func, args, id: 1, channel: 'widget' })
+}
+
+/**
+ * How the photo controls look in CSS for a frame `minSidePx` on its short side (§16): brightness 1 is the original
+ * picture, warmth a multiply tint normalised so no channel goes above its original value (render/photoLook.ts, the
+ * same math as the shader), the blur radius a CSS blur. Master, blackout and the underlay level dim the player
+ * through the canvas above it (its alpha), not here.
  */
 export function youtubeLook(a: Pick<YouTubeActive, 'blur' | 'brightness' | 'warmth'>, minSidePx: number) {
-  const gains = [1 + 0.22 * a.warmth, 1 + 0.04 * a.warmth, 1 - 0.22 * a.warmth]
-  const top = Math.max(...gains)
+  const k = photoGain(1, a.warmth)
   return {
     blurPx: Math.round(a.blur * 30 * (minSidePx / 1080) * 10) / 10,
-    brightness: Math.round(a.brightness * 1.4 * top * 1000) / 1000,
+    brightness: Math.round(Math.max(0, Math.min(1, a.brightness)) * 1000) / 1000,
     /** multiply tint 0..255 per channel (white = none) */
-    tint: gains.map((g) => Math.round((g / top) * 255)) as [number, number, number],
+    tint: k.map((g) => Math.round(g * 255)) as [number, number, number],
   }
 }

@@ -3,6 +3,9 @@
   inset: 0;
   background: var(--bg);
   overflow: hidden;
+}
+/* §17: the cursor hides after 2 s without mouse movement */
+.out[data-idle='true'] {
   cursor: none;
 }
 .canvas {

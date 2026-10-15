@@ -12,7 +12,10 @@ type Scene struct {
 	Version int64  `json:"version"`
 	Mode    string `json:"mode"`
 	// Kind is what the scene is for (protocol §15): static, live, color, scenery or mapping.
-	Kind     string   `json:"kind"`
+	Kind string `json:"kind"`
+	// Format is the document format (protocol §16): FormatVersion; absent (0) is a document from before the plate
+	// library, which the stored-scene upgrade brings up once.
+	Format   int      `json:"format"`
 	Backdrop Backdrop `json:"backdrop"`
 	Underlay Underlay `json:"underlay"`
 	Points   []Point  `json:"points"`
@@ -308,7 +311,7 @@ type Cue struct {
 
 // New is an empty scene.
 func New(id, setupID, name string) Scene {
-	return Scene{ID: id, SetupID: setupID, Name: name, Version: 1, Mode: ModeStatic, Underlay: DefaultUnderlay(), Points: []Point{},
+	return Scene{ID: id, SetupID: setupID, Name: name, Version: 1, Mode: ModeStatic, Format: FormatVersion, Underlay: DefaultUnderlay(), Points: []Point{},
 		Objects: []Object{}, Sounds: Sounds{Pads: []Pad{}}, Timeline: Timeline{Duration: 20, Tracks: []Track{}, Clips: []Clip{}, Cues: []Cue{}}}
 }
 
@@ -402,8 +405,13 @@ func (s *Scene) Normalize() {
 // Decode parses a scene document. Documents from before modes (v1, `backdrop: { layers }`) and from before the
 // light model (gobo layers in static and live, no kind) are upgraded on the way in (see Upgrade).
 func Decode(doc []byte) (*Scene, error) {
-	s, _, err := decode(doc)
-	return s, err
+	s, _, _, err := decode(doc)
+	if err != nil {
+		return nil, err
+	}
+	// a document read here is current: only the stored-scene upgrade (UpgradeNotes) acts on an old format
+	s.Format = FormatVersion
+	return s, nil
 }
 
 // Encode is the canonical JSON of a scene.

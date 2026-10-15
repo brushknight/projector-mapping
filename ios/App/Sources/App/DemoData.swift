@@ -86,8 +86,8 @@ enum DemoData {
         }
         let golden = fixture("preset")?["backdrop"] ?? staticStack
         stack("pre_golden", "golden hour", "static", golden)
-        stack("pre_office", "office am", "static", (try? staticStack.applying([.replace("/attachments/0/gobo", "blinds"), .replace("/attachments/0/name", "blinds"), .replace("/light/color/kelvin", 5600)])) ?? staticStack)
-        stack("pre_noir", "noir blinds", "static", (try? staticStack.applying([.replace("/attachments/0/gobo", "blinds-wide"), .replace("/attachments/0/name", "wide blinds"), .replace("/light/color/kelvin", 6500), .replace("/light/focus", 0.9)])) ?? staticStack)
+        stack("pre_office", "office am", "static", (try? staticStack.applying([.replace("/attachments/0/gobo", "plate-slat-blinds"), .replace("/attachments/0/name", "slat blinds"), .replace("/attachments/0/params", [:]), .replace("/light/color/kelvin", 5600)])) ?? staticStack)
+        stack("pre_noir", "noir blinds", "static", (try? staticStack.applying([.replace("/attachments/0/gobo", "plate-louvre"), .replace("/attachments/0/name", "louvre"), .replace("/attachments/0/params", [:]), .replace("/light/color/kelvin", 6500), .replace("/light/focus", 0.9)])) ?? staticStack)
         stack("pre_breezy", "breezy window", "live", (try? liveStack.applying(.replace("/layers", [sunDrift, tree, clouds, dayCycle]))) ?? liveStack)
         stack("pre_storm", "storm", "live", (try? liveStack.applying(.replace("/layers", [rain, lightning]))) ?? liveStack)
         stack("pre_sunset", "slow sunset", "live", (try? liveStack.applying(.replace("/layers", [sunDrift]))) ?? liveStack)

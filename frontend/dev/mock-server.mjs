@@ -21,6 +21,7 @@
  *              /sounds/stop: direct `sound.play` / `sound.stop` messages to every connection with cap `audio` whose
  *              role matches show.audio.output (projector → output, editor → editor, phone → remote); 409 no_audio
  *              (cmd: error no_audio) when there is none. show.go fires the started cue's `sound` (with cueId).
+ *   outputs    GET /outputs/displays (two fake displays), POST /outputs/launch {display, route} records the launch (§17)
  *   videos     GET/POST /videos (multipart file), PATCH/DELETE /videos/{id}, GET /videos/tools, POST /videos/import
  *              {url, maxHeight?, start?, end?, name?} (400 invalid_url), GET /videos/import/{id}; channels `videos`
  *              and `import:{id}`. Seeded with one embed video (youtube:aqz-KE-bpKQ, the fixture's lay_waves).
@@ -222,13 +223,23 @@ const kindMode = (k) => (k === 'mapping' ? 'objects' : k)
 const schemaDefaults = (schema) => Object.fromEntries(Object.entries(schema ?? {}).map(([k, v]) => [k, v.default]))
 function mockAttachment(gobo, id) {
   const item = catalogDoc.gobos.find((g) => g.id === gobo)
+  const params = { ...schemaDefaults(catalogDoc.goboParams), ...(item?.defaults ?? {}), ...schemaDefaults(item?.params) }
+  // (§16) a window preset's geometry stays out of the params: missing params take the preset
+  if (item?.family === 'window') for (const g of catalogDoc.windowParamGroups ?? []) for (const k of g.params) delete params[k]
   return {
     id, gobo, name: item?.name ?? gobo, visible: true, opacity: 1, rotation: item?.attachment?.rotation ?? 0, offsetX: 0, offsetY: 0,
-    scale: item?.attachment?.scale ?? 1, params: { ...schemaDefaults(catalogDoc.goboParams), ...(item?.defaults ?? {}), ...schemaDefaults(item?.params) }, motion: null,
+    scale: item?.attachment?.scale ?? 1, params, motion: null,
   }
 }
+/** (§16) the templates' window: the 6-pane grid window preset, a little low-sun stretched and larger, as on the server */
+function templateWindow() {
+  const a = mockAttachment('plate-grid-window', rid('att'))
+  a.params.throw = 0.25
+  a.scale = 1.25
+  return a
+}
 function mockLight(over = {}) {
-  return { intensity: 0.85, focus: 0.7, color: { mode: 'cct', kelvin: catalogDoc.stackLight?.kelvin ?? 5600, tint: 0, hue: 212, sat: 0.7 }, fx: { kind: 'none', speed: 0.35 }, colorLayer: null, fringe: 0.2, vignette: 0.3, haze: 0, slide: { x: 0, y: 0 }, motion: null, ...over }
+  return { intensity: 0.85, focus: 1, color: { mode: 'cct', kelvin: catalogDoc.stackLight?.kelvin ?? 5600, tint: 0, hue: 212, sat: 0.7 }, fx: { kind: 'none', speed: 0.35 }, colorLayer: null, fringe: 0.2, vignette: 0, backgroundFocus: 1, slide: { x: 0, y: 0 }, motion: null, ...over }
 }
 const TEMPLATE_OF_KIND = { static: 'static-window', live: 'live-window-tree', color: 'color-ember', scenery: 'scenery-flowers', mapping: 'mapping-empty' }
 function sceneFromTemplate(id, name, setupId, template) {
@@ -237,10 +248,10 @@ function sceneFromTemplate(id, name, setupId, template) {
   const sun = catalogDoc.motionPresets?.find((m) => m.id === 'sun-lr')?.motion
   switch (template) {
     case 'static-window': {
-      const a = mockAttachment('window-4', rid('att'))
+      const a = templateWindow()
       // off, parked in the middle of its path (phase 0.5), ready to play
       a.motion = sun ? { ...clone(sun), on: false, phase: 0.5, startedAt: Date.now() } : null
-      doc.backdrop.static = { layers: [], light: mockLight({ color: warm, intensity: 0.85, focus: 0.68 }), attachments: [a] }
+      doc.backdrop.static = { layers: [], light: mockLight({ color: warm, intensity: 0.85 }), attachments: [a] }
       break
     }
     case 'live-window-tree': {
@@ -248,7 +259,7 @@ function sceneFromTemplate(id, name, setupId, template) {
       doc.kind = doc.mode = 'live'
       doc.backdrop.live = {
         light: mockLight({ color: warm, focus: 0.68 }),
-        attachments: [mockAttachment('window-4', rid('att'))],
+        attachments: [templateWindow()],
         layers: [{ id: rid('lay'), kind: 'procedural', ref: 'tree-sway', name: tree?.name ?? 'tree sway', visible: true, opacity: 0.9, blend: 'multiply', light: { intensity: 0.8, softness: 0.5, angle: 0, scale: 1, offsetX: 0, offsetY: 0, color: warm, fx: { kind: 'none', speed: 0.35 } }, params: schemaDefaults(tree?.params) }],
       }
       break
@@ -700,6 +711,11 @@ function startCalibration(setupId) {
 // ── HTTP ─────────────────────────────────────────────────────────────────────
 const MIME = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.json': 'application/json' }
 
+const MOCK_DISPLAYS = [
+  { index: 1, name: 'Built-in Retina Display', width: 3024, height: 1964, scale: 2, x: 0, y: 0, main: true },
+  { index: 2, name: 'EPSON PJ', width: 1920, height: 1080, scale: 1, x: 1512, y: 0, main: false },
+]
+
 function readBody(req) {
   return new Promise((res) => {
     const chunks = []
@@ -1070,6 +1086,18 @@ async function api(req, res, path, url) {
     return json(res, 201, v)
   }
   if (path === '/videos/tools' && m === 'GET') return json(res, 200, S.tools)
+  // (§17) put the output on a display: two fake displays; a launch only records what would open (S.launches)
+  if (path === '/outputs/displays' && m === 'GET') return json(res, 200, MOCK_DISPLAYS)
+  if (path === '/outputs/launch' && m === 'POST') {
+    const b = j()
+    const route = b.route ?? 'out'
+    if (route !== 'out' && route !== 'view') return err(res, 400, 'bad_request', 'route must be out or view.')
+    const d = MOCK_DISPLAYS.find((x) => x.index === b.display)
+    if (!d) return err(res, 404, 'not_found', `Display ${b.display} is not connected. This Mac has ${MOCK_DISPLAYS.length}.`)
+    const url = `http://127.0.0.1:7400/${route}`
+    ;(S.launches ??= []).push({ display: d.index, route })
+    return json(res, 202, { launched: true, url, display: d })
+  }
   if (path === '/videos/import' && m === 'POST') {
     const b = j()
     const yt = youtubeIdOf(String(b.url ?? ''))
@@ -1186,7 +1214,7 @@ const server = createServer(async (req, res) => {
       const t = url.searchParams.get('t')
       return json(res, 200, t ? S.log.filter((e) => e.t === t) : S.log)
     }
-    if (path === '/__mock/state') return json(res, 200, { show: S.show, scenes: [...S.scenes.values()].map((s) => ({ id: s.doc.id, version: s.version })), clients: [...clients].map((c) => ({ role: c.role, caps: c.caps ?? [], subs: [...c.subs] })) })
+    if (path === '/__mock/state') return json(res, 200, { show: S.show, scenes: [...S.scenes.values()].map((s) => ({ id: s.doc.id, version: s.version })), clients: [...clients].map((c) => ({ role: c.role, caps: c.caps ?? [], subs: [...c.subs] })), launches: S.launches ?? [] })
     if (path === '/__mock/tools' && req.method === 'POST') {
       const b = JSON.parse((await readBody(req)).toString() || '{}')
       S.tools = { ytdlp: !!b.ytdlp, ffmpeg: b.ffmpeg == null ? !!b.ytdlp : !!b.ffmpeg }

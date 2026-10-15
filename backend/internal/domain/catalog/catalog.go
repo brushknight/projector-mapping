@@ -25,11 +25,13 @@ type Schema map[string]Param
 
 // Item is any catalog entry; kind-specific fields stay in Raw.
 type Item struct {
-	ID     string          `json:"id"`
-	Name   string          `json:"name"`
-	Params Schema          `json:"params,omitempty"`
-	Asset  string          `json:"asset,omitempty"`
-	Raw    json.RawMessage `json:"-"`
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Params Schema `json:"params,omitempty"`
+	Asset  string `json:"asset,omitempty"`
+	// Blend (procedural, §16) is the blend a new layer of the item gets; multiply makes it a mask over the light.
+	Blend string          `json:"blend,omitempty"`
+	Raw   json.RawMessage `json:"-"`
 }
 
 // Effect is a catalog or user/agent-made effect.
@@ -144,6 +146,9 @@ type Catalog struct {
 	SceneKinds      []SceneKind     `json:"sceneKinds"`
 	SceneTemplates  []SceneTemplate `json:"sceneTemplates"`
 
+	// WindowParamGroups orders the parametric window params in groups (catalog version 6, protocol §16).
+	WindowParamGroups []ParamGroup `json:"windowParamGroups"`
+
 	Raw json.RawMessage `json:"-"`
 }
 
@@ -152,6 +157,13 @@ type StackLightSpec struct {
 	Params           Schema  `json:"params"`
 	Kelvin           float64 `json:"kelvin"`
 	AttachmentParams Schema  `json:"attachmentParams"`
+}
+
+// ParamGroup is a named group of param keys, in display order (catalog windowParamGroups).
+type ParamGroup struct {
+	ID     string   `json:"id"`
+	Name   string   `json:"name"`
+	Params []string `json:"params"`
 }
 
 // Named is an {id, name} pair (gobo categories).
@@ -191,10 +203,13 @@ type Gobo struct {
 	Description string `json:"description"`
 	Category    string `json:"category"`
 	Thumb       string `json:"thumb"`
-	// MetalThumb is a plate's metal thumbnail, the plate itself (catalog version 5, category plates).
+	// MetalThumb is a plate's metal thumbnail, the plate itself (catalog version 5; every gobo since version 6).
 	MetalThumb string `json:"metalThumb,omitempty"`
-	// Source names the real plate a design follows (catalog version 5, plates).
+	// Source names the reference photo a design follows: "<file in design/refs/gobo-plates>, <label>" (catalog 6).
 	Source string `json:"source,omitempty"`
+	// Family is "window" for a parametric window preset (catalog 6, protocol §16): its params hold the window
+	// geometry with the preset's values as defaults.
+	Family string `json:"family,omitempty"`
 	Params Schema `json:"params"`
 	// Attachment is the scale and rotation a new attachment of this gobo starts with.
 	Attachment struct {

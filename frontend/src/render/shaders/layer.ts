@@ -6,7 +6,8 @@
  * angle and divided by its scale.
  */
 import { FULLSCREEN_VS, HEADER, NOISE } from './common'
-import { SHAPES_GLSL } from './light'
+import { LIVE_SHAPES_GLSL } from './light'
+import { LIVE_GLSL } from './live'
 
 export const GOBO_IDS = ['window', 'blinds', 'tree', 'palm', 'arch', 'lattice', 'dots', 'spot'] as const
 export const PROCEDURAL_IDS = ['tree-sway', 'palm-sway', 'clouds', 'rain-glass', 'lightning', 'day-cycle', 'sun-drift', 'candle-flicker', 'caustics', 'dapple', 'film-grain', 'haze'] as const
@@ -66,7 +67,8 @@ uniform vec4 u_gp1;
 uniform vec4 u_gp2;
 
 ${NOISE}
-${SHAPES_GLSL}
+${LIVE_SHAPES_GLSL}
+${LIVE_GLSL}
 
 // ── gobos: return light passing 0..1 ─────────────────────────────────────────
 
@@ -208,31 +210,28 @@ float gobo(int id, vec2 q) {
 
 vec3 procedural(int id, vec2 q, vec2 p) {
   float t = u_clock;
-  if (id == 0) { // tree-sway: the leaf breakup on a tree that sways from a trunk far below the frame
-    float wind = u_pa.x, gust = u_pa.y;
-    float g = smoothstep(0.5, 0.9, noise(vec2(t * 0.25, u_pa.w)));
-    float ang = (0.034 * sin(t * (0.55 + wind * 0.9)) + 0.016 * sin(t * (1.3 + wind) + 1.3)) * (0.25 + wind) + g * gust * 0.06 * sin(t * 2.1);
+  if (id == 0) { // tree-sway: a canopy on a tree whose trunk stands far below the frame (u_pb: sway, gust, flutter)
+    float wind = u_pa.x;
     vec2 pivot = vec2(0.1, 1.7);
-    vec2 qq = pivot + rot(ang) * (q - pivot);
-    // leaves flutter on their own
-    qq += (vec2(noise(q * 5.0 + t * (0.5 + wind)), noise(q * 5.0 - t * (0.4 + wind) + 3.0)) - 0.5) * 0.01 * (wind + gust);
-    return vec3(shapeLeaves(qq / 1.4));
+    vec2 rel = q - pivot;
+    float r = length(rel);
+    // the crown leans with the wind; the further from the trunk, the more it moves (tips more than boughs)
+    float bend = u_pb.x * 0.032 * pow(clamp(r / 2.2, 0.0, 1.5), 1.6);
+    vec2 qq = pivot + rot(bend) * rel;
+    // boughs sway out of step with each other: a slow, smooth field of phases, never per-pixel jitter
+    float ph = noise(q * 1.3 + u_pa.w) * 6.2832;
+    float amp = (0.003 + 0.01 * wind + 0.016 * u_pb.y) * smoothstep(0.2, 1.6, r);
+    qq += amp * vec2(sin(t * (0.8 + 0.5 * wind) + ph), 0.45 * cos(t * (0.6 + 0.4 * wind) + ph * 1.3));
+    return vec3(liveLeaves(qq / 1.4, 0.5, 0.5, u_pa.w * 0.137, t, u_pb.z));
   }
-  if (id == 1) { // palm-sway: fronds bending from the crown
-    float wind = u_pa.x, gust = u_pa.y;
-    float g = smoothstep(0.5, 0.9, noise(vec2(t * 0.3, u_pa.w)));
+  if (id == 1) { // palm-sway: fronds swaying out of step from a crown above the frame (u_pb: sway, gust, flutter)
     vec2 crown = vec2(0.25, -0.75);
     float r = length(q - crown);
-    float ang = (0.06 * sin(t * (0.5 + wind * 1.1)) + 0.03 * sin(t * 1.7 + 0.7)) * (0.3 + wind) * (0.4 + r) + g * gust * 0.08 * sin(t * 1.9);
-    vec2 qq = crown + rot(ang) * (q - crown);
-    return vec3(shapePalm(qq / 1.2));
+    vec2 qq = crown + rot(u_pb.x * 0.025 * (0.4 + r)) * (q - crown);
+    return vec3(livePalm(qq / 1.2, 9.0, u_pa.w * 0.137, t, u_pb.x, u_pb.y, u_pb.z));
   }
   if (id == 2) { // clouds: speed, density, softness
-    vec2 c = q * 1.3 + vec2(t * (0.01 + u_pa.x * 0.08), t * 0.004);
-    float n = fbm(c);
-    float w = 0.05 + u_pa.z * 0.3;
-    float cover = smoothstep(0.62 - u_pa.y * 0.35 - w, 0.62 - u_pa.y * 0.35 + w, n);
-    return vec3(1.0 - cover * 0.85);
+    return vec3(liveClouds(q, t, u_pa.x, u_pa.y, u_pa.z));
   }
   if (id == 3) { // rain-glass: amount, speed, drops
     vec2 uv = q * vec2(1.0, 1.0);
@@ -247,7 +246,8 @@ vec3 procedural(int id, vec2 q, vec2 p) {
       vec2 f = fract(g) - 0.5;
       vec2 h = hash2(id2 + fl * 13.0);
       if (h.x > u_pa.x) continue;
-      float wob = sin(t * 3.0 + h.y * 30.0) * 0.12;
+      // drops meander slowly as they run, they do not shiver
+      float wob = sin(t * 0.9 + h.y * 30.0 + g.y * 2.0) * 0.07;
       vec2 dp = f - vec2(wob, (h.y - 0.5) * 0.5);
       dp.x *= grid.y / grid.x * 2.0;
       float d = length(dp);
@@ -357,8 +357,10 @@ void main() {
     uv /= zoom;
     uv += u_pDrift * 0.03 * vec2(sin(dt), cos(dt * 0.7));
     vec3 c = texture(u_tex, uv + 0.5).rgb;
-    c *= u_pBright * 1.4;
-    c *= vec3(1.0 + 0.22 * u_pWarm, 1.0 + 0.04 * u_pWarm, 1.0 - 0.22 * u_pWarm);
+    // (§16) brightness 1 is the original picture; warmth gains are divided by the largest, so no channel goes above
+    // its original value (render/photoLook.ts holds the same math)
+    vec3 wg = vec3(1.0 + 0.22 * u_pWarm, 1.0 + 0.04 * u_pWarm, 1.0 - 0.22 * u_pWarm);
+    c *= u_pBright * wg / max(wg.r, max(wg.g, wg.b));
     float inPic = step(0.0, mp.x) * step(mp.x, 1.0) * step(0.0, mp.y) * step(mp.y, 1.0);
     outc = vec4(clamp(c, 0.0, 1.0) * u_opacity, u_opacity) * inPic;
   } else {
