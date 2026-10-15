@@ -14,6 +14,11 @@ export interface Builtin {
   text?: boolean
   /** needs the drawing texture (the strokes, rasterized on the CPU) in u_text */
   drawing?: boolean
+  /**
+   * (§20) drawn by the engine over the whole scene, not inside a surface (the converge): surface content skips its
+   * clips, and its source draws nothing
+   */
+  scene?: boolean
 }
 
 const PX = `
@@ -22,6 +27,11 @@ vec4 premul(vec3 c, float a) { a = clamp(a, 0.0, 1.0); return vec4(c * a, a); }
 `
 
 export const BUILTINS: Record<string, Builtin> = {
+  // (§20) the converge closes a backdrop mode's light onto the target's silhouette; render/converge.ts draws it
+  converge: {
+    scene: true,
+    source: `vec4 effect(vec2 uv, float t, float progress) { return vec4(0.0); }`,
+  },
   'grid-build': {
     source: `${PX}
 vec4 effect(vec2 uv, float t, float progress) {

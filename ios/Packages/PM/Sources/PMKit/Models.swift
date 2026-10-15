@@ -471,10 +471,31 @@ public struct Clip: Codable, Sendable, Hashable, Identifiable {
     public var fadeIn: Double
     public var fadeOut: Double
     public var params: JSONObject
+    /// (§20) keeps the end state after `end`; nil = the effect's default (`holds`).
+    public var hold: Bool?
 
-    public init(id: String, trackId: String, effect: String, start: Double, end: Double, fadeIn: Double = 0, fadeOut: Double = 0, params: JSONObject = [:]) {
+    public init(id: String, trackId: String, effect: String, start: Double, end: Double, fadeIn: Double = 0, fadeOut: Double = 0, params: JSONObject = [:], hold: Bool? = nil) {
         self.id = id; self.trackId = trackId; self.effect = effect; self.start = start; self.end = end
-        self.fadeIn = fadeIn; self.fadeOut = fadeOut; self.params = params
+        self.fadeIn = fadeIn; self.fadeOut = fadeOut; self.params = params; self.hold = hold
+    }
+
+    /// (§20) the effects whose clips hold their end state when `hold` is absent.
+    public static let holdByDefault: Set<String> = ["converge", "reveal", "sweep", "motion"]
+    /// (§20) whether the clip keeps its end state after its end, until the next clip of its effect on its track.
+    public var holds: Bool { hold ?? Self.holdByDefault.contains(effect) }
+    /// (§20) the converge clip: a backdrop mode's light closing onto the target's silhouette.
+    public var isConverge: Bool { effect == "converge" }
+
+    /// (§20) Whether the clip is in effect at `t`: playing, or held after its end until the next clip of its effect
+    /// on its track starts. `track` is every clip of its track.
+    public func inEffect(at t: Double, track: [Clip]) -> Bool {
+        if t < start { return false }
+        if t < end { return true }
+        guard holds else { return false }
+        let i = track.firstIndex(of: self) ?? -1
+        return !track.enumerated().contains { k, d in
+            d != self && d.effect == effect && d.start <= t && (d.start > start || (d.start == start && k > i))
+        }
     }
 
     /// `{ sound, offset, volume }` of a clip on a sound track (protocol §14), nil for other clips.
@@ -490,6 +511,7 @@ public struct Clip: Codable, Sendable, Hashable, Identifiable {
         fadeIn = c.v(.fadeIn, 0)
         fadeOut = c.v(.fadeOut, 0)
         params = c.v(.params, [:])
+        hold = c.opt(.hold)
     }
 }
 
@@ -551,6 +573,8 @@ public struct Scene: Codable, Sendable, Hashable, Identifiable {
     public var kind: String
     public var backdrop: SceneBackdrop
     public var underlay: Underlay
+    /// (§19) The object accent; nil when the scene has none (off).
+    public var objectAccent: ObjectAccent?
     public var points: [ScenePoint]
     public var objects: [MapObject]
     public var timeline: Timeline
@@ -579,6 +603,7 @@ public struct Scene: Codable, Sendable, Hashable, Identifiable {
             mode = SceneMode.backdrops.first { !stacks[$0].isEmpty } ?? "static"
         }
         underlay = c.v(.underlay, Underlay())
+        objectAccent = c.opt(.objectAccent)
         points = c.v(.points, [])
         objects = c.v(.objects, [])
         let k: String? = c.opt(.kind)

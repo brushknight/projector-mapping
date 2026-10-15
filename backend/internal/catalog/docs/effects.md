@@ -71,6 +71,16 @@ Clarifications from the web renderer (`frontend/src/render/`), additive to the c
   through the face's atlas rect, then the surface's own layers), with `src/render/shaders/content.ts`. Effects
   composite on top of them in the same UV space.
 
+- **`converge` (frontend, protocol §20).** Not a surface effect: its clips never reach `drawContent` (the timeline
+  hands surfaces no `converge` clips; the `BUILTINS` entry is a stub marked `scene`). `src/render/converge.ts`
+  evaluates the converge clips at t (with hold), finds the start shape (the frame, or the light's round spot from the
+  plates' cut paths) and the target's silhouette (the accent's), and the engine draws the source backdrop into its own
+  target (`converge:<mode>`, once per frame per mode) and masks it with `shaders/converge.ts`: the polygon SDF in the
+  shader (128 points, 16 loops), mixed with the start SDF by the eased progress. It runs after the underlay and before
+  the mapping; the outline (the accent's line) after the mapping.
+- **Hold (protocol §20).** `evaluateTimeline` and `evaluateLayerClips` include held clips (progress 1, no fade out)
+  until the next clip of the same effect on the track: the state at t is a pure function of the document and t.
+
 ## The light model (frontend, protocol §15)
 
 Static and live stacks draw with the light model, not as layers: `src/render/shaders/light.ts`.

@@ -163,6 +163,18 @@
   height: 1px;
   background: var(--sep-faint);
 }
+.holdTail {
+  position: absolute;
+  top: 50%;
+  height: 0;
+  border-top: 1px dashed var(--dim);
+  opacity: 0.6;
+  pointer-events: none;
+}
+.clipIcon {
+  vertical-align: -2px;
+  margin-right: 5px;
+}
 .clip {
   position: absolute;
   top: 3px;

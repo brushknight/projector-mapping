@@ -297,3 +297,32 @@ func TestBackdropToolsLive(t *testing.T) {
 		t.Fatalf("desk mode after activate %v", sc["mode"])
 	}
 }
+
+// (protocol §19) object_accent_set writes the accent (live with "agents edit live").
+func TestObjectAccentTool(t *testing.T) {
+	h := apitest.New(t)
+	apitest.Expect(t, h.Do("PATCH", "/api/v1/settings", map[string]any{"agentLiveEdits": true}), http.StatusOK)
+	s, err := connect(t, h, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	text, res := call(t, s, "object_accent_set", map[string]any{"on": true, "objects": []any{"zimacube"}, "width": 5, "glow": 0.6, "fill": true, "fill_mode": "light"})
+	if res.IsError || !strings.Contains(text, "is on for") {
+		t.Fatalf("object_accent_set %s", text)
+	}
+	a := h.Do("GET", "/api/v1/scenes/scn_desk", nil).Map(t)["objectAccent"].(map[string]any)
+	if a["on"] != true || a["outline"].(map[string]any)["width"] != float64(5) || a["fill"].(map[string]any)["mode"] != "light" || len(a["objects"].([]any)) != 1 {
+		t.Fatalf("accent %v", a)
+	}
+	if text, res = call(t, s, "object_accent_set", map[string]any{"fill_mode": "sparkle"}); !res.IsError {
+		t.Fatalf("a bad fill mode is refused: %s", text)
+	}
+	if text, res = call(t, s, "object_accent_set", map[string]any{"objects": []any{"nope"}}); !res.IsError {
+		t.Fatalf("an unknown object is refused: %s", text)
+	}
+	call(t, s, "object_accent_set", map[string]any{"on": false})
+	if a := h.Do("GET", "/api/v1/scenes/scn_desk", nil).Map(t)["objectAccent"].(map[string]any); a["on"] != false || a["fill"].(map[string]any)["mode"] != "light" {
+		t.Fatalf("off keeps the rest: %v", a)
+	}
+}

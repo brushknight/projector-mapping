@@ -179,3 +179,11 @@ describe('light and attachment ops (§15)', () => {
     expect(setStackLight(noLight, 'live', null)[0].op).toBe('add')
   })
 })
+
+describe('converge source (§20)', () => {
+  it('takes the backdrop mode on air, or the underlay mode while objects are on air', () => {
+    expect(ops.convergeSource({ ...scene, mode: 'live' })).toBe('live')
+    expect(ops.convergeSource({ ...scene, mode: 'objects' })).toBe('static')
+    expect(ops.convergeSource({ ...scene, mode: 'objects', underlay: { on: false, from: 'scenery', level: 0.3 } })).toBe('scenery')
+  })
+})

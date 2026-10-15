@@ -476,6 +476,35 @@
 .sq:active {
   transform: scale(0.98);
 }
+.convergeRow {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.converge {
+  height: 46px;
+  border: 0;
+  border-radius: var(--radius-card);
+  background: var(--ink);
+  color: var(--on-ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-family: var(--num);
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+}
+.converge:active {
+  transform: scale(0.98);
+}
+.converge:disabled {
+  background: var(--control);
+  color: var(--dim);
+  cursor: default;
+}
 .cueSound {
   display: inline-flex;
   align-items: center;

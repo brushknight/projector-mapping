@@ -161,6 +161,28 @@ export interface Underlay {
 
 export const DEFAULT_UNDERLAY: Underlay = { on: false, from: 'static', level: 0.35 }
 
+/** (protocol §19) how the object accent fills the silhouette: a soft light, the backdrop cut out, or the backdrop only inside */
+export type AccentFillMode = 'light' | 'cut' | 'only'
+/**
+ * (protocol §19) the mapped objects drawn over a backdrop mode: the outer silhouette of each object (the union of its
+ * faces, no inner edges, no details) as a crisp line with a glow, and an optional fill. One setting per scene; it
+ * applies in every backdrop mode (static, live, color, scenery), never in objects mode.
+ */
+export interface ObjectAccent {
+  on: boolean
+  /** "all" or object ids */
+  objects: 'all' | string[]
+  outline: { on: boolean; width: number; color: string; glow: number }
+  fill: { on: boolean; opacity: number; mode: AccentFillMode }
+}
+
+export const DEFAULT_OBJECT_ACCENT: ObjectAccent = {
+  on: false,
+  objects: 'all',
+  outline: { on: true, width: 3, color: '#ffffff', glow: 0.3 },
+  fill: { on: false, opacity: 0.5, mode: 'cut' },
+}
+
 /** One stroke of the `drawing` effect (protocol §1): points in surface UV, width and size in surface px. */
 /** polygon: 3+ points, closed; circle: [centre, rim], radius measured in surface px */
 export type StrokeTool = 'pen' | 'line' | 'rect' | 'ellipse' | 'text' | 'polygon' | 'circle'
@@ -297,6 +319,25 @@ export interface Clip {
   fadeIn: number
   fadeOut: number
   params: Params
+  /**
+   * (§20) keeps the clip's end state after its end, until the next clip with the same effect on its track starts.
+   * Absent = the effect's default: true for converge, reveal, sweep and motion, false otherwise.
+   */
+  hold?: boolean | null
+}
+
+/** (§20) the converge clip's params: the light of a backdrop mode closing onto the target's silhouette */
+export type ConvergeFrom = 'current' | 'circle' | 'frame'
+export type ConvergeEase = 'inOut' | 'in' | 'out' | 'linear'
+export interface ConvergeParams {
+  from: ConvergeFrom
+  /** the backdrop mode whose light converges; show.converge records the mode on air */
+  source: BackdropMode
+  ease: ConvergeEase
+  /** soft edge, scene px */
+  edge: number
+  /** draws the silhouette outline (the accent's line style) as it lands */
+  outline: boolean
 }
 
 /** (§14) a sound fired when the cue starts on the wall */
@@ -363,6 +404,8 @@ export interface Scene {
   backdrop: Backdrop
   /** optional on the wire; absent = DEFAULT_UNDERLAY */
   underlay?: Underlay
+  /** (§19) optional on the wire; absent = DEFAULT_OBJECT_ACCENT (off) */
+  objectAccent?: ObjectAccent
   points: Point[]
   objects: SceneObject[]
   /** (§14) the soundboard; optional on the wire (absent = { pads: [] }) */

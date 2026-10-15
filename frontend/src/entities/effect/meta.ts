@@ -10,6 +10,7 @@ const ICONS: Record<string, string> = {
   pulse: 'pulse',
   highlight: 'highlight',
   spin: 'spin',
+  converge: 'converge',
 }
 
 export function effectIcon(id: string, kind?: string): string {

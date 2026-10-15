@@ -70,6 +70,7 @@ func Register(s *mcp.Server, env *tools.Env) {
 			"motionPresets (sun-lr: the sun passes left to right…) and/or from, via, to (frame fractions -2..2), duration (seconds per pass), " +
 			"easing (linear, in, out, inOut, sine), loop (once, loop, pingpong), rotate (degrees), scaleFrom/scaleTo, kelvinFrom/kelvinTo. " +
 			"on false pauses it; preset none removes it. It starts now."}, motionSet)
+	registerAccent(s, env)
 	tools.Add(s, env, &mcp.Tool{Name: "preset_apply", Title: "Apply a preset",
 		Description: "Applies a preset (id or name: golden hour, office am, noir blinds, breezy window, storm, ember, flowers, and the user's " +
 			"own) to the active scene: it replaces that mode's stack and puts the mode on air."}, presetApply)

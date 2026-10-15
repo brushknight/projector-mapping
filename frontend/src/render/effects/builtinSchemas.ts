@@ -264,5 +264,12 @@ export const BUILTIN_SCHEMAS: Record<string, ParamSchema> = {
       "default": "#e9fbff",
       "label": "color"
     }
+  },
+  "converge": {
+    "from": { "type": "enum", "options": ["current", "circle", "frame"], "default": "current", "label": "from" },
+    "source": { "type": "enum", "options": ["static", "live", "color", "scenery"], "default": "static", "label": "light from" },
+    "ease": { "type": "enum", "options": ["inOut", "in", "out", "linear"], "default": "inOut", "label": "ease" },
+    "edge": { "type": "number", "min": 0, "max": 200, "default": 6, "label": "soft edge", "unit": "px" },
+    "outline": { "type": "boolean", "default": false, "label": "outline at the end" }
   }
 }

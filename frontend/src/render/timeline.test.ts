@@ -119,3 +119,62 @@ describe('layer clips', () => {
     expect(evaluateTimeline(base, 3).size).toBe(0)
   })
 })
+
+describe('holds (§20)', () => {
+  const obj = scene.objects[0]
+  const base = (clips: Array<Partial<import('../entities/scene/types').Clip>>, tracks = [{ id: 'tk', name: 'cube', target: { kind: 'object', id: obj.id } }]) =>
+    ({
+      ...scene,
+      timeline: {
+        duration: 30,
+        tracks,
+        clips: clips.map((c, i) => ({ id: `c${i}`, trackId: 'tk', effect: 'trace', start: 0, end: 1, fadeIn: 0, fadeOut: 0.5, params: {}, ...c })),
+        cues: [],
+      },
+    }) as unknown as Scene
+  const on = (sc: Scene, t: number) => (evaluateTimeline(sc, t).get(obj.surfaces[0].id) ?? []).map((a) => `${a.clip.id}${a.held ? '·held' : ''}`)
+
+  it('ends a clip without hold at its end and keeps one with hold until the next of its effect', () => {
+    const sc = base([
+      { effect: 'trace', start: 0, end: 2 },
+      { effect: 'fill', start: 2, end: 4, hold: true },
+      { effect: 'trace', start: 5, end: 6 },
+      { effect: 'fill', start: 8, end: 9 },
+    ])
+    expect(on(sc, 1)).toEqual(['c0'])
+    expect(on(sc, 3)).toEqual(['c1'])
+    // after its end the fill holds at progress 1, full alpha (no fade out), under the next trace
+    expect(on(sc, 5.5)).toEqual(['c1·held', 'c2'])
+    const held = evaluateTimeline(sc, 7).get(obj.surfaces[0].id)![0]
+    expect(held).toMatchObject({ progress: 1, alpha: 1, held: true })
+    // the next fill takes over; it does not hold, so after it nothing
+    expect(on(sc, 8.5)).toEqual(['c3'])
+    expect(on(sc, 10)).toEqual([])
+  })
+
+  it('is a pure function of t: seeking back and forth lands on the same state', () => {
+    const sc = base([{ effect: 'fill', start: 0, end: 2, hold: true }, { effect: 'scan', start: 3, end: 5 }])
+    const ts = [0.5, 4, 2.5, 10, 0.5, 4, 2.5]
+    const first = ts.slice(0, 4).map((t) => JSON.stringify(on(sc, t)))
+    expect(ts.slice(4).map((t) => JSON.stringify(on(sc, t)))).toEqual([first[0], first[1], first[2]])
+  })
+
+  it('never hands the converge to surfaces (the engine draws it over the scene)', () => {
+    const sc = base([{ effect: 'converge', start: 0, end: 2 }])
+    expect(on(sc, 1)).toEqual([])
+    expect(on(sc, 5)).toEqual([])
+  })
+
+  it('reverts a layer clip with hold false to the value before it', () => {
+    const sc = base(
+      [
+        { trackId: 'tl', effect: 'reveal', start: 0, end: 2, params: { from: 0, to: 0.5 } },
+        { trackId: 'tl', effect: 'reveal', start: 4, end: 6, params: { from: 0.5, to: 1 }, hold: false },
+      ],
+      [{ id: 'tl', name: 'l', target: { kind: 'layer', id: 'cl_1' } }] as never,
+    )
+    expect(evaluateLayerClips(sc, 3).get('cl_1')?.reveal).toBe(0.5)
+    expect(evaluateLayerClips(sc, 5).get('cl_1')?.reveal).toBeCloseTo(0.75)
+    expect(evaluateLayerClips(sc, 7).get('cl_1')?.reveal).toBe(0.5)
+  })
+})

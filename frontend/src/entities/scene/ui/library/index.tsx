@@ -84,6 +84,10 @@ function EffectsTab({ onTab }: { onTab: (t: LibraryTab) => void }) {
   const ed = useEditor()
   const pick = usePick()
   const add = (def: EffectDef) => {
+    if (def.id === 'converge') {
+      ed.toast('Drag converge onto an object track: the light on air closes onto the object over the clip.')
+      return
+    }
     const sid = ed.sel.surfaceId
     if (!sid) {
       ed.toast('Select a surface first, or drag the effect onto a timeline track.')
@@ -94,7 +98,7 @@ function EffectsTab({ onTab }: { onTab: (t: LibraryTab) => void }) {
   return (
     <div className={s.grid}>
       {ed.effects.map((def) => (
-        <LibTile key={def.id} icon={effectIcon(def.id, def.kind)} label={def.name} dragData={`effect:${def.id}`} onClick={() => add(def)} title={`${def.name}: click to add to the selected surface, drag onto a track`} />
+        <LibTile key={def.id} icon={effectIcon(def.id, def.kind)} label={def.name} dragData={`effect:${def.id}`} onClick={() => add(def)} title={def.id === 'converge' ? 'converge: drag onto an object track; the light on air closes onto the object' : `${def.name}: click to add to the selected surface, drag onto a track`} />
       ))}
       <LibTile
         icon="gobo"

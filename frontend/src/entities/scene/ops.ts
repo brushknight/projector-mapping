@@ -4,8 +4,9 @@
  * They return null when the target no longer exists.
  */
 import { pointer } from '../../shared/lib/jsonPatch'
-import { findLayer, locateAttachment, locateLayer, stackAttachments, stackLayers } from './lib'
-import type { Atlas, AtlasRect, Attachment, BackdropMode, Clip, ContentLayer, Cue, EffectInstance, Layer, LayerStack, Mesh, Motion, PatchOp, Point, Scene, SceneMode, SceneObject, SoundPad, StackLight, Surface, Track, Underlay } from './types'
+import { findLayer, locateAttachment, locateLayer, stackAttachments, stackLayers, underlayOf } from './lib'
+import type { Atlas, AtlasRect, Attachment, BackdropMode, Clip, ContentLayer, Cue, EffectInstance, Layer, LayerStack, Mesh, Motion, ObjectAccent, PatchOp, Point, Scene, SceneMode, SceneObject, SoundPad, StackLight, Surface, Track, Underlay } from './types'
+import { BACKDROP_MODES } from './types'
 
 type Ops = PatchOp[] | null
 
@@ -263,6 +264,11 @@ export function setUnderlay(scene: Scene, underlay: Underlay): PatchOp[] {
   return [{ op: scene.underlay ? 'replace' : 'add', path: '/underlay', value: underlay }]
 }
 
+/** (§19) writes the whole object accent (creates it on the first change) */
+export function setObjectAccent(scene: Scene, accent: ObjectAccent): PatchOp[] {
+  return [{ op: scene.objectAccent ? 'replace' : 'add', path: '/objectAccent', value: accent }]
+}
+
 export function removeLayer(scene: Scene, layerId: string): Ops {
   const loc = locateLayer(scene, layerId)
   return loc ? [{ op: 'remove', path: pointer('backdrop', loc.mode, 'layers', loc.i) }] : null
@@ -297,6 +303,11 @@ export function removeTrack(scene: Scene, trackId: string): Ops {
   for (let c = scene.timeline.clips.length - 1; c >= 0; c--) if (scene.timeline.clips[c].trackId === trackId) ops.push({ op: 'remove', path: pointer('timeline', 'clips', c) })
   ops.push({ op: 'remove', path: pointer('timeline', 'tracks', i) })
   return ops
+}
+
+/** (§20) the light a new converge takes: the backdrop mode on air, or the underlay's mode while objects are on air. */
+export function convergeSource(scene: Scene): BackdropMode {
+  return scene.mode !== 'objects' && (BACKDROP_MODES as string[]).includes(scene.mode) ? (scene.mode as BackdropMode) : underlayOf(scene).from
 }
 
 export function addClip(clip: Clip): PatchOp[] {

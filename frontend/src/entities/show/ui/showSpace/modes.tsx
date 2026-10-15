@@ -9,7 +9,7 @@ import { layerParamSchema } from '../../../catalog/layers'
 import { ParamControls, resolveParams } from '../../../effect'
 import { presetApi, type Preset } from '../../../preset'
 import { stackLayers, underlayOf } from '../../../scene/lib'
-import { addLayer, applyPresetOps, layerPath, moveLayer, pickOne, removeLayer, setUnderlay, sortedCues, videoLayer } from '../../../scene/ops'
+import { addLayer, applyPresetOps, convergeSource, layerPath, moveLayer, pickOne, removeLayer, setUnderlay, sortedCues, videoLayer } from '../../../scene/ops'
 import { BACKDROP_MODES, type BackdropMode, type BlendMode, type GradientStop, type Layer, type LayerKind, type Light, type LightFxKind, type SceneObject } from '../../../scene/types'
 import { gradientCss, layerSwatch } from '../../../scene/ui/library'
 import { formatDuration } from '../../../sound/ui/useSounds'
@@ -18,8 +18,10 @@ import { useVideoUpload } from '../../../video/ui/videoUpload'
 import { useVideos, videoThumbUrl } from '../../../video/ui/useVideos'
 import { youtubeRef, type Video } from '../../../video/types'
 import { playheadNow } from '../../live'
+import { clipPhase } from '../../../../render/timeline'
 import { showAudio } from '../../types'
 import { useShow } from './context'
+import { AccentCard } from './accent'
 import { AttachmentBrowser, AttachmentCard, LightCard, MotionCard, PictureMotion, StaticLightPanel } from './light'
 import { LiveGallery } from './liveGallery'
 import { useLayerThumb } from './thumbs'
@@ -261,6 +263,7 @@ export function LivePanel() {
           <LightCard mode="live" />
           {selAtt && <AttachmentCard attachment={selAtt} />}
           {selAtt && <MotionCard key={selAtt.id} mode="live" attachment={selAtt} />}
+          <AccentCard />
         </div>
       </div>
     </>
@@ -497,6 +500,17 @@ function soundWhere(output: 'projector' | 'editor' | 'phone'): string {
 
 // ── objects ──────────────────────────────────────────────────────────────────
 
+/** (§20) what "start with converge" will do: which light closes onto which object, or why it cannot. */
+function convergeOpening(scene: NonNullable<ReturnType<typeof useShow>['scene']>, last: BackdropMode | null): { ok: boolean; hint: string } {
+  const clip = scene.timeline.clips.find((c) => c.effect === 'converge' && c.start <= 1e-6)
+  const track = clip ? scene.timeline.tracks.find((t) => t.id === clip.trackId) : null
+  const target = track?.target.kind === 'object' ? scene.objects.find((o) => o.id === track.target.id)?.name : track?.target.kind === 'all' ? 'every object' : track?.target.kind === 'surface' ? 'its surface' : scene.objects.find((o) => o.visible)?.name
+  if (!target) return { ok: false, hint: 'map an object first: the light needs a shape to close onto.' }
+  const own = clip ? (clip.params as Record<string, unknown>).source : null
+  const source = last ?? (scene.mode !== 'objects' ? scene.mode : typeof own === 'string' ? own : convergeSource(scene))
+  return { ok: true, hint: `the ${source} light closes onto ${target}${clip ? '' : ' (adds a 2 s converge at 0)'}, then holds for go.` }
+}
+
 function objectClips(scene: NonNullable<ReturnType<typeof useShow>['scene']>, o: SceneObject) {
   const surfaces = new Set(o.surfaces.map((x) => x.id))
   const layers = new Set([...(o.layers ?? []), ...o.surfaces.flatMap((x) => x.layers ?? [])].map((l) => l.id))
@@ -508,11 +522,11 @@ function objectClips(scene: NonNullable<ReturnType<typeof useShow>['scene']>, o:
   return scene.timeline.clips.filter((c) => tracks.has(c.trackId))
 }
 
-/** lit (a clip plays on it now), waiting (one comes later), off. */
+/** lit (a clip plays on it now, or holds its end, §20), waiting (one comes later), off. */
 function objectState(scene: NonNullable<ReturnType<typeof useShow>['scene']>, o: SceneObject, t: number): 'lit' | 'waiting' | 'off' {
   if (!o.visible) return 'off'
   const c = objectClips(scene, o)
-  if (c.some((x) => x.start <= t && t < x.end)) return 'lit'
+  if (c.some((x) => clipPhase(x, scene.timeline.clips.filter((y) => y.trackId === x.trackId), t))) return 'lit'
   if (c.some((x) => x.start > t)) return 'waiting'
   return 'off'
 }
@@ -544,6 +558,9 @@ export function ObjectsPanel() {
   const segFrac = cur ? Math.max(0, Math.min(1, (t - cur.at) / Math.max(0.01, segEnd - cur.at))) : 0
   const soundName = cur?.sound?.sound ? sh.sounds.find((x) => x.sha === cur.sound!.sound)?.name ?? 'missing sound' : null
   const under = scene ? underlayOf(scene) : null
+  // (§20) the opening: the light on air closes onto the object, then the wall holds for go
+  const opening = scene ? convergeOpening(scene, sh.lastBackdrop) : null
+  const converge = () => void sh.command('show.converge', sh.lastBackdrop ? { source: sh.lastBackdrop } : {})
   const reveal = async (o: SceneObject) => {
     if (!scene) return
     const starts = objectClips(scene, o).map((c) => c.start)
@@ -560,6 +577,16 @@ export function ObjectsPanel() {
         </div>
         <ProgressBar segments={Math.max(1, cues.length)} filled={cues.length ? i + 1 : 0} label="cues" />
         <ProgressBar value={transport?.state === 'stopped' ? 0 : segFrac} label="this cue" />
+        {opening && (
+          <div className={s.convergeRow}>
+            <button type="button" className={s.converge} onClick={converge} disabled={!opening.ok} title={opening.ok ? 'switch the wall to the objects: the light on air closes onto the object, then holds at the next cue for go' : opening.hint} data-testid="start-converge">
+              <Icon name="converge" size={18} /> start with converge
+            </button>
+            <span className={s.dim} data-testid="converge-hint">
+              {opening.hint}
+            </span>
+          </div>
+        )}
         <div className={s.goRow}>
           <button type="button" className={s.sq} onClick={() => sh.command('show.back')} aria-label="previous cue" title="previous cue" data-testid="cue-back">
             <Icon name="prev" size={18} />

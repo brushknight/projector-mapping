@@ -81,6 +81,31 @@ import PMTestSupport
         #expect(scene.points.count == 41)
     }
 
+    /// (§20) the converge clip and `hold` decode, default by effect and survive a round trip.
+    @Test func convergeClipAndHold() throws {
+        let scene = try JSONDecoder().decode(Scene.self, from: Fixtures.data("scene"))
+        let clip = try #require(scene.timeline.clips.first { $0.isConverge })
+        #expect(clip.hold == true && clip.holds && clip.start == 0 && clip.end == 2)
+        #expect(clip.params["source"] == "static" && clip.params["from"] == "current" && clip.params["outline"] == true)
+        let track = try #require(scene.timeline.tracks.first { $0.id == clip.trackId })
+        #expect(track.target == TrackTarget(kind: "object", id: "obj_cube"))
+        // absent hold: the effect's default
+        let grid = try #require(scene.timeline.clips.first { $0.id == "clp_grid" })
+        #expect(grid.hold == nil && !grid.holds)
+        #expect(Clip(id: "c", trackId: "t", effect: "reveal", start: 0, end: 1).holds)
+        #expect(!Clip(id: "c", trackId: "t", effect: "converge", start: 0, end: 1, hold: false).holds)
+        // in effect while it plays and after its end when it holds; a grid build ends at its end
+        let own = scene.timeline.clips.filter { $0.trackId == clip.trackId }
+        #expect(clip.inEffect(at: 1, track: own) && clip.inEffect(at: 10, track: own) && !clip.inEffect(at: -1, track: own))
+        #expect(grid.inEffect(at: 1, track: [grid]) && !grid.inEffect(at: 5, track: [grid]))
+        let next = Clip(id: "c2", trackId: clip.trackId, effect: "converge", start: 6, end: 7, hold: false)
+        #expect(!clip.inEffect(at: 6.5, track: own + [next]) && next.inEffect(at: 6.5, track: own + [next]) && !next.inEffect(at: 8, track: own + [next]))
+        let again = try JSONDecoder().decode(Clip.self, from: JSONEncoder().encode(clip))
+        #expect(again == clip)
+        let plain = String(data: try JSONEncoder().encode(grid), encoding: .utf8) ?? ""
+        #expect(!plain.contains("hold"))
+    }
+
     @Test func showKeepsNanoseconds() throws {
         let show = try JSONDecoder().decode(Show.self, from: Fixtures.data("show"))
         #expect(show.transport.startedAt == 1_791_700_000_123_456_789)
@@ -199,9 +224,13 @@ import PMTestSupport
             case "reject":
                 #expect(try #require(env.d).decode(WireError.self).code == "stale")
                 #expect(env.v == 421)
-            case "cmd": #expect(["show.go", "scene.mode", "setup.testPattern", "sound.play", "show.audio"].contains(env.d?["name"]?.string ?? ""))
+            case "cmd":
+                #expect(["show.go", "scene.mode", "setup.testPattern", "sound.play", "show.audio", "show.converge"].contains(env.d?["name"]?.string ?? ""))
+                if env.d?["name"]?.string == "show.converge" {
+                    #expect(env.d?["args"]?["source"] == "static" && env.d?["args"]?["objectId"] == "obj_cube" && env.d?["args"]?["duration"] == 2)
+                }
             case "ack":
-                #expect(env.re == "c-78" || env.re == "c-90")
+                #expect(env.re == "c-78" || env.re == "c-90" || env.re == "c-95")
                 if env.re == "c-90" { #expect(env.d?["playId"] == "ply_k2m9x0aa" && env.d?["outputs"] == 1) }
             case "sound.play":
                 #expect(env.ch == nil)
@@ -223,7 +252,10 @@ import PMTestSupport
 
     @Test func catalogKeepsParamOrder() throws {
         let cat = try Catalog.decode(Data(contentsOf: Fixtures.catalogURL))
-        #expect(cat.version == 6)
+        #expect(cat.version == 7)
+        // (§20) the converge effect and its params, in order
+        let converge = try #require(cat.effects.first { $0.id == "converge" })
+        #expect(converge.params["from"]?["default"] == "current" && converge.params["outline"]?["type"] == "boolean")
         #expect(cat.videoParams.items.map(\.key) == ["blur", "brightness", "warmth", "drift", "start", "end", "audio", "volume"])
         #expect(cat.videoParams["blur"]?.default == 0.2)
         #expect(cat.videoDefaults["audio"] == false && cat.videoDefaults["brightness"] == 0.9)

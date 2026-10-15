@@ -5,6 +5,7 @@ package showsvc
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"sort"
 	"sync"
@@ -13,6 +14,7 @@ import (
 	"projmap/internal/application/app_errors"
 	"projmap/internal/application/ports/out/realtime"
 	showrepo "projmap/internal/application/ports/repository/show"
+	"projmap/internal/application/services"
 	assetssvc "projmap/internal/application/services/assets"
 	scenessvc "projmap/internal/application/services/scenes"
 	showsvc "projmap/internal/application/services/show"
@@ -188,6 +190,9 @@ func (s *Service) Do(ctx context.Context, action string, args json.RawMessage, b
 		Output     *string   `json:"output"`
 		Volume     *float64  `json:"volume"`
 		Muted      *bool     `json:"muted"`
+		Duration   *float64  `json:"duration"`
+		ObjectID   string    `json:"objectId"`
+		Source     string    `json:"source"`
 	}
 	if len(args) > 0 && string(args) != "null" {
 		if err := json.Unmarshal(args, &a); err != nil {
@@ -260,6 +265,50 @@ func (s *Service) Do(ctx context.Context, action string, args json.RawMessage, b
 				return st, app_errors.BadRequest("seek needs {t} in seconds.")
 			}
 			st.Transport = show.Seek(st.Transport, *a.T, cues, sc.Timeline.Duration, now)
+		}
+	case "converge":
+		// (§20) the opening sequence: the converge clip at 0 (inserted when missing), objects mode, play to the
+		// first cue after it and hold there for GO
+		id := a.SceneID
+		if id == "" {
+			id = st.ActiveSceneID
+		}
+		if id == "" {
+			return st, app_errors.NoScene("No active scene.")
+		}
+		sc, err := s.scenes.Scene(ctx, id)
+		if err != nil {
+			return st, err
+		}
+		in := scene.ConvergeIn{ObjectID: a.ObjectID, Source: a.Source}
+		if a.Duration != nil {
+			if *a.Duration < 0.1 || *a.Duration > 60 {
+				return st, app_errors.BadRequest("converge duration must be 0.1..60 seconds.")
+			}
+			in.Duration = *a.Duration
+		}
+		plan, err := scene.Converge(sc, in, services.NewID)
+		if err != nil {
+			var ce scene.ErrConverge
+			if errors.As(err, &ce) {
+				return st, app_errors.BadRequest("%s", ce.Msg)
+			}
+			return st, err
+		}
+		if len(plan.Ops) > 0 {
+			if _, err := s.scenes.Patch(ctx, scenessvc.PatchCmd{SceneID: sc.ID, Base: sc.Version, Ops: plan.Ops, By: by}); err != nil {
+				return st, err
+			}
+		}
+		if sc.ID != st.ActiveSceneID {
+			st.ActiveSceneID, st.ActiveSetupID = sc.ID, sc.SetupID
+			st.Audio = s.clearLoops(st.Audio)
+		}
+		st.Preview = nil
+		st.Transport = show.Transport{State: show.Playing, StartedAt: now, Offset: 0, Cue: plan.Cue}
+		s.log.Info("converge", "scene", sc.ID, "clip", plan.ClipID, "inserted", plan.Inserted, "source", plan.Source, "holdAt", plan.HoldAt)
+		if fresh, err := s.scenes.Scene(ctx, sc.ID); err == nil {
+			defer s.cueSound(ctx, fresh, 0)
 		}
 	case "solo":
 		solo, err := soloOf(a.SurfaceIDs, a.Fill, a.Seconds, now)

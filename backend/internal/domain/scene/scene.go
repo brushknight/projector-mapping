@@ -18,8 +18,10 @@ type Scene struct {
 	Format   int      `json:"format"`
 	Backdrop Backdrop `json:"backdrop"`
 	Underlay Underlay `json:"underlay"`
-	Points   []Point  `json:"points"`
-	Objects  []Object `json:"objects"`
+	// ObjectAccent draws the objects' silhouettes over a backdrop mode (protocol §19); nil (absent) is off.
+	ObjectAccent *ObjectAccent `json:"objectAccent,omitempty"`
+	Points       []Point       `json:"points"`
+	Objects      []Object      `json:"objects"`
 	// Sounds is the scene's soundboard (protocol §14); always written, absent decodes to no pads.
 	Sounds   Sounds   `json:"sounds"`
 	Timeline Timeline `json:"timeline"`
@@ -297,6 +299,8 @@ type Clip struct {
 	FadeIn  float64        `json:"fadeIn"`
 	FadeOut float64        `json:"fadeOut"`
 	Params  map[string]any `json:"params"`
+	// Hold keeps the clip's end state after its end (protocol §20); nil takes the effect's default (Holds).
+	Hold *bool `json:"hold,omitempty"`
 }
 
 // Cue is a GO stop.

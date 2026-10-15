@@ -10,13 +10,16 @@ import { layerParamSchema, stackLightOf } from '../entities/catalog/layers'
 import { resolveParams } from '../entities/effect/params'
 import type { EffectDef, ParamSchema } from '../entities/effect/types'
 import { allLayers, onAirPlan } from '../entities/scene/lib'
-import type { Attachment, ContentLayer, Layer, LayerStack, Point, Scene, SceneObject, StackLight, Surface } from '../entities/scene/types'
+import type { Attachment, BackdropMode, ContentLayer, Layer, LayerStack, ObjectAccent, Point, Scene, SceneObject, StackLight, Surface } from '../entities/scene/types'
 import { attachmentParams, attachmentUniforms } from './attachments'
 import { GENERATOR_IDS, GENERATORS } from './generators'
 import { sampleMotion } from './motion'
 import { COLOR_FS, LIGHT_FS, MASK_FS, SHAPE } from './shaders/light'
 import { PLATE_TEXTURE, plateCanvas, plateDef, plateKey } from './plates'
 import { atlasAffines, resolveAtlas, type Affine } from './atlas'
+import { accentObjects, objectAccentOf, silhouette, silhouetteFaces } from './accent'
+import { convergeLoops, convergeStart, evaluateConverge, farDistance, CONVERGE_MAX_LOOPS, CONVERGE_MAX_VERTS, type ConvergeState } from './converge'
+import { CONVERGE_FS } from './shaders/converge'
 import { CONTENT_FS, MAX_STOPS } from './shaders/content'
 import { BUILTINS } from './effects/builtins'
 import { makeDrawingCanvas, parseStrokes, strokesKey } from './effects/drawing'
@@ -143,6 +146,9 @@ export class Renderer {
   private maskProg: GLProgram
   private colorProg: GLProgram
   private lightProg: GLProgram
+  private convergeProg: GLProgram
+  private convergePts = new Float32Array(CONVERGE_MAX_VERTS * 2)
+  private convergeEnds = new Float32Array(CONVERGE_MAX_LOOPS)
   private videos: VideoCache
   private gridCanvases = new Map<string, OffscreenCanvas | HTMLCanvasElement>()
   /** (plates) mask textures of metal plates, rasterized once per plate */
@@ -197,6 +203,7 @@ export class Renderer {
     this.maskProg = createProgram(gl, FULLSCREEN_VS, MASK_FS)
     this.colorProg = createProgram(gl, FULLSCREEN_VS, COLOR_FS)
     this.lightProg = createProgram(gl, FULLSCREEN_VS, LIGHT_FS)
+    this.convergeProg = createProgram(gl, FULLSCREEN_VS, CONVERGE_FS)
     this.images = new ImageCache(gl)
     this.images.onLoad = () => this.onInvalidate?.()
     this.videos = new VideoCache(gl)
@@ -252,11 +259,18 @@ export class Renderer {
 
     const plan = input.scene ? (solo ? { layers: [], level: 0, objects: true, light: null } : this.plan(input, input.scene)) : null
     if (input.scene && plan && !input.hideBackdrop) this.renderBackdrop(input, plan.layers, plan.level, scene, plan.light)
+    // (§19) the object accent: the mapped objects' silhouettes over a backdrop mode
+    const onAir = input.mode ?? input.scene?.mode ?? 'static'
+    if (input.scene && plan && !solo && !input.layerOnly && !input.hideBackdrop && onAir !== 'objects') this.renderAccent(input, input.scene, scene)
+    // (§20) the converge: a backdrop mode's light closing onto the objects' silhouettes, under the mapped content
+    const converges = input.scene && plan?.objects && !solo && !input.layerOnly && !input.hideBackdrop ? evaluateConverge(input.scene, input.t, input.mutedTracks) : []
+    if (converges.length) this.renderConverge(input, input.scene!, scene, converges)
     this.objFrame.clear()
 
     const keep = new Set<string>()
     const dynKeep = new Set<string>()
     if (input.scene && plan?.objects && !input.hideMapping && !input.layerOnly) this.renderMapping(input, input.scene, scene, keep, dynKeep)
+    if (converges.length) this.renderConvergeOutline(input, input.scene!, scene, converges)
     this.pool.prune('content:', keep)
     for (const k of this.textCanvases.keys()) if (!dynKeep.has('text:' + k)) this.textCanvases.delete(k)
     for (const k of this.drawCanvases.keys()) if (!dynKeep.has(k)) this.drawCanvases.delete(k)
@@ -374,7 +388,10 @@ export class Renderer {
     const scene = input.scene
     if (!scene) return
     const waits: Promise<void>[] = []
-    for (const l of this.plan(input, scene).layers) {
+    // (§20) a converge draws its source backdrop too
+    const sources = new Set(evaluateConverge(scene, input.t, input.mutedTracks).map((c) => c.params.source))
+    const layers = [...this.plan(input, scene).layers, ...[...sources].flatMap((m) => onAirPlan(scene, m).layers)]
+    for (const l of layers) {
       if (l.kind !== 'photo' && !(l.kind === 'video' && l.ref.startsWith('asset:'))) continue
       if (!l.visible && input.layerOnly !== l.id) continue
       const url = photoUrl(l.ref, this.opts.resolveUrl)
@@ -427,7 +444,7 @@ export class Renderer {
     this.js.dispose()
     this.mesh.dispose()
     for (const p of this.effectProgs.values()) if ('prog' in p) gl.deleteProgram(p.prog.prog)
-    for (const p of [this.layerProg, this.downProg, this.upProg, this.blitProg, this.warpProg, this.finalProg, this.contentProg, this.maskProg, this.colorProg, this.lightProg]) gl.deleteProgram(p.prog)
+    for (const p of [this.layerProg, this.downProg, this.upProg, this.blitProg, this.warpProg, this.finalProg, this.contentProg, this.maskProg, this.colorProg, this.lightProg, this.convergeProg]) gl.deleteProgram(p.prog)
     gl.deleteTexture(this.blackTex)
     gl.deleteTexture(this.opaqueBlack)
     if (loseContext) gl.getExtension('WEBGL_lose_context')?.loseContext()
@@ -1391,6 +1408,7 @@ export class Renderer {
     content: WebGLTexture | null,
     o: { sx: number; sy: number; mode: number; color: [number, number, number, number]; opacity: number; soft: number },
     target: Target,
+    blend: 'none' | 'over' | 'add' = 'over',
   ) {
     // geometry is in authored scene px; scale into the (possibly capped) target
     let verts = geo.verts
@@ -1425,8 +1443,150 @@ export class Renderer {
     } else if (geo.hInv) p.m3('u_hInv', toGlMat3(geo.hInv, this.m3))
     p.i1('u_useH', geo.hInv ? 1 : 0)
     p.tex('u_content', 0, content ?? this.blackTex)
-    this.setBlend('over')
+    this.setBlend(blend)
     this.mesh.draw()
+  }
+
+  // ── object accent (§19) ────────────────────────────────────────────────────
+
+  /**
+   * Draws the accented objects over the backdrop in `target`: the fill (a soft light added inside, the backdrop cut
+   * out inside, or the backdrop kept only inside) from the faces' triangles, then the silhouette as a crisp line
+   * with stepped glow bands under it. The line is never blurred, so the mapping edge stays sharp.
+   */
+  private renderAccent(input: RenderInput, scene: Scene, target: Target) {
+    const a = objectAccentOf(scene)
+    if (!a.on) return
+    const objs = accentObjects(scene, a)
+    if (!objs.length) return
+    const gl = this.gl
+    const size = sceneSizeOf(input.setup)
+    const sx = target.width / size.width
+    const sy = target.height / size.height
+    const pts = new Map<string, Point>(scene.points.map((p) => [p.id, p]))
+    const c = hexToRgb(a.outline.color, [1, 1, 1])
+    const clamp01 = (v: number) => Math.max(0, Math.min(1, Number.isFinite(v) ? v : 0))
+    const op = clamp01(a.fill.opacity)
+    if (a.fill.on && op > 0) {
+      const faces = objs.flatMap((o) => silhouetteFaces(o)).map((s) => surfaceGeometry(s, pts)).filter((g): g is SurfaceGeometry => !!g)
+      if (a.fill.mode === 'light') {
+        for (const g of faces) this.drawWarp(g, null, { sx, sy, mode: 2, color: [c[0] * op, c[1] * op, c[2] * op, 0], opacity: 1, soft: 0 }, target, 'add')
+      } else {
+        // a multiply mask: the backdrop × (inside ? in : out)
+        const inside = a.fill.mode === 'cut' ? 1 - op : 1
+        const outside = a.fill.mode === 'only' ? 1 - op : 1
+        const m = this.pool.get('accent', target.width, target.height)
+        bindTarget(gl, m)
+        gl.clearColor(outside, outside, outside, 1)
+        gl.clear(gl.COLOR_BUFFER_BIT)
+        for (const g of faces) this.drawWarp(g, null, { sx, sy, mode: 2, color: [inside, inside, inside, 1], opacity: 1, soft: 0 }, m, 'none')
+        bindTarget(gl, target)
+        gl.enable(gl.BLEND)
+        gl.blendEquation(gl.FUNC_ADD)
+        gl.blendFuncSeparate(gl.ZERO, gl.SRC_COLOR, gl.ZERO, gl.ONE)
+        this.blit(m.tex)
+      }
+    }
+    if (a.outline.on) this.strokeSilhouette(objs.flatMap((o) => silhouette(o, pts)), a.outline, target, sx, sy, 1)
+    this.setBlend('none')
+  }
+
+  /**
+   * (§19) The accent's line over silhouette loops: a crisp line of `width` scene px with stepped glow bands under it,
+   * never blurred. `alpha` fades the whole line (the converge's outline lands with it, §20).
+   */
+  private strokeSilhouette(loops: Array<Array<[number, number]>>, outline: ObjectAccent['outline'], target: Target, sx: number, sy: number, alpha: number) {
+    const width = Math.max(0, Math.min(64, outline.width))
+    const k = Math.max(0, Math.min(1, alpha))
+    if (width <= 0 || k <= 0) return
+    const c = hexToRgb(outline.color, [1, 1, 1])
+    const glow = Math.max(0, Math.min(1, Number.isFinite(outline.glow) ? outline.glow : 0))
+    const lines = loops.filter((l) => l.length > 1)
+    bindTarget(this.gl, target)
+    if (glow > 0) {
+      // widest band first, each a little brighter towards the line
+      for (let i = 4; i >= 1; i--) {
+        const w = width + i * (3 + 10 * glow)
+        const al = 0.12 * glow * k
+        for (const l of lines) this.drawWarp({ ...strokePolyline(l, w), kind: 'line', closed: false }, null, { sx, sy, mode: 2, color: [c[0] * al, c[1] * al, c[2] * al, al], opacity: 1, soft: 0 }, target)
+      }
+    }
+    for (const l of lines) this.drawWarp({ ...strokePolyline(l, width), kind: 'line', closed: false }, null, { sx, sy, mode: 2, color: [c[0] * k, c[1] * k, c[2] * k, k], opacity: 1, soft: 0 }, target)
+  }
+
+  // ── converge (§20) ─────────────────────────────────────────────────────────
+
+  /**
+   * Draws each converge in effect: its source backdrop, rendered exactly as in its own mode (each source once per
+   * frame), through the morphing mask (CONVERGE_FS). Over the underlay, under the mapped content.
+   */
+  private renderConverge(input: RenderInput, scene: Scene, target: Target, states: ConvergeState[]) {
+    const gl = this.gl
+    const frame = sceneSizeOf(input.setup)
+    const sources = new Map<BackdropMode, Target>()
+    for (const st of states) {
+      if (st.alpha <= 0) continue
+      const mode = st.params.source
+      let src = sources.get(mode)
+      if (!src) {
+        src = this.pool.get(`converge:${mode}`, target.width, target.height)
+        bindTarget(gl, src)
+        gl.clearColor(0, 0, 0, 1)
+        gl.clear(gl.COLOR_BUFFER_BIT)
+        const was = this.seeThrough
+        this.seeThrough = false
+        this.renderBackdrop(input, onAirPlan(scene, mode).layers, 1, src, mode === 'static' || mode === 'live' ? lightPlan(scene, mode) : null)
+        this.seeThrough = was
+        sources.set(mode, src)
+      }
+      const start = convergeStart(scene, st.params, frame, input.catalog, input.now ?? 0, input.t)
+      const loops = convergeLoops(scene, st.track)
+      this.convergePts.fill(0)
+      this.convergeEnds.fill(0)
+      let n = 0
+      loops.forEach((l, i) => {
+        for (const [x, y] of l) {
+          this.convergePts[n * 2] = x
+          this.convergePts[n * 2 + 1] = y
+          n++
+        }
+        this.convergeEnds[i] = n
+      })
+      bindTarget(gl, target)
+      this.setBlend('over')
+      const p = this.convergeProg.use()
+      p.tex('u_src', 0, src.tex)
+      p.f2('u_frame', frame.width, frame.height)
+      p.i1('u_start', start.kind === 'circle' ? 1 : 0)
+      if (start.kind === 'circle') p.f3('u_circle', start.cx, start.cy, start.r)
+      else p.f3('u_circle', 0, 0, 0)
+      p.v2('u_pts', this.convergePts)
+      p.v1('u_loopEnd', this.convergeEnds)
+      p.i1('u_loops', loops.length)
+      p.f1('u_far', farDistance(frame))
+      p.f1('u_e', st.e)
+      p.f1('u_edge', st.params.edge)
+      p.f1('u_aa', frame.width / Math.max(1, target.width))
+      p.f1('u_alpha', st.alpha)
+      this.drawFullscreen()
+    }
+    this.setBlend('none')
+  }
+
+  /** (§20) A converge with `outline` draws the silhouette in the accent's line style as it lands, over the content. */
+  private renderConvergeOutline(input: RenderInput, scene: Scene, target: Target, states: ConvergeState[]) {
+    const frame = sceneSizeOf(input.setup)
+    const sx = target.width / frame.width
+    const sy = target.height / frame.height
+    const style = objectAccentOf(scene).outline
+    for (const st of states) {
+      if (!st.params.outline || st.alpha <= 0) continue
+      const k = st.alpha * Math.max(0, Math.min(1, (st.progress - 0.8) / 0.2))
+      if (k <= 0) continue
+      const loops = convergeLoops(scene, st.track).map((l) => [...l, l[0]])
+      this.strokeSilhouette(loops, style, target, sx, sy, k)
+    }
+    this.setBlend('none')
   }
 
   // ── overlay and final ──────────────────────────────────────────────────────

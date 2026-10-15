@@ -707,3 +707,45 @@ struct MotionProgress: View {
         }
     }
 }
+
+// MARK: - Object accent
+
+/// (protocol §19) The mapped objects over the backdrop: their outer outline as a sharp line with a glow, and a fill
+/// (a light inside, the backdrop cut out, or the backdrop only inside). One setting per scene, shared by every
+/// backdrop tab; the web editor's show panel also picks which objects.
+struct AccentCard: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        let a = model.objectAccent
+        let live = model.hub.isLive
+        let hasObjects = !(model.active.scene?.objects.isEmpty ?? true)
+        Card {
+            CapRow("object accent", padding: 2) { CapText(hasObjects ? "the objects over the light" : "map an object first") }
+            Toggle("outline the objects", isOn: Binding(get: { a.on }, set: { on in model.editAccent { $0.on = on } }))
+                .toggleStyle(PMSwitchStyle())
+                .disabled(!live || !hasObjects)
+                .accessibilityHint("draws the outer edge of every mapped object over this backdrop")
+            if a.on {
+                FillSlider("line width", icon: .softness, value: min(1, a.outline.width / 16), enabled: live, format: { "\(Int(($0 * 16).rounded())) px" }) { f in
+                    model.accentParam(["outline", "width"], (f * 16).rounded()) { $0.outline.width = $1 }
+                }
+                FillSlider("glow", icon: .sun, value: a.outline.glow, enabled: live) { f in
+                    model.accentParam(["outline", "glow"], (f * 100).rounded() / 100) { $0.outline.glow = $1 }
+                }
+                Toggle("fill the objects", isOn: Binding(get: { a.fill.on }, set: { on in model.editAccent { $0.fill.on = on } }))
+                    .toggleStyle(PMSwitchStyle())
+                    .disabled(!live)
+                if a.fill.on {
+                    Segmented(["light inside", "cut out", "only inside"], selected: ObjectAccent.Fill.modes.firstIndex(of: a.fill.mode) ?? 1, height: 30) { i in
+                        model.editAccent { $0.fill.mode = ObjectAccent.Fill.modes[i] }
+                    }
+                    .accessibilityLabel("fill")
+                    FillSlider("fill strength", icon: .softness, value: a.fill.opacity, enabled: live) { f in
+                        model.accentParam(["fill", "opacity"], (f * 100).rounded() / 100) { $0.fill.opacity = $1 }
+                    }
+                }
+            }
+        }
+    }
+}

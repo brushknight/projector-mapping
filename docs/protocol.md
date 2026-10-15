@@ -197,6 +197,9 @@ writes.
   `all` to every surface in the scene.
 - Times are seconds. Each clip's `progress` = (t − start) / (end − start), 0…1.
 - GO jumps to the next cue's `at` and plays. If `autoFollow` is false, playback holds at the next cue.
+- (§20) A clip may carry `hold` (it keeps its end state after `end`); the state at t is every clip up to t with its
+  hold, so GO, seek and back continue from the previous state. The built-in effect `converge` closes a backdrop
+  mode's light onto an object's silhouette (`show.converge` starts a sequence with it).
 
 ### Effect (catalog or user/agent-made)
 
@@ -1680,3 +1683,129 @@ Codex (or kill those `projmap mcp` processes) once to pick up the new binary.
   connection drops; while disconnected it shows "reconnecting to projmap…" in the corner.
 - `output.pattern` (calibration, aim, light check) goes to exactly one client: the newest connection with role
   `output`. The pre-flight shows that output's window size next to the setup's size.
+
+## 19. Object accent (2026-10-15)
+
+The mapped objects can be drawn over a backdrop mode, so a gobo's pattern falls over the object while its edges glow.
+
+```json
+"objectAccent": {
+  "on": true,
+  "objects": "all",
+  "outline": { "on": true, "width": 3, "color": "#ffffff", "glow": 0.3 },
+  "fill": { "on": false, "opacity": 0.5, "mode": "cut" }
+}
+```
+
+- **One setting per scene**, optional on decode (absent = off; the defaults above with `on: false`). It applies in
+  every backdrop mode (`static`, `live`, `color`, `scenery`) and never in `objects` mode, where the objects draw
+  themselves. Clients add it with `add /objectAccent` (the whole object) and then edit leaves (`replace
+  /objectAccent/outline/width`, params while a slider moves).
+- `objects`: `"all"` or a list of object ids. Ids of objects that no longer exist draw nothing (deleting an object
+  never fails on the accent). Hidden objects are skipped.
+- **Silhouette**: the outer outline of each object, the union of its faces (visible surfaces that are not details,
+  edges, lines or masks). Faces that meet share corner points (§1), so an edge two faces use is inside and is not
+  drawn; details are never drawn. A circle face draws its own outline. Faces that overlap without sharing points
+  show their own edges.
+- `outline`: `width` in scene px (0…64), `color` `#rrggbb`, `glow` 0…1 (soft bands around the line). The line is
+  never blurred (no focus), so the mapping edge stays sharp.
+- `fill.mode`: `light` adds a soft light of the outline colour inside the silhouette, `cut` blocks the backdrop
+  inside (the object stays dark with lit edges), `only` shows the backdrop only inside; `opacity` 0…1 is the
+  strength.
+- The same engine draws it on `/out`, `/view`, `/preview` (the phone's previews) and the editor.
+- **Validation (server)**: width 0…64, glow and opacity 0…1, colour `#rrggbb`, mode one of `light`, `cut`, `only`,
+  objects `"all"` or a string list.
+- **Editors**: the web Show panel has an "object accent" card under static and live (switch, object pick, width,
+  glow, colour, fill mode and strength); the phone's Static and Live tabs have a compact card (switch, width and glow
+  sliders, fill switch, fill mode, strength). Every object is accented on the phone; the web card picks them.
+- **MCP**: `object_accent_set { scene?, on?, objects?, outline?, width?, color?, glow?, fill?, fill_mode?,
+  fill_opacity? }` changes only the fields passed (`objects: ["all"]` for every object; names or ids otherwise).
+  Live with "agents edit live", else in the draft.
+
+## 20. Converge and state that carries over (2026-10-15)
+
+The opening of a mapping sequence: the light on the wall (a spot, a window, a gradient, a photo) closes onto the mapped
+object's outline, then the animations play. Every step continues from the state before it. Catalog `version` 7 (one
+new effect). Fixtures: `scene.json` (track `trk_converge`, clip `clp_converge` with `hold`), `ws-messages.json`
+(`cmd show.converge` and its `ack`), `catalog.json` (effect `converge`).
+
+### Hold: every clip may keep its end state
+
+```json
+{ "id": "clp_converge", "trackId": "trk_converge", "effect": "converge", "start": 0, "end": 2, "fadeIn": 0, "fadeOut": 0,
+  "params": { "from": "current", "source": "static", "ease": "inOut", "edge": 6, "outline": true }, "hold": true }
+```
+
+- `clip.hold` (boolean, optional; absent or null = the effect's default): **true** for `converge`, `reveal`, `sweep` and
+  `motion` (the layer clips always held, §12, §15), **false** for every other effect.
+- A clip that holds stays in effect after its `end`, at progress 1 and without its fade out, until the next clip
+  **with the same effect on the same track** starts (a later `start`; at the same `start`, the one further down
+  `timeline.clips`). A clip without hold ends at its `end` as before.
+- Layer clips (§12, §15) with `hold: false` go back after their end to the value they had before the clip (the `to`
+  of the last held clip, or the first clip's `from`) until the next clip starts.
+- **The state at time t is the evaluation of every clip up to t with its hold.** It depends on the document and t only:
+  GO, `seek`, `back`, a restart or a client that joins late all land on the same picture as playing there, so stepping
+  to the next cue continues from the previous state and never starts empty. Renderers keep no state between frames.
+- MCP: `clip_add` and `clip_update` take `hold`; `timeline_get { t }` adds `at`: the clips in effect at t
+  (`{ clipId, trackId, effect, progress, held }`).
+
+### The converge effect
+
+A built-in clip effect on a `surface`, `object` or `all` track (not on layer or sound tracks). Catalog params:
+
+| param | values | what |
+| --- | --- | --- |
+| `from` | `current` (default) \| `circle` \| `frame` | where the light starts: `frame` the whole frame; `circle` the light's round spot, else the frame's inscribed circle; `current` the light's round spot, else the frame |
+| `source` | `static` \| `live` \| `color` \| `scenery` (default `static`) | whose light converges: that backdrop mode, rendered exactly as in its own mode (light, attachments, focus, live layers, colours, photos, videos; a YouTube layer does not show) |
+| `ease` | `inOut` (default) \| `in` \| `out` \| `linear` | the motion curves of §15: `in` u², `out` 1 − (1 − u)², `inOut` 3u² − 2u³ |
+| `edge` | 0…200 scene px (default 6) | the soft edge of the moving outline |
+| `outline` | boolean (default false) | draws the silhouette in the object accent's line style (§19: `objectAccent.outline` width, colour and glow) as it lands, over the content |
+
+- **The round spot** (`current`, `circle`) of a `static` or `live` source is the smallest circle around what its
+  visible plates with `field: "round"` let through: per plate, how far its cut-outs reach from its centre (at most its
+  field), at its offset, scale, rotation and motion, grown by the throw, skew and focus blur, moved by the frame slide;
+  with several plates, the smallest. Plates with `fill`, `stretch` or `tile` fields and the modes without a light
+  (`color`, `scenery`) have none.
+- **The silhouette** is the union outline of the target's faces (the accent's silhouette, §19: visible faces that are
+  not details, edges, lines or masks); for `all`, every visible object; for a surface track, that surface's outline.
+  Hidden objects converge to nothing.
+- **Rendering** (scene px, at eased progress e): `d = mix(sdStart, sdSilhouette, e)` with signed distance fields
+  (negative inside; the frame start is padded by `edge` so its border stays lit), and the source drawn with coverage
+  `1 − smoothstep(−h, h, d)`, `h = max(edge / 2, half an output pixel)`, times the clip's fade in. At p = 0 the
+  picture is the source's own (the switch from that mode is seamless), at p = 1 the light covers the silhouette only.
+  The renderers compute the polygon SDF in the shader (at most 128 silhouette points in 16 loops; longer outlines are
+  thinned evenly).
+- Order in `objects` mode: the underlay (§1, unchanged; turn it off for a dark wall around the object), the converge,
+  the mapped content (faces, layers, effects, other clips), then the converge outline.
+- Held (the default), the object stays lit by the source inside its silhouette until another converge on that track
+  starts. Converge clips never reach surface content: the faces' own clips draw over the lit object.
+- Only in `objects` mode (and the editor stage, which previews objects mode; Space plays the morph there), like every
+  timeline clip.
+
+### `show.converge`: start with converge
+
+`cmd show.converge { sceneId?, duration?, objectId?, source? }` (also `POST /show/converge`), atomically:
+
+1. **Source**: `source` when given (a backdrop mode, else 400 `bad_request`), else the scene's mode when it is a
+   backdrop mode, else (already in `objects` mode) the converge clip's own `source`, else `underlay.from`. Clients
+   pass the backdrop mode they last saw on air: opening their objects view puts objects on air first.
+2. **Clip**: the converge clip that starts at 0 (the first by track order) gets that `source`. Without one, a new
+   clip at 0 of `duration` seconds (0.1…60, default 2, capped at the timeline's duration) with
+   `{ from: "current", source, ease: "inOut", edge: 6, outline: false }` goes onto a track of the target (`objectId`,
+   or the first visible object; `"all"` for every object) that is free over that time, else a new track
+   `"<object name> · converge"`. Nothing else moves.
+3. **Cues**: when no cue is at 0 it adds one (`"converge"`); when no cue is at or after the clip's end it adds one there
+   (`"after converge"`).
+4. **Mode**: `replace /mode` with `objects`. Steps 1 to 4 are one patch by the sender.
+5. **Transport**: playing from 0, `cue` = the cue before the first cue at or after the clip's end, so playback holds
+   there (§9) and GO continues. A sound on the cue at 0 plays. Another `sceneId` is activated first.
+
+Errors: no active scene `no_scene`; no object to converge onto, an unknown `objectId`, a bad `duration` or `source`
+`bad_request`. Answer `ack` (the scene and show snapshots carry the change).
+
+- **Web**: the Show space's objects panel has **start with converge** (a primary button above GO, with a line saying
+  which light closes onto which object). The editor's effects library has **converge**; its clip inspector edits
+  starts from, light from, ease, soft edge, outline at the end and **hold the end** (every clip has the hold switch). A
+  converge dropped on a track takes the mode on air as its `source`.
+- **Phone**: the Objects tab has **start with converge** above GO; it sends the last backdrop mode seen on air.
+- **MCP**: `converge_start { scene?, duration?, object?, source? }` (needs "agent may go live").

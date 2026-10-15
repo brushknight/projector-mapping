@@ -103,6 +103,13 @@ const paths: Record<string, ReactNode> = {
       <path d="M12 4a8 8 0 0 1 8 8" />
     </>
   ),
+  converge: (
+    <>
+      <circle cx="12" cy="12" r="9.5" strokeDasharray="2.4 2.6" />
+      <path d="M12 7.2l4.2 2.4v4.8L12 16.8l-4.2-2.4V9.6z" />
+      <path d="M12 12v4.8M12 12l4.2-2.4M12 12L7.8 9.6" />
+    </>
+  ),
   highlight: (
     <>
       <rect x="4" y="5" width="16" height="14" rx="1" />

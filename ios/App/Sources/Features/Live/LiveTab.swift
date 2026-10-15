@@ -45,6 +45,7 @@ struct LiveTab: View {
             if let selected { paramsCard(selected) }
             lightSection
             atmosphere
+            AccentCard()
             PresetsSection(mode: "live")
         }
         .onChange(of: model.layers("live").map(\.id)) { _, ids in

@@ -1,6 +1,6 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
 import WebSocket from 'ws'
-import { API, canvasPixels, litSamples, resetMock, waitForOutput } from './lib'
+import { API, canvasPixels, litSamples, resetMock, waitForOutput, withoutConverge } from './lib'
 
 test.use({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1 })
 test.beforeEach(async ({ request }) => resetMock(request))
@@ -40,6 +40,8 @@ async function patch(page: Page, sel: string, x: number, y: number, s = 24): Pro
 }
 
 test('switching mode replaces what is on the wall', async ({ page, request }) => {
+  // objects alone over a dark wall: without the fixture's opening converge (§20, converge.spec covers it)
+  await withoutConverge(request)
   await page.goto('/out?headless=1')
   await waitForOutput(request)
   // color: the ember gradient fills the frame, corner to corner

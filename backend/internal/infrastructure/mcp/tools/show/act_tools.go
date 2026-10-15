@@ -20,6 +20,11 @@ func Register(s *mcp.Server, env *tools.Env) {
 		Description: "Plays your draft on the real projector from..to seconds, then holds. Needs \"agent may preview\". The live scene is untouched."}, preview)
 	tools.Add(s, env, &mcp.Tool{Name: "transport", Title: "Control the live show",
 		Description: "Live control: play, pause, stop, go (next cue), back, seek {t}, blackout {on}. Needs \"agent may go live\", which is off by default."}, transport)
+	tools.Add(s, env, &mcp.Tool{Name: "converge_start", Title: "Start with converge",
+		Description: "The opening of a mapping sequence: records the backdrop mode on air (static, live, color or scenery) as the light that converges, " +
+			"switches the wall to objects mode, uses the converge clip at t = 0 or inserts one (duration seconds, default 2, onto object or the first object; " +
+			"\"all\" for every object), then plays from 0 and holds at the first cue after it for GO. The light closes from its own shape onto the object's silhouette. " +
+			"Needs \"agent may go live\"."}, convergeStart)
 	tools.Add(s, env, &mcp.Tool{Name: "projector_show", Title: "Show something on the projector",
 		Description: "Puts a test pattern (white, black, gray stripes), surface outlines, or a frame of your draft on the projector; off returns to normal. Needs \"agent may preview\"."}, projectorShow)
 }
@@ -60,6 +65,37 @@ func transport(ctx context.Context, e *tools.Env, in transportIn) (*mcp.CallTool
 		return nil, err
 	}
 	return tools.JSON(fmt.Sprintf("Show: %s, on air %v.", st.Transport.State, st.OnAir), st), nil
+}
+
+type convergeIn struct {
+	Scene    string   `json:"scene,omitempty" jsonschema:"scene id; default the scene on the wall"`
+	Duration *float64 `json:"duration,omitempty" jsonschema:"seconds of an inserted converge clip, 0.1..60, default 2"`
+	Object   string   `json:"object,omitempty" jsonschema:"object id or name an inserted clip converges onto, or all; default the first object"`
+	Source   string   `json:"source,omitempty" jsonschema:"static, live, color or scenery: whose light converges; default the mode on air (in objects mode, the clip's own)"`
+}
+
+func convergeStart(ctx context.Context, e *tools.Env, in convergeIn) (*mcp.CallToolResult, error) {
+	if err := e.NeedLive(ctx); err != nil {
+		return nil, err
+	}
+	obj := in.Object
+	if obj != "" && obj != "all" {
+		id := in.Scene
+		if id == "" {
+			id = e.D.Show.Get(ctx).ActiveSceneID
+		}
+		if sc, err := e.D.Scenes.Scene(ctx, id); err == nil {
+			if oi := sc.FindObject(obj); oi >= 0 {
+				obj = sc.Objects[oi].ID
+			}
+		}
+	}
+	args, _ := json.Marshal(map[string]any{"sceneId": in.Scene, "duration": in.Duration, "objectId": obj, "source": in.Source})
+	st, err := e.D.Show.Do(ctx, "converge", args, "agent:"+e.S.AgentName())
+	if err != nil {
+		return nil, err
+	}
+	return tools.JSON(fmt.Sprintf("The wall converges onto the object and holds at the next cue for GO (show %s).", st.Transport.State), st), nil
 }
 
 type showIn struct {

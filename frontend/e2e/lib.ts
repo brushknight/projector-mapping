@@ -67,3 +67,13 @@ export async function litSamples(page: Page, selector: string, step = 97): Promi
     { selector, step },
   )
 }
+
+/**
+ * (§20) Takes the fixture's opening converge off the timeline, for checks of objects mode over a dark wall (with it,
+ * objects mode at t = 0 shows the static light at the start of the converge).
+ */
+export async function withoutConverge(request: APIRequestContext) {
+  const sc = await (await request.get(`${API}/api/v1/scenes/scn_desk`)).json()
+  const clips = sc.timeline.clips.filter((c: { effect: string }) => c.effect !== 'converge')
+  await request.post(`${API}/api/v1/scenes/scn_desk/patch`, { data: { base: sc.version, ops: [{ op: 'replace', path: '/timeline/clips', value: clips }] } })
+}

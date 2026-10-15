@@ -135,7 +135,7 @@ describe('contract fixtures', () => {
     expect(scene.format).toBe(6)
     expect(scene.backdrop.static.attachments?.[0].motion?.preset).toBe('sun-lr')
     const cat = read('catalog.json')
-    expect(cat.version).toBe(6)
+    expect(cat.version).toBe(7)
     expect(cat.gobos.length).toBeGreaterThanOrEqual(45)
     // (catalog 6) every attachment is a metal plate with its metal thumbnail and the reference photo it follows
     for (const g of cat.gobos) {
@@ -148,6 +148,19 @@ describe('contract fixtures', () => {
     expect(cat.motionPresets.map((m: { id: string }) => m.id)).toEqual(['sun-lr', 'sun-rl', 'drift', 'sway', 'rise', 'set'])
     // an attachment needs its gobo
     expect(sceneShape({ ...scene, backdrop: { ...scene.backdrop, static: { ...scene.backdrop.static, attachments: [{ id: 'att_x' }] } } }, '').length).toBeGreaterThan(0)
+  })
+
+  it('carries the §20 converge clip, hold and show.converge', () => {
+    const scene = read('fixtures/scene.json') as Scene
+    const clip = scene.timeline.clips.find((c) => c.effect === 'converge')!
+    expect(clip).toMatchObject({ start: 0, end: 2, hold: true, params: { from: 'current', source: 'static', ease: 'inOut', edge: 6, outline: true } })
+    expect(scene.timeline.tracks.find((t) => t.id === clip.trackId)?.target).toEqual({ kind: 'object', id: 'obj_cube' })
+    expect(sceneShape({ ...scene, timeline: { ...scene.timeline, clips: [{ ...clip, hold: 'yes' }] } }, '')).not.toHaveLength(0)
+    const cat = read('catalog.json')
+    const fx = cat.effects.find((e: { id: string }) => e.id === 'converge')
+    expect(Object.keys(fx.params)).toEqual(['from', 'source', 'ease', 'edge', 'outline'])
+    const msgs = read('fixtures/ws-messages.json') as Array<{ t: string; d?: { name?: string; args?: Record<string, unknown> } }>
+    expect(msgs.find((m) => m.t === 'cmd' && m.d?.name === 'show.converge')?.d?.args).toEqual({ sceneId: 'scn_desk', source: 'static', duration: 2, objectId: 'obj_cube' })
   })
 
   it('rejects a drifted shape', () => {

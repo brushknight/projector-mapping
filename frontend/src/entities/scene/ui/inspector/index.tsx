@@ -26,6 +26,7 @@ import { findLayer, locateLayer, stackLayers } from '../../lib'
 import {
   addSurfaceEffect,
   clipPath,
+  convergeSource,
   deleteObject,
   deleteSurface,
   flatMesh,
@@ -38,11 +39,12 @@ import {
   surfaceEffectPath,
   surfacePath,
 } from '../../ops'
-import type { BlendMode, GradientStop, Layer, LightFxKind, Scene, Surface, SurfaceRole } from '../../types'
+import { BACKDROP_MODES, type BackdropMode, type BlendMode, type Clip, type ConvergeEase, type ConvergeFrom, type GradientStop, type Layer, type LightFxKind, type Scene, type Surface, type SurfaceRole } from '../../types'
 import { ContentLayerInspector, LayerList } from './content'
 import { CueInspector, SoundClipInspector, VideoLayerNote } from './sound'
 import { locateContentLayer } from '../../ops'
-import { LAYER_CLIP_DEFAULTS } from '../../../../render/timeline'
+import { clipHolds, LAYER_CLIP_DEFAULTS, SCENE_EFFECTS } from '../../../../render/timeline'
+import { convergeParams } from '../../../../render/converge'
 import { resolveAtlas } from '../../../../render'
 import s from './styles.module.css'
 
@@ -282,9 +284,10 @@ function resize(mesh: NonNullable<Surface['mesh']>, cols: number, rows: number) 
   return { ...flatMesh(Math.max(1, cols), Math.max(1, rows), mesh.bezier) }
 }
 
-export function AddEffectMenu({ onPick, label }: { onPick: (def: EffectDef) => void; label?: string }) {
+export function AddEffectMenu({ onPick, label, timeline }: { onPick: (def: EffectDef) => void; label?: string; timeline?: boolean }) {
   const ed = useEditor()
-  const builtins = ed.effects.filter((e) => e.kind === 'builtin')
+  // (§20) the converge only lives on the timeline: it is not something a surface shows all the time
+  const builtins = ed.effects.filter((e) => e.kind === 'builtin' && (timeline || !SCENE_EFFECTS.has(e.id)))
   const users = ed.effects.filter((e) => e.kind !== 'builtin')
   return (
     <Menu
@@ -564,7 +567,11 @@ function ClipInspector({ scene, clipId }: { scene: Scene; clipId: string }) {
             <NumField prefix="from" ariaLabel="from" value={num('from')} digits={2} step={0.05} onCommit={(v) => ed.editing.setValue(cp('params'), { ...lp, from: v }, 'final')} />
             <NumField prefix="to" ariaLabel="to" value={num('to')} digits={2} step={0.05} onCommit={(v) => ed.editing.setValue(cp('params'), { ...lp, to: v }, 'final')} />
           </div>
-          <span className={s.dim}>{clip.effect === 'reveal' ? 'wipes the layer from "from" to "to" (0 hidden, 1 whole).' : 'moves a gradient band (or slides a picture) from "from" to "to".'} after the clip it holds "to".</span>
+          <HoldRow clip={clip} path={cp('hold')} />
+          <span className={s.dim}>
+            {clip.effect === 'reveal' ? 'wipes the layer from "from" to "to" (0 hidden, 1 whole).' : 'moves a gradient band (or slides a picture) from "from" to "to".'}{' '}
+            {clipHolds(clip) ? 'after the clip it holds "to".' : 'after the clip it goes back to the value before it.'}
+          </span>
         </Section>
       </div>
     )
@@ -590,18 +597,62 @@ function ClipInspector({ scene, clipId }: { scene: Scene; clipId: string }) {
         </div>
         <Row>
           <span>effect</span>
-          <AddEffectMenu label={def?.name ?? clip.effect} onPick={(d) => ed.editing.setValues([[cp('effect'), d.id], [cp('params'), {}]], 'final')} />
+          <AddEffectMenu timeline label={def?.name ?? clip.effect} onPick={(d) => ed.editing.setValues([[cp('effect'), d.id], [cp('params'), d.id === 'converge' ? { source: convergeSource(scene) } : {}]], 'final')} />
         </Row>
+        <HoldRow clip={clip} path={cp('hold')} />
       </Section>
       <Section>
         <Cap>look</Cap>
-        {def ? (
+        {clip.effect === 'converge' && def ? (
+          <ConvergeLook scene={scene} clip={clip} def={def} path={(k) => cp('params', k)} />
+        ) : def ? (
           <ParamControls schema={def.params} values={resolveParams(def.params, clip.params as Record<string, unknown>)} onChange={(k, v, ph) => ed.editing.setValue(cp('params', k), v, ph)} />
         ) : (
           <span className={s.dim}>unknown effect {clip.effect}</span>
         )}
       </Section>
     </div>
+  )
+}
+
+/** (§20) every clip may keep its end state after its end. */
+function HoldRow({ clip, path }: { clip: Clip; path: string }) {
+  const ed = useEditor()
+  return (
+    <Row>
+      <span title={`keeps the end of the clip on the wall until the next ${clip.effect} clip on this track starts`}>hold the end</span>
+      <Switch checked={clipHolds(clip)} onChange={(v) => ed.editing.setValue(path, v, 'final')} ariaLabel="hold the end" />
+    </Row>
+  )
+}
+
+const CONVERGE_FROM: Array<{ value: ConvergeFrom; label: string }> = [
+  { value: 'current', label: 'the light' },
+  { value: 'circle', label: 'circle' },
+  { value: 'frame', label: 'frame' },
+]
+const CONVERGE_EASE: Array<{ value: ConvergeEase; label: string }> = [
+  { value: 'inOut', label: 'in out' },
+  { value: 'in', label: 'in' },
+  { value: 'out', label: 'out' },
+  { value: 'linear', label: 'linear' },
+]
+
+/** (§20) the converge's look: where the light starts, which mode's light, the ease, the soft edge and the outline. */
+function ConvergeLook({ scene, clip, def, path }: { scene: Scene; clip: Clip; def: EffectDef; path: (k: string) => string }) {
+  const ed = useEditor()
+  const p = convergeParams(scene, clip)
+  return (
+    <>
+      <span className={s.dim}>starts from</span>
+      <Segmented<ConvergeFrom> ariaLabel="starts from" size="sm" value={p.from} onChange={(v) => ed.editing.setValue(path('from'), v, 'final')} options={CONVERGE_FROM} />
+      <span className={s.dim}>light from</span>
+      <Segmented<BackdropMode> ariaLabel="light from" size="sm" value={p.source} onChange={(v) => ed.editing.setValue(path('source'), v, 'final')} options={BACKDROP_MODES.map((m) => ({ value: m, label: m }))} />
+      <span className={s.dim}>ease</span>
+      <Segmented<ConvergeEase> ariaLabel="ease" size="sm" value={p.ease} onChange={(v) => ed.editing.setValue(path('ease'), v, 'final')} options={CONVERGE_EASE} />
+      <ParamControls schema={def.params} skip={['from', 'source', 'ease']} values={resolveParams(def.params, clip.params as Record<string, unknown>)} onChange={(k, v, ph) => ed.editing.setValue(path(k), v, ph)} />
+      <span className={s.dim}>the {p.source} light closes from {p.from === 'current' ? 'its own shape' : `the ${p.from}`} onto the silhouette. space plays it here.</span>
+    </>
   )
 }
 

@@ -30,6 +30,9 @@
  *              progress snapshot on `import:{id}` every 150 ms (0 → 0.8 download, 0.95 trim, 1 store) and ends with
  *              a Video `asset:<sha>` (fake bytes, so it draws no texture).
  *   hooks      GET /__mock/state also lists clients with caps; POST /__mock/send {role?, cap?, t, d} sends any message.
+ *
+ * Protocol §20: cmd show.converge / POST /show/converge {sceneId?, duration?, objectId?, source?} as the Go server
+ * does it (convergePlan below): the converge clip at 0 (inserted when missing), its source, cues, objects mode, play.
  */
 import { createHash } from 'node:crypto'
 import { readFileSync, existsSync, readdirSync } from 'node:fs'
@@ -389,6 +392,60 @@ function commitDraft(id, ops, by, re, onValid) {
   pushSnapshot(`draft:${id}`)
 }
 
+/** (§20) show.converge on a scene document, as the Go server's scene.Converge: the patch and where playback holds. */
+function convergePlan(doc, args) {
+  const BACK = ['static', 'live', 'color', 'scenery']
+  const tl = doc.timeline
+  const ops = []
+  if (args.source != null && !BACK.includes(args.source)) throw fail('bad_request', `converge source ${args.source} is not one of static, live, color, scenery.`)
+  const trackIdx = (id) => tl.tracks.findIndex((t) => t.id === id)
+  let ci = -1
+  tl.clips.forEach((c, i) => {
+    if (c.effect === 'converge' && c.start <= 1e-6 && (ci < 0 || trackIdx(c.trackId) < trackIdx(tl.clips[ci].trackId))) ci = i
+  })
+  let source = args.source ?? doc.mode
+  if (!BACK.includes(source)) source = (ci >= 0 && BACK.includes(tl.clips[ci].params?.source) ? tl.clips[ci].params.source : null) ?? doc.underlay?.from ?? 'static'
+  let end
+  if (ci >= 0) {
+    end = tl.clips[ci].end
+    if (tl.clips[ci].params?.source !== source) ops.push({ op: 'add', path: `/timeline/clips/${ci}/params/source`, value: source })
+  } else {
+    let target = null
+    let name = 'all'
+    if (args.objectId === 'all') target = { kind: 'all', id: null }
+    else {
+      const o = args.objectId ? doc.objects.find((x) => x.id === args.objectId || x.name === args.objectId) : doc.objects.find((x) => x.visible)
+      if (!o) throw fail('bad_request', args.objectId ? `Object ${args.objectId} does not exist in this scene.` : 'The scene has no mapped object to converge onto. Map one in the map space first.')
+      target = { kind: 'object', id: o.id }
+      name = o.name
+    }
+    const dur = args.duration == null ? 2 : Number(args.duration)
+    if (!(dur >= 0.1 && dur <= 60)) throw fail('bad_request', 'converge duration must be 0.1..60 seconds.')
+    end = Math.round(Math.min(dur, tl.duration) * 1000) / 1000
+    let track = tl.tracks.find((t) => t.target.kind === target.kind && (t.target.id ?? null) === target.id && !tl.clips.some((c) => c.trackId === t.id && c.start < end && c.end > 0))
+    if (!track) {
+      track = { id: rid('trk'), name: `${name} · converge`, target }
+      ops.push({ op: 'add', path: '/timeline/tracks/-', value: track })
+    }
+    ops.push({ op: 'add', path: '/timeline/clips/-', value: { id: rid('clp'), trackId: track.id, effect: 'converge', start: 0, end, fadeIn: 0, fadeOut: 0, params: { from: 'current', source, ease: 'inOut', edge: 6, outline: false } } })
+  }
+  const cues = [...tl.cues]
+  if (!cues.some((c) => c.at <= 1e-6)) {
+    const c = { id: rid('cue'), at: 0, label: 'converge', autoFollow: false }
+    cues.push(c)
+    ops.push({ op: 'add', path: '/timeline/cues/-', value: c })
+  }
+  if (!cues.some((c) => c.at >= end - 1e-6)) {
+    const c = { id: rid('cue'), at: end, label: 'after converge', autoFollow: false }
+    cues.push(c)
+    ops.push({ op: 'add', path: '/timeline/cues/-', value: c })
+  }
+  const sorted = cues.sort((a, b) => a.at - b.at)
+  const hold = sorted.findIndex((c) => c.at >= end - 1e-6)
+  if (doc.mode !== 'objects') ops.push({ op: 'replace', path: '/mode', value: 'objects' })
+  return { ops, cue: Math.max(0, hold - 1), holdAt: sorted[hold].at }
+}
+
 function showAction(action, args = {}) {
   const t = S.show.transport
   const scene = S.scenes.get(S.show.activeSceneId)?.doc
@@ -439,6 +496,26 @@ function showAction(action, args = {}) {
     case 'blackout':
       S.show.onAir = !args.on
       break
+    case 'converge': {
+      const s = S.scenes.get(String(args.sceneId ?? S.show.activeSceneId))
+      if (!s) throw Object.assign(new Error('No active scene.'), { code: 'no_scene' })
+      const plan = convergePlan(s.doc, args)
+      if (plan.ops.length) commit(`scene:${s.doc.id}`, plan.ops, 'server')
+      S.show.activeSceneId = s.doc.id
+      S.show.activeSetupId = s.doc.setupId
+      S.show.preview = null
+      Object.assign(t, { state: 'playing', offset: 0, startedAt: nowNs(), cue: plan.cue })
+      // the server pauses at the hold cue; the mock does it with a timer
+      clearTimeout(convergeTimer)
+      const started = t.startedAt
+      convergeTimer = setTimeout(() => {
+        if (t.state === 'playing' && t.startedAt === started) {
+          Object.assign(t, { state: 'paused', offset: plan.holdAt, startedAt: 0 })
+          bumpShow()
+        }
+      }, plan.holdAt * 1000)
+      break
+    }
     case 'activate': {
       const s = S.scenes.get(String(args.sceneId))
       if (!s) throw Object.assign(new Error(`Scene ${args.sceneId} does not exist.`), { code: 'not_found' })
@@ -487,6 +564,7 @@ function showAction(action, args = {}) {
   return S.show
 }
 let soloTimer = null
+let convergeTimer = null
 
 // test patterns turn off by themselves after `seconds` (default 60), as the Go server does (protocol §1 Setup)
 const patternTimers = new Map()

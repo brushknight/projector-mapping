@@ -9,7 +9,7 @@ import type { EffectDef } from '../../../effect/types'
 import { useSceneEditing } from '../../../scene/editing'
 import { stackLayers } from '../../../scene/lib'
 import { padForKey, setMode, sortedCues } from '../../../scene/ops'
-import type { SceneKind, SceneMode, SceneSummary } from '../../../scene/types'
+import type { BackdropMode, SceneKind, SceneMode, SceneSummary } from '../../../scene/types'
 import { activeTestPattern, testPatternSecondsLeft, type Setup } from '../../../setup'
 import type { SoundPlayAck } from '../../../sound/types'
 import { SoundLibrary } from '../../../sound/ui/soundLibrary'
@@ -91,6 +91,13 @@ export function ShowSpace({
     if (scene?.mode) setTab(scene.mode)
   }, [scene?.mode, scene?.id])
 
+  // (§20) the last backdrop mode seen on air per scene: "start with converge" closes that light onto the objects
+  const [lastBackdrop, setLastBackdrop] = useState<Record<string, BackdropMode>>({})
+  useEffect(() => {
+    const m = scene?.mode
+    if (scene && m && m !== 'objects') setLastBackdrop((o) => (o[scene.id] === m ? o : { ...o, [scene.id]: m }))
+  }, [scene?.mode, scene?.id, scene])
+
   const openTab = useCallback(
     (m: SceneMode) => {
       setTab(m)
@@ -136,6 +143,7 @@ export function ShowSpace({
     staticTry,
     setStaticTry,
     presetMode: tab === 'objects' ? 'static' : tab,
+    lastBackdrop: scene ? lastBackdrop[scene.id] ?? null : null,
   }
 
   // ── keys: pads on their keys, Enter (or G when no pad has it) is GO; Space stays with nothing ──────────────

@@ -47,6 +47,10 @@ extension LiveHub {
             show.version += 1
             try? db.saveShow(show)
             return result
+        case "show.converge":
+            // §20: objects on air, play from 0 (the demo does not insert a clip)
+            if let sceneId = state.scene?.id, state.scene?.mode != "objects" { edit(sceneId: sceneId, .setMode("objects")) }
+            show.transport = Transport(state: "playing", startedAt: nowNs, offset: 0, cue: 0)
         case "show.back":
             guard !cues.isEmpty else { return nil }
             let prev = max(show.transport.cue - 1, 0)

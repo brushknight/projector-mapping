@@ -30,7 +30,7 @@ func registerWrite(s *mcp.Server, env *tools.Env) {
 		Description: "Places an effect on the timeline for a target (surface, object or all) from start to end seconds. Reuses the track of that target or makes one. Params follow the effect's schema (effects_list). " +
 			"For a sound effect pass sound (a library sha or name from sound_list), optional offset (seconds into the file) and volume (0..1): the clip goes on the scene's first sound track (made when there is none) and plays from start to end."}, clipAdd)
 	tools.Add(s, env, &mcp.Tool{Name: "clip_update", Title: "Change a clip",
-		Description: "Changes a clip's effect, timing, fades or params (params merge into the existing ones)."}, clipUpdate)
+		Description: "Changes a clip's effect, timing, fades, hold or params (params merge into the existing ones)."}, clipUpdate)
 	tools.Add(s, env, &mcp.Tool{Name: "clip_remove", Title: "Remove a clip", Description: "Removes a clip from the timeline."}, clipRemove)
 	tools.Add(s, env, &mcp.Tool{Name: "cue_add", Title: "Add a cue",
 		Description: "Adds a cue (a GO stop on the phone) at a time in seconds. auto_follow lets playback run through it."}, cueAdd)
@@ -292,6 +292,7 @@ type clipAddIn struct {
 	Sound   string         `json:"sound,omitempty" jsonschema:"for a sound clip: a library sound sha or name (sound_list)"`
 	Offset  *float64       `json:"offset,omitempty" jsonschema:"for a sound clip: seconds into the file where the clip starts, default 0"`
 	Volume  *float64       `json:"volume,omitempty" jsonschema:"for a sound clip: 0..1, default 1"`
+	Hold    *bool          `json:"hold,omitempty" jsonschema:"keep the clip's end state after its end until the next clip of that effect on the track; default true for converge, reveal and sweep, false otherwise"`
 }
 
 func resolveTarget(sc *scene.Scene, t TargetIn) (scene.Target, string, error) {
@@ -359,7 +360,7 @@ func clipAdd(ctx context.Context, e *tools.Env, in clipAddIn) (*mcp.CallToolResu
 	if in.Params == nil {
 		in.Params = map[string]any{}
 	}
-	cl := scene.Clip{ID: NewID("clp"), TrackID: track, Effect: in.Effect, Start: in.Start, End: in.End, FadeIn: fi, FadeOut: fo, Params: in.Params}
+	cl := scene.Clip{ID: NewID("clp"), TrackID: track, Effect: in.Effect, Start: in.Start, End: in.End, FadeIn: fi, FadeOut: fo, Params: in.Params, Hold: in.Hold}
 	ops = append(ops, docpatch.Add("/timeline/clips/-", cl))
 	if in.End > sc.Timeline.Duration {
 		ops = append(ops, docpatch.Replace("/timeline/duration", math.Ceil(in.End)))
@@ -448,6 +449,7 @@ type clipUpdateIn struct {
 	FadeIn  *float64       `json:"fade_in,omitempty"`
 	FadeOut *float64       `json:"fade_out,omitempty"`
 	Params  map[string]any `json:"params,omitempty" jsonschema:"merged into the clip's params"`
+	Hold    *bool          `json:"hold,omitempty" jsonschema:"keep the end state after the clip's end"`
 }
 
 func clipIndex(sc *scene.Scene, id string) (int, error) {
@@ -486,6 +488,9 @@ func clipUpdate(ctx context.Context, e *tools.Env, in clipUpdateIn) (*mcp.CallTo
 	}
 	for k, v := range in.Params {
 		cl.Params[k] = v
+	}
+	if in.Hold != nil {
+		cl.Hold = in.Hold
 	}
 	ops := []docpatch.Op{docpatch.Replace(fmt.Sprintf("/timeline/clips/%d", i), cl)}
 	if cl.End > sc.Timeline.Duration {

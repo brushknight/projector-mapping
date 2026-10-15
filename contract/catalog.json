@@ -1,5 +1,5 @@
 {
-  "version": 6,
+  "version": 7,
   "paramSchemaNote": "each param: {type: number|integer|boolean|color|enum|string|strokes, min?, max?, step?, default, label?, unit?, options?}; strokes is an array of drawing strokes (protocol §1, effect drawing); an attachment's params validate against goboParams merged with its gobo's own params; a generator layer or colour layer validates against its colorGenerators params",
   "light": {
     "params": {
@@ -5309,6 +5309,60 @@
           "max": 1,
           "default": 1,
           "label": "reveal"
+        }
+      }
+    },
+    {
+      "id": "converge",
+      "name": "converge",
+      "group": "transform",
+      "kind": "builtin",
+      "origin": "builtin",
+      "params": {
+        "from": {
+          "type": "enum",
+          "options": [
+            "current",
+            "circle",
+            "frame"
+          ],
+          "default": "current",
+          "label": "from"
+        },
+        "source": {
+          "type": "enum",
+          "options": [
+            "static",
+            "live",
+            "color",
+            "scenery"
+          ],
+          "default": "static",
+          "label": "light from"
+        },
+        "ease": {
+          "type": "enum",
+          "options": [
+            "inOut",
+            "in",
+            "out",
+            "linear"
+          ],
+          "default": "inOut",
+          "label": "ease"
+        },
+        "edge": {
+          "type": "number",
+          "min": 0,
+          "max": 200,
+          "default": 6,
+          "label": "soft edge",
+          "unit": "px"
+        },
+        "outline": {
+          "type": "boolean",
+          "default": false,
+          "label": "outline at the end"
         }
       }
     }

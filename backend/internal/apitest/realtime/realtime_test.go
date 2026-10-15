@@ -27,7 +27,7 @@ func TestHello(t *testing.T) {
 		CatalogVersion int
 	}
 	ws.Hello.Into(t, &w)
-	if w.Device.Role != "output" || !w.Device.Online || w.ServerTime < before || w.Show.ActiveSceneID != "scn_desk" || w.CatalogVersion != 6 {
+	if w.Device.Role != "output" || !w.Device.Online || w.ServerTime < before || w.Show.ActiveSceneID != "scn_desk" || w.CatalogVersion != 7 {
 		t.Fatalf("welcome %s", ws.Hello.D)
 	}
 	// a LAN client without a token is refused

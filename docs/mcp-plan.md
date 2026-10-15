@@ -95,6 +95,7 @@ The built-in effects (grid build, trace, scan, glitch, fill, particles, label, p
 | `proposal_submit(summary)` | shows the proposal card in the editor's agent panel (apply / preview / discard) |
 | `preview_on_projector(from, to)` | plays the draft on the real projector. **Needs the "agent may preview" toggle** |
 | `transport(play / stop / go / blackout)` | live control. **Needs the "agent may go live" toggle (off by default)** |
+| `converge_start(scene?, duration?, object?, source?)` | (protocol §20) the opening: the light on air closes onto the object (a converge clip at 0, inserted when missing), objects mode, plays and holds at the next cue for GO. **Needs "agent may go live"** |
 
 ### Dress an object: draw on the flat faces (implemented)
 

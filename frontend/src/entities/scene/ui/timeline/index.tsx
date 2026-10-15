@@ -1,12 +1,12 @@
-import { useLayoutEffect, useRef, useState, type DragEvent, type PointerEvent } from 'react'
+import { Fragment, useLayoutEffect, useRef, useState, type DragEvent, type PointerEvent } from 'react'
 import { Icon, Menu, Pill, Waveform } from '../../../../shared/components'
 import { pressed } from '../../../../shared/lib/pointer'
 import { cx } from '../../../../shared/lib/cx'
 import { newId } from '../../../../shared/lib/ids'
 import { useRaf } from '../../../../shared/lib/useRaf'
-import { LAYER_CLIP_DEFAULTS } from '../../../../render/timeline'
+import { clipHolds, LAYER_CLIP_DEFAULTS } from '../../../../render/timeline'
 import { useEditor } from '../../editor/context'
-import { addClip, addCue, addSoundClip, addTrack, cuePath, removeCue, removeTrack, round3, setClipTimes, soundClip, sortedCues } from '../../ops'
+import { addClip, addCue, addSoundClip, addTrack, convergeSource, cuePath, removeCue, removeTrack, round3, setClipTimes, soundClip, sortedCues } from '../../ops'
 import type { Clip, ContentLayer, Scene, Track } from '../../types'
 import { soundClipParams } from '../../../sound/audioSchedule'
 import { usePreviewAudio, useSoundList } from '../../../sound/audioHooks'
@@ -222,7 +222,11 @@ export function Timeline() {
     }
     const effect = data.slice(7)
     const start = round3(Math.min(duration - 0.5, Math.round(timeAt(e.clientX) * 10) / 10))
-    const clip: Clip = { id: newId('clp'), trackId: track.id, effect, start, end: round3(Math.min(duration, start + 2)), fadeIn: 0.2, fadeOut: 0.2, params: {} }
+    // (§20) a converge takes the light on air now (the underlay's mode while objects are on air) and needs no fades
+    const converge = effect === 'converge' && ed.scene
+    const clip: Clip = converge
+      ? { id: newId('clp'), trackId: track.id, effect, start, end: round3(Math.min(duration, start + 2)), fadeIn: 0, fadeOut: 0, params: { source: convergeSource(ed.scene!) } }
+      : { id: newId('clp'), trackId: track.id, effect, start, end: round3(Math.min(duration, start + 2)), fadeIn: 0.2, fadeOut: 0.2, params: {} }
     void ed.editing.edit(() => addClip(clip))
     ed.select({ clipId: clip.id, focus: 'clip' })
   }
@@ -398,9 +402,13 @@ export function Timeline() {
                 const isSound = t.target.kind === 'sound'
                 const snd = isSound ? sounds.find((x) => x.sha === soundClipParams(c).sound) : undefined
                 const soundName = isSound ? (snd?.name ?? (sounds.length ? 'missing sound' : 'sound')) : ''
+                // (§20) a held clip keeps its end state until the next clip of its effect on the track: a dashed tail
+                const nextSame = scene.timeline.clips.filter((x) => x.trackId === t.id && x.effect === c.effect && x.id !== c.id && x.start > start).reduce((m, x) => Math.min(m, x.start), duration)
+                const tail = !isSound && clipHolds(c) && nextSame > end ? nextSame : 0
                 return (
+                  <Fragment key={c.id}>
+                  {tail > 0 && <i className={s.holdTail} style={{ left: `${(end / duration) * 100}%`, width: `${((tail - end) / duration) * 100}%` }} title={`${def?.name ?? c.effect} holds its end`} aria-hidden="true" />}
                   <button
-                    key={c.id}
                     type="button"
                     data-align="content"
                     className={cx(s.clip, ed.sel.clipId === c.id && s.sel, ed.mutedTracks.has(t.id) && s.muted)}
@@ -416,8 +424,10 @@ export function Timeline() {
                     {isSound && <Waveform className={s.clipWave} peaks={clipPeaks(snd, { ...c, start, end })} bars={48} height={20} />}
                     {c.fadeIn > 0 && <i className={s.fadeIn} style={{ width: `${Math.min(100, (c.fadeIn / Math.max(0.01, end - start)) * 100)}%` }} />}
                     {c.fadeOut > 0 && <i className={s.fadeOut} style={{ width: `${Math.min(100, (c.fadeOut / Math.max(0.01, end - start)) * 100)}%` }} />}
+                    {c.effect === 'converge' && <Icon name="converge" size={12} className={s.clipIcon} />}
                     <span className={s.clipLabel}>{isSound ? soundName : (c.params as Record<string, unknown>).label ? String((c.params as Record<string, unknown>).label) : def?.name ?? c.effect}</span>
                   </button>
+                  </Fragment>
                 )
               })}
           </div>

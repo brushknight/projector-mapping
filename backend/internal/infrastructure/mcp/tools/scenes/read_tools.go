@@ -22,7 +22,7 @@ func Register(s *mcp.Server, env *tools.Env) {
 	tools.Add(s, env, &mcp.Tool{Name: "surface_get", Title: "Read one surface",
 		Description: "One surface in detail: points, edges with lengths, area, centroid, which points it shares with other surfaces and which faces touch it, its parent and details."}, surfaceGet)
 	tools.Add(s, env, &mcp.Tool{Name: "timeline_get", Title: "Read the timeline",
-		Description: "Tracks (with their targets), clips (effect, start, end, fades, params) and cues (GO stops) of the scene. Sound tracks (target kind sound) hold sound clips {sound, offset, volume}; a cue may carry a sound that plays when it starts."}, timelineGet)
+		Description: "Tracks (with their targets), clips (effect, start, end, fades, hold, params) and cues (GO stops) of the scene; with t, also the clips in effect at t (a held clip keeps its end state until the next clip of that effect on its track). Sound tracks (target kind sound) hold sound clips {sound, offset, volume}; a cue may carry a sound that plays when it starts."}, timelineGet)
 	tools.Add(s, env, &mcp.Tool{Name: "reference_photo_get", Title: "See the reference photo",
 		Description: "The photo taken from the projector lens position (never projected): what the real objects look like from the projector. Scene pixels line up with it when it was taken at the lens."}, referencePhoto)
 	registerWrite(s, env)
@@ -236,13 +236,25 @@ func surfaceGet(ctx context.Context, e *tools.Env, in surfaceIn) (*mcp.CallToolR
 	return tools.JSON("", out), nil
 }
 
-func timelineGet(ctx context.Context, e *tools.Env, _ noIn) (*mcp.CallToolResult, error) {
+type timelineIn struct {
+	T *float64 `json:"t,omitempty" jsonschema:"seconds: also list the clips in effect at t (playing, or held after their end)"`
+}
+
+func timelineGet(ctx context.Context, e *tools.Env, in timelineIn) (*mcp.CallToolResult, error) {
 	sc, _, err := e.View(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return tools.JSON(fmt.Sprintf("%.1f s, %d tracks, %d clips, %d cues.", sc.Timeline.Duration, len(sc.Timeline.Tracks),
-		len(sc.Timeline.Clips), len(sc.Timeline.Cues)), sc.Timeline), nil
+	head := fmt.Sprintf("%.1f s, %d tracks, %d clips, %d cues.", sc.Timeline.Duration, len(sc.Timeline.Tracks),
+		len(sc.Timeline.Clips), len(sc.Timeline.Cues))
+	if in.T == nil {
+		return tools.JSON(head, sc.Timeline), nil
+	}
+	// (§20) the state at t: every clip up to t with its hold, the same from a seek as from playing there
+	return tools.JSON(head+fmt.Sprintf(" State at %.2f s: see at.", *in.T), struct {
+		scene.Timeline
+		At []scene.ClipState `json:"at"`
+	}{sc.Timeline, sc.Timeline.StateAt(*in.T)}), nil
 }
 
 func referencePhoto(ctx context.Context, e *tools.Env, _ noIn) (*mcp.CallToolResult, error) {

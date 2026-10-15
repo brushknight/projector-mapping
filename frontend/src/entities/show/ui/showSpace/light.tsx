@@ -17,6 +17,7 @@ import { addAttachment, attachmentPath, layerPath, lightPath, pickAttachment, re
 import { MOTION_EASINGS, MOTION_LOOPS, type Attachment, type FramePt, type LightFxKind, type Motion, type MotionEasing, type MotionLoop, type StackLight } from '../../../scene/types'
 import { gradientCss } from '../../../scene/ui/library'
 import { durationFromSpeed, pauseMotion, playMotion, retimeMotion, sampleMotion, speedFromDuration } from '../../../../render/motion'
+import { AccentCard } from './accent'
 import { Card } from './card'
 import { focusLabel, StaticGallery, StaticStack } from './staticGallery'
 import { useShow } from './context'
@@ -606,6 +607,7 @@ export function StaticLightPanel() {
         <LightCard mode="static" />
         {att && <AttachmentCard attachment={att} />}
         {sh.scene && <MotionCard key={att?.id ?? 'light'} mode="static" attachment={att} />}
+        <AccentCard />
       </div>
     </div>
   )

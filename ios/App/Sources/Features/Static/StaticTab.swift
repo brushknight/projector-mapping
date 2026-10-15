@@ -29,6 +29,7 @@ struct StaticTab: View {
             MotionCard(mode: "static", attachment: selected)
                 .id("motion")
             LensCard(mode: "static")
+            AccentCard()
             PresetsSection(mode: "static")
         }
         .onChange(of: list.map(\.id)) { _, ids in

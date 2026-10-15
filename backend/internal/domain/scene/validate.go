@@ -121,6 +121,7 @@ func (s *Scene) Validate(refs Refs) error {
 		c.fail("underlay.from %q is not one of static, live, color, scenery", s.Underlay.From)
 	}
 	c.rng("underlay.level", s.Underlay.Level, 0, 1)
+	c.objectAccent(s.ObjectAccent)
 	for i, ml := range s.Backdrop.All() {
 		l := ml.Layer
 		w := fmt.Sprintf("layer %s (%s)", l.ID, ml.Mode)

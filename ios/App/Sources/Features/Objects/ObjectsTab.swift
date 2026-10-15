@@ -89,6 +89,7 @@ struct ObjectsTab: View {
                         .frame(height: 6)
                 }
             }
+            convergeButton
             HStack(spacing: 10) {
                 WideButton("", icon: .previous, iconSize: 20) { model.command("show.back") }
                     .frame(width: 54)
@@ -98,6 +99,22 @@ struct ObjectsTab: View {
                     .frame(width: 54)
                     .accessibilityLabel("stop")
             }
+        }
+    }
+
+    /// (§20) The opening: the light that was on air closes onto the object, then the wall holds for GO.
+    var convergeButton: some View {
+        let target = model.scene?.objects.first(where: \.visible)?.name
+        return VStack(spacing: 6) {
+            WideButton("start with converge", icon: .converge, iconSize: 20, on: target != nil, height: 50, font: .pmMono(15, .bold)) {
+                if target == nil { model.flash("Map an object first: the light needs a shape to close onto.") } else { model.startConverge() }
+            }
+            .accessibilityLabel("start with converge")
+            .accessibilityHint("the \(model.convergeSource) light closes onto the object, then holds for go")
+            Text(target.map { "the \(model.convergeSource) light closes onto \($0), then holds for go" } ?? "map an object first")
+                .font(.pm(12)).tracking(0.2).foregroundStyle(Palette.dim)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 2)
         }
     }
 
@@ -162,11 +179,12 @@ struct ObjectsTab: View {
         return (scene?.timeline.clips ?? []).filter { ids.contains($0.trackId) }
     }
 
-    /// lit (a clip plays on it now), waiting (one comes later), off.
+    /// lit (a clip plays on it now, or holds its end, §20), waiting (one comes later), off.
     func status(_ o: MapObject, scene: PMKit.Scene?, t: Double) -> String {
         guard o.visible else { return "off" }
         let c = clips(of: o, scene: scene)
-        if c.contains(where: { $0.start <= t && t < $0.end }) { return "lit" }
+        let all = scene?.timeline.clips ?? []
+        if c.contains(where: { x in x.inEffect(at: t, track: all.filter { $0.trackId == x.trackId }) }) { return "lit" }
         if c.contains(where: { $0.start > t }) { return "waiting" }
         return "off"
     }

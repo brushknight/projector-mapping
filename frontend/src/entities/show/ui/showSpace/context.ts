@@ -44,6 +44,8 @@ export interface ShowState {
   setStaticTry: (t: StaticTry | null) => void
   /** scenery category open in the picker */
   presetMode: BackdropMode
+  /** (§20) the backdrop mode last seen on air in this scene (null when the page opened in objects mode) */
+  lastBackdrop: BackdropMode | null
 }
 
 export const ShowContext = createContext<ShowState | null>(null)

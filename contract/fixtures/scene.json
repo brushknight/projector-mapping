@@ -285,6 +285,21 @@
   "from": "static",
   "level": 0.35
  },
+ "objectAccent": {
+  "on": false,
+  "objects": "all",
+  "outline": {
+   "on": true,
+   "width": 3,
+   "color": "#ffffff",
+   "glow": 0.3
+  },
+  "fill": {
+   "on": true,
+   "opacity": 0.6,
+   "mode": "cut"
+  }
+ },
  "points": [
   {
    "id": "p_t",
@@ -1070,6 +1085,14 @@
      "kind": "layer",
      "id": "att_window"
     }
+   },
+   {
+    "id": "trk_converge",
+    "name": "zimacube · converge",
+    "target": {
+     "kind": "object",
+     "id": "obj_cube"
+    }
    }
   ],
   "clips": [
@@ -1218,6 +1241,23 @@
      "from": 0.5,
      "to": 1
     }
+   },
+   {
+    "id": "clp_converge",
+    "trackId": "trk_converge",
+    "effect": "converge",
+    "start": 0,
+    "end": 2,
+    "fadeIn": 0,
+    "fadeOut": 0,
+    "params": {
+     "from": "current",
+     "source": "static",
+     "ease": "inOut",
+     "edge": 6,
+     "outline": true
+    },
+    "hold": true
    }
   ],
   "cues": [

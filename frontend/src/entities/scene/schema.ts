@@ -29,6 +29,14 @@ export const stackShape = obj({ layers: arr(layerShape), light: nullable(stackLi
 export const backdropShape = obj({ static: stackShape, live: stackShape, color: stackShape, scenery: stackShape })
 export const sceneModeShape = lit('static', 'live', 'color', 'scenery', 'objects')
 export const underlayShape = obj({ on: bool, from: lit('static', 'live', 'color', 'scenery'), level: num })
+/** (§19) objects is "all" or a list of object ids */
+const accentObjectsShape = (v: unknown, path: string) => (v === 'all' ? [] : arr(str)(v, path))
+export const objectAccentShape = obj({
+  on: bool,
+  objects: accentObjectsShape,
+  outline: obj({ on: bool, width: num, color: str, glow: num }),
+  fill: obj({ on: bool, opacity: num, mode: lit('light', 'cut', 'only') }),
+})
 export const strokeShape = obj({
   tool: lit('pen', 'line', 'rect', 'ellipse', 'text', 'polygon', 'circle'), points: arr(tuple(num, num)), color: str, width: num,
   fill: optional(bool), text: optional(str), size: optional(num),
@@ -54,7 +62,7 @@ export const trackShape = obj({
   id: str, name: str,
   target: oneOf(obj({ kind: lit('surface', 'object', 'layer'), id: str }), obj({ kind: lit('all', 'sound'), id: lit(null) })),
 })
-export const clipShape = obj({ id: str, trackId: str, effect: str, start: num, end: num, fadeIn: num, fadeOut: num, params: record(any) })
+export const clipShape = obj({ id: str, trackId: str, effect: str, start: num, end: num, fadeIn: num, fadeOut: num, params: record(any), hold: optional(bool) })
 export const cueShape = obj({ id: str, at: num, label: str, autoFollow: bool, sound: optional(obj({ sound: str, volume: num })) })
 export const padShape = obj({
   id: str, name: str, sound: str, volume: num, color: lit('ink', 'red', 'amber', 'green', 'teal', 'blue', 'violet', 'pink'),
@@ -63,7 +71,7 @@ export const padShape = obj({
 export const soundsShape = obj({ pads: arr(padShape) })
 export const timelineShape = obj({ duration: num, tracks: arr(trackShape), clips: arr(clipShape), cues: arr(cueShape) })
 export const sceneShape = obj({
-  id: str, setupId: str, name: str, version: int, mode: sceneModeShape, kind: optional(lit('static', 'live', 'color', 'scenery', 'mapping')), format: optional(int), backdrop: backdropShape, underlay: optional(underlayShape), points: arr(pointShape), objects: arr(objectShape),
+  id: str, setupId: str, name: str, version: int, mode: sceneModeShape, kind: optional(lit('static', 'live', 'color', 'scenery', 'mapping')), format: optional(int), backdrop: backdropShape, underlay: optional(underlayShape), objectAccent: optional(objectAccentShape), points: arr(pointShape), objects: arr(objectShape),
   sounds: optional(soundsShape), timeline: timelineShape,
 })
 export const sceneSummaryShape = obj({ id: str, name: str, setupId: str, version: int, kind: optional(lit('static', 'live', 'color', 'scenery', 'mapping')), mode: optional(sceneModeShape) })

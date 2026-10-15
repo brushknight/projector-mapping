@@ -103,7 +103,7 @@ final class AppModel {
     /// Starts the observations, the connection (or the demo) and the camera bridge.
     func start() {
         guard observers.isEmpty else { return }
-        observe(db.observeActive()) { self.active = $0; self.syncTab(); self.updateAudio() }
+        observe(db.observeActive()) { self.active = $0; self.syncTab(); self.noteBackdrop(); self.updateAudio() }
         observe(db.observeCatalog()) { self.catalog = $0 }
         observe(db.observeScenes()) { self.scenes = $0 }
         observe(db.observeAllPresets()) { self.presets = $0 }
@@ -280,6 +280,29 @@ final class AppModel {
         param(path, value)
     }
 
+    // MARK: Object accent (protocol §19)
+
+    /// The scene's object accent (off with defaults when the scene has none).
+    var objectAccent: ObjectAccent { active.scene?.objectAccent ?? ObjectAccent() }
+
+    /// A switch or a pick: writes the whole accent (`add /objectAccent` creates or replaces it).
+    func editAccent(_ change: (inout ObjectAccent) -> Void) {
+        var a = objectAccent
+        change(&a)
+        guard let v = try? JSONValue(encoding: a) else { return }
+        edit(.raw([.add("/objectAccent", v)]))
+    }
+
+    /// A slider drag on a number of the accent: `param` while the accent exists, else it is created with the value.
+    func accentParam(_ field: [String], _ value: Double, set: @escaping (inout ObjectAccent, Double) -> Void) {
+        let path = "/objectAccent" + field.map { "/" + JSONPointer.escape($0) }.joined()
+        if active.sceneDoc?.value(at: path) == nil {
+            editAccent { set(&$0, value) }
+            return
+        }
+        if !param(path, .number(value)) { flash("Not connected to the projector.") }
+    }
+
     /// The server's clock now (Unix ms), for motion progress.
     var serverNowMs: Double { hub.status == .online ? hub.serverNowMs : Date().timeIntervalSince1970 * 1000 }
 
@@ -298,6 +321,33 @@ final class AppModel {
         tabSynced = true
         guard let scene, scene.mode != t.rawValue else { return }
         edit(.setMode(t.rawValue))
+    }
+
+    /// (§20) The backdrop mode last seen on air per scene: "start with converge" closes that light onto the objects
+    /// (opening the objects tab has already put objects on air by then).
+    private(set) var lastBackdrop: [String: String] = [:]
+    private func noteBackdrop() {
+        guard let scene = active.scene, scene.mode != "objects", lastBackdrop[scene.id] != scene.mode else { return }
+        lastBackdrop[scene.id] = scene.mode
+    }
+
+    /// (§20) The light that "start with converge" closes onto the objects: the last backdrop mode on air, else the
+    /// scene's converge clip's own, else the underlay's.
+    var convergeSource: String {
+        if let id = sceneId, let m = lastBackdrop[id] { return m }
+        if let scene, scene.mode != "objects" { return scene.mode }
+        let clip = scene?.timeline.clips.first { $0.isConverge && $0.start <= 1e-6 }
+        if case .string(let s)? = clip?.params["source"] { return s }
+        return scene?.underlay.from ?? "static"
+    }
+
+    /// (§20) `cmd show.converge { source }`: the opening of the sequence. The server switches the wall to objects,
+    /// closes that light onto the object (inserting a 2 s converge at 0 when the timeline has none) and holds for GO.
+    func startConverge() {
+        guard hub.isLive else { flash("Not connected to the projector."); return }
+        var args: JSONObject = [:]
+        if let id = sceneId, let m = lastBackdrop[id] { args["source"] = .string(m) }
+        command("show.converge", .object(args))
     }
 
     /// The first scene from the server opens the tab of its mode (launching the app never changes the wall).

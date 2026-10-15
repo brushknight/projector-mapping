@@ -31,6 +31,8 @@ extension LineIcon {
     public static let tabColor = LineIcon([.circle(12, 12, 8.5), .path("M12 3.5a8.5 8.5 0 0 1 0 17z", fill: true)])
     public static let tabScenery = LineIcon([.rect(3.5, 4.5, 17, 15, rx: 2.5), .path("M3.5 16l5-5 4 4 2.5-2.5 5 5"), .circle(15.5, 9, 1.6)])
     public static let cube = LineIcon([.path("M12 3l8 4.5v9L12 21l-8-4.5v-9z"), .path("M4 7.5l8 4.5 8-4.5M12 12v9")])
+    /// (§20) the converge: a light closing onto a cube
+    public static let converge = LineIcon([.circle(12, 12, 9.5, dash: [2.4, 2.6]), .path("M12 7.2l4.2 2.4v4.8L12 16.8l-4.2-2.4V9.6z"), .path("M12 12v4.8M12 12l4.2-2.4M12 12L7.8 9.6")])
 
     // Light FX (stroke 1.6)
     public static let candle = LineIcon([.path("M12 3c1.6 1.8 2 3.2 0 5-2-1.8-1.6-3.2 0-5z"), .rect(9, 10, 6, 10, rx: 1)], stroke: 1.6)

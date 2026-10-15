@@ -13,7 +13,7 @@ const refs = fileURLToPath(new URL('../../../../design/refs/gobo-plates/', impor
 
 describe('the plate library (catalog 6)', () => {
   it('matches the catalog attachments one to one: every attachment is a plate', () => {
-    expect(catalog.version).toBe(6)
+    expect(catalog.version).toBeGreaterThanOrEqual(6)
     expect(PLATES.map((p) => p.id)).toEqual(catalog.gobos.map((g) => g.id))
     expect(catalog.goboCategories?.map((c) => c.id)).toEqual(PLATE_CATEGORIES.map((c) => c.id))
     for (const p of PLATES) {

@@ -320,6 +320,23 @@
   }
  },
  {
+  "t": "cmd",
+  "id": "c-95",
+  "d": {
+   "name": "show.converge",
+   "args": {
+    "sceneId": "scn_desk",
+    "source": "static",
+    "duration": 2,
+    "objectId": "obj_cube"
+   }
+  }
+ },
+ {
+  "t": "ack",
+  "re": "c-95"
+ },
+ {
   "t": "snapshot",
   "ch": "sounds",
   "v": 1791700000123,
