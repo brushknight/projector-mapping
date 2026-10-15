@@ -36,12 +36,13 @@ import PMTestSupport
         #expect(cat.gobos.count >= 45 && cat.gobos.count <= 60)
         let sun = try #require(cat.gobo("plate-sunburst"))
         #expect(sun.name == "sunburst" && sun.source?.hasPrefix("amaran-as-gb-m-set1.png, MO05") == true && sun.category == "beams")
-        #expect(sun.metalThumb == "thumbs/plate-sunburst-metal.png" && cat.metalThumbId("plate-sunburst") == "plate-sunburst-metal")
+        // (catalog 8) no metal thumbnail any more: tiles show the light
+        #expect(sun.metalThumb == nil)
         #expect(cat.thumbId("plate-sunburst") == "plate-sunburst")
         let field = try #require(sun.params["field"])
         #expect(field.type == "enum" && field.options == ["round", "fill", "stretch", "tile"] && field.default == "round")
         #expect(cat.newAttachment(sun).params["field"] == "round")
-        #expect(cat.gobos.allSatisfy { $0.source != nil && $0.metalThumb != nil })
+        #expect(cat.gobos.allSatisfy { $0.source != nil && $0.metalThumb == nil })
         #expect(!sun.isWindow && cat.windowGroups("plate-sunburst").isEmpty && cat.windowKeys("plate-sunburst").isEmpty)
     }
 
@@ -101,7 +102,6 @@ import PMTestSupport
         let cat = try Catalog.decode(Data(v3.utf8))
         #expect(cat.gobos.map(\.browseCategory) == ["windows", "blinds", "nature"])
         #expect(cat.goboCategories.count == 6 && cat.sceneKinds.count == 5 && cat.motionPresets.isEmpty)
-        #expect(cat.metalThumbId("window") == nil)
         #expect(cat.newAttachment(cat.gobos[0]).params.isEmpty)
     }
 

@@ -1475,6 +1475,42 @@ at 100 %. The shader and the YouTube CSS (`brightness()` plus a multiply tint) u
 **Upgrade (server).** Stored scenes and presets from before catalog 6 scale every photo and video layer's
 `params.brightness` by 1.4, clamped to 1, once (the `format` marker, Migration above), so they look as they did.
 
+### Plate masks, light previews and catalog 8 (2026-10-15)
+
+Picking a plate took about a second: every renderer (the projector, the editor and the phone's web view) rasterized
+the plate's vector cut-outs into a 4096 px canvas on the main thread and uploaded it. Plates are now pre-rendered.
+
+- **Plate masks.** `npm run masks` (frontend) rasterizes every plate at its preset geometry with the same vector path
+  and writes one-channel PNGs (8-bit greyscale, rows unfiltered) to `backend/internal/catalog/assets/masks/<id>-<size>.png`
+  at **4096**, **2048** and **1024** px (the smaller sizes box-filtered from 4096), and
+  `frontend/src/render/plates/maskIndex.ts` (the sizes and a hash of each plate's files). The server embeds them and
+  serves them at `GET /catalog/assets/masks/<id>-<size>.png` (no auth) with `Cache-Control: public, max-age=31536000,
+  immutable`; clients add `?v=<hash>`, so a changed mask is a new URL. 404 for unknown files.
+- **Renderers** (web engine): the mask size is 4096 on outputs of 1200 px and more, 2048 below, and 1024 on a light
+  preview renderer (2048 past 1100 px). A plate at its preset geometry takes the PNG of that size, fetched and decoded
+  in a worker (`DecompressionStream`, no canvas) and uploaded as an R8 texture with mipmaps; one cache of decoded masks
+  serves every renderer of the page. Until the full size arrives a smaller decoded size stands in; with none yet, a
+  live view (`/out`, `/preview`, the editor's wall views) keeps its last frame for up to about half a second instead
+  of drawing the plate's vector path. A reshaped window, a plate without a file and a failed load use the vector path
+  as before. `/out` and `/preview` warm the masks of their size at idle; the editor's attachment tiles fetch a plate's
+  masks when they scroll into view and decode them on hover.
+- **Light previews.** `/preview` renders at most **720** px wide (the web view scales it up), with the 1024 masks, at
+  most 30 fps, and does nothing while the page is hidden. Every renderer (previews and `/out`) blurs at reduced
+  resolution: a layer or mask that a focus ring softens draws at half or a quarter size (a texel never more than a
+  quarter of the blur radius, a third in a preview), and the dual-Kawase blur stops upsampling at the level whose
+  texels are still that fine; the compose pass samples it with linear filtering. Sharp focus has no blur pass at all.
+  Nothing changes on the wire.
+- **Trial layer in place.** The phone's live gallery switches the trial layer of a loaded `/preview` without a reload:
+  the page exposes `window.projmapPreview.set({ try: <procedural id> | null })` (answers `true`); an older page
+  without it is loaded with the new `try` URL as before.
+- **Catalog 8.** The metal thumbnails are gone: gobo items no longer carry `metalThumb` (clients still decode it as
+  optional), `GET /catalog/thumbs/<id>-metal.png` answers 404, and plate tiles show `thumb` (the light the plate
+  projects) on the web and the phone; the "plates show: the plate / its light" toggle is removed.
+- **Picks feel instant (phone).** Tapping an attachment, gradient, scenery or live layer tile plays a selection haptic,
+  rings the tile at once and sends the patch on the next turn of the main run loop. Drags still send at most one
+  `param` per path every 16 ms (60 Hz), the newest value last, and `/preview` applies each incoming `param` to its
+  copy of the document and draws it on the next frame (no reload, no new renderer).
+
 ## 17. Output windows (2026-10-15)
 
 A clean projector output: no browser chrome, on the display you pick. Additive; nothing else changes on the wire.
@@ -1809,3 +1845,45 @@ Errors: no active scene `no_scene`; no object to converge onto, an unknown `obje
   converge dropped on a track takes the mode on air as its `source`.
 - **Phone**: the Objects tab has **start with converge** above GO; it sends the last backdrop mode seen on air.
 - **MCP**: `converge_start { scene?, duration?, object?, source? }` (needs "agent may go live").
+
+### Step 0: the opening look and `show.sequence.start` (2026-10-15)
+
+Two ways to open a sequence: the opening look, GO, the converge onto the object, the mapping cues; or the opening look,
+GO, a short crossfade (or a cut) straight into the mapping. Fixtures: `scene.json` (`intro`), `show.json`
+(`transport.step`), `ws-messages.json` (`cmd show.sequence.start` and its `ack`).
+
+```json
+"intro": { "on": true, "source": { "mode": "live", "presetId": null }, "converge": true, "convergeDuration": 2,
+  "from": "current", "ease": "inOut", "transition": "fade", "transitionMs": 600 }
+```
+
+- **`scene.intro`** (optional; absent is none, absent fields take the values above with `on: false`): `source.mode` a
+  backdrop mode (the opening look), `source.presetId` a preset of that mode applied when the sequence starts (null =
+  the stack as it is), `converge` (GO converges onto the object), `convergeDuration` 0.1…60 s, `from` and `ease` as
+  the converge clip's params, `transition` `fade` | `cut` and `transitionMs` 0…10000 (GO without converge). The server
+  validates the enums and ranges (422 `invalid`). Clients write it whole with `add /intro`.
+- **`transport.step`** (optional): `intro` while the opening look holds (step 0), `timeline` or absent otherwise.
+- **`cmd show.sequence.start { sceneId? }`** (also `POST /show/sequence.start`): activates the scene when another one
+  is given; applies `intro.source.presetId` (as `POST /presets/{id}/apply`, author `server`); then, in one patch by the
+  sender: `add /intro` with `on: true` when the scene has no intro or it is off (a new one takes the backdrop mode on
+  air, else the underlay's, converge on); with converge, the converge clip at 0 as `show.converge` makes it (source =
+  the intro's mode, its end = `convergeDuration` capped at the timeline, `from`, `ease`, cues at 0 and after it);
+  without converge, a cue at 0 (`"start"`) when there is none; `replace /mode objects`. The transport becomes
+  `{ state: "paused", offset: 0, cue: 0, step: "intro" }`: the wall shows the opening look, fully animated on the
+  ambient clock (live layers move, motion runs), and nothing else happens until GO. Answers `ack`.
+- **GO in step 0**: `step: "timeline"`, playing from 0. With converge `cue` is the cue before the first cue at or after
+  the converge's end (playback holds there, as `show.converge`); without it `cue` is 0 and playback holds at the next
+  cue. The cue at 0's sound plays.
+- **Back** with the intro on, from step 0 or while `cue` is 0 (stopped excepted): back to step 0 (`paused`, 0, cue 0,
+  `step: "intro"`). Stop, seek, activate and `show.converge` leave step 0.
+- **Rendering** (every renderer; the picture is a function of `intro`, `step` and t): in objects mode with the intro on,
+  step 0 draws `backdrop[source.mode]` full frame as in its own mode (no mapping, no accent, no underlay). After GO
+  with converge, the converge clip at 0 morphs from that look (seamless at p = 0). After GO without converge, converge
+  clips that start at 0 are skipped and the look crossfades into the objects frame over the first `transitionMs` of
+  the timeline: `look × (1 − a) + objects(t) × a`, `a = smoothstep(t / T)`; `cut` (or 0 ms) shows the objects at once.
+- **Web**: the Show space's objects panel: **start sequence** (was "start with converge") with the opening look (mode,
+  preset), "converge into the object" with its duration and start shape, or fade / cut with the fade length; a line
+  says when step 0 holds. **Phone**: the same compact controls above GO in the Objects tab.
+- **MCP**: `sequence_start { scene? }` (needs "agent may go live"); `intro_set { scene?, on?, mode?, preset?, converge?,
+  convergeDuration?, from?, ease?, transition?, transitionMs? }` changes only what it gets (live with "agents edit
+  live", else in the draft). `converge_start` stays.

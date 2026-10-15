@@ -300,6 +300,19 @@
    "mode": "cut"
   }
  },
+ "intro": {
+  "on": false,
+  "source": {
+   "mode": "live",
+   "presetId": null
+  },
+  "converge": true,
+  "convergeDuration": 2,
+  "from": "current",
+  "ease": "inOut",
+  "transition": "fade",
+  "transitionMs": 600
+ },
  "points": [
   {
    "id": "p_t",

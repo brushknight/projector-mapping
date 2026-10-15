@@ -107,11 +107,32 @@ public final class PreviewHost: NSObject, WKNavigationDelegate, WKScriptMessageH
         return view
     }
 
-    /// Loads `url` unless this view already shows it or is loading it; a failed page loads again.
+    /// Loads `url` unless this view already shows it or is loading it; a failed page loads again. (§16 masks) A page that
+    /// is up and differs only in `try` (the live gallery's trial layer) switches in place: no reload, no new renderer.
     public func ensure(_ url: URL) {
         if self.url == url, state != .failed { return }
         if self.url == url, state == .failed, retryTask != nil { return }  // a retry is already scheduled
+        if state == .loaded, let current = self.url, let trial = Self.trialChange(from: current, to: url) {
+            self.url = url
+            let arg = trial.map { "'\($0.replacingOccurrences(of: "\\", with: "").replacingOccurrences(of: "'", with: ""))'" } ?? "null"
+            webView.evaluateJavaScript("window.projmapPreview && window.projmapPreview.set({ try: \(arg) })") { [weak self] result, error in
+                // an older page without the hook: load the new URL after all
+                if error != nil || (result as? Bool) == false { MainActor.assumeIsolated { self?.load(url) } }
+            }
+            return
+        }
         load(url)
+    }
+
+    /// When `a` and `b` are the same preview but for the `try` query item, the new trial (nil = none); else nil.
+    nonisolated static func trialChange(from a: URL, to b: URL) -> String?? {
+        guard var ca = URLComponents(url: a, resolvingAgainstBaseURL: false), var cb = URLComponents(url: b, resolvingAgainstBaseURL: false) else { return nil }
+        let trial = cb.queryItems?.first { $0.name == "try" }?.value
+        ca.queryItems = ca.queryItems?.filter { $0.name != "try" }
+        cb.queryItems = cb.queryItems?.filter { $0.name != "try" }
+        if ca.queryItems?.isEmpty == true { ca.queryItems = nil }
+        if cb.queryItems?.isEmpty == true { cb.queryItems = nil }
+        return ca == cb ? .some(trial) : nil
     }
 
     /// Loads again now when the page is not up (the app came back, the hub reconnected).

@@ -122,6 +122,7 @@ func (s *Scene) Validate(refs Refs) error {
 	}
 	c.rng("underlay.level", s.Underlay.Level, 0, 1)
 	c.objectAccent(s.ObjectAccent)
+	c.intro(s.Intro)
 	for i, ml := range s.Backdrop.All() {
 		l := ml.Layer
 		w := fmt.Sprintf("layer %s (%s)", l.ID, ml.Mode)

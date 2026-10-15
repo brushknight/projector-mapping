@@ -284,6 +284,9 @@ public struct StripSlider: View {
     var onChange: (Double) -> Void
     @Environment(\.hapticsEnabled) private var haptics
     @State private var dragging = false
+    /// The knob's own value while dragging: drag values are not written to the store per tick (large scenes made
+    /// that lag), so the knob follows the finger itself and hands back to `value` once the server's commit lands.
+    @State private var local: Double?
 
     public init(gradient: Gradient, value: Double, enabled: Bool = true, onChange: @escaping (Double) -> Void) {
         self.gradient = gradient; self.value = value; self.enabled = enabled; self.onChange = onChange
@@ -299,7 +302,7 @@ public struct StripSlider: View {
                     .frame(width: 26, height: 26)
                     .shadow(color: .black.opacity(0.4), radius: 0.5)
                     .shadow(color: .black.opacity(0.5), radius: 4, y: 2)
-                    .offset(x: g.size.width * min(1, max(0, value)) - 13)
+                    .offset(x: g.size.width * min(1, max(0, local ?? value)) - 13)
             }
             .contentShape(Rectangle())
             .opacity(enabled ? 1 : 0.5)
@@ -309,16 +312,30 @@ public struct StripSlider: View {
                 switch p.phase {
                 case .began, .changed:
                     dragging = true
-                    onChange(min(1, max(0, p.location.x / max(1, g.size.width))))
+                    let v = min(1, max(0, p.location.x / max(1, g.size.width)))
+                    local = v
+                    onChange(v)
                 case .tap:
-                    onChange(min(1, max(0, p.location.x / max(1, g.size.width))))
+                    let v = min(1, max(0, p.location.x / max(1, g.size.width)))
+                    local = v
+                    onChange(v)
+                    release()
                 case .ended, .cancelled:
                     dragging = false
+                    release()
                 }
             }
         }
         .frame(height: 40)
-        .sensoryFeedback(trigger: Int((value * 10).rounded(.down))) { _, _ in haptics && dragging ? .selection : nil }
+        .sensoryFeedback(trigger: Int(((local ?? value) * 10).rounded(.down))) { _, _ in haptics && dragging ? .selection : nil }
+    }
+
+    /// Hands the knob back to the store once the server has committed the value (~200 ms after the drag settles).
+    private func release() {
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(600))
+            if !dragging { local = nil }
+        }
     }
 }
 
@@ -445,8 +462,12 @@ public struct ImageCard<Art: View>: View {
         self.name = name; self.meta = meta; self.on = on; self.aspect = aspect; self.badge = badge; self.action = action; self.art = art()
     }
 
+    /// (§16 masks) bumps on every tap, for the selection haptic
+    @State private var taps = 0
+    @Environment(\.hapticsEnabled) private var haptics
+
     public var body: some View {
-        Button(action: action) {
+        Button(action: { taps += 1; action() }) {
             VStack(alignment: .leading, spacing: 8) {
                 Color.clear
                     .aspectRatio(aspect, contentMode: .fit)
@@ -462,6 +483,7 @@ public struct ImageCard<Art: View>: View {
             }
         }
         .buttonStyle(.plain)
+        .sensoryFeedback(trigger: taps) { _, _ in haptics ? .selection : nil }
         .accessibilityAddTraits(on ? .isSelected : [])
     }
 }

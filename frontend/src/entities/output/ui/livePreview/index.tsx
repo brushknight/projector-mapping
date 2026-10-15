@@ -58,7 +58,7 @@ export function LivePreview({ hub, maxWidth = 1280, fps = 30, children, classNam
 
   useEffect(() => {
     try {
-      r.current = new Renderer(canvasRef.current!, { space: 'scene', maxSceneSize: maxWidth, transparent: true })
+      r.current = new Renderer(canvasRef.current!, { space: 'scene', maxSceneSize: maxWidth, transparent: true, hold: true })
     } catch {
       r.current = null
     }
@@ -84,6 +84,7 @@ export function LivePreview({ hub, maxWidth = 1280, fps = 30, children, classNam
       catalog,
       effects,
       t: playheadNow(hub, show),
+      step: previewing ? null : show?.transport.step ?? null,
       clock: ambientClock(hub),
       now: hub.serverNow(),
       blackout: blackout.step(performance.now()),

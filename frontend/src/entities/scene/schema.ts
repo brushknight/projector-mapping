@@ -31,6 +31,16 @@ export const sceneModeShape = lit('static', 'live', 'color', 'scenery', 'objects
 export const underlayShape = obj({ on: bool, from: lit('static', 'live', 'color', 'scenery'), level: num })
 /** (§19) objects is "all" or a list of object ids */
 const accentObjectsShape = (v: unknown, path: string) => (v === 'all' ? [] : arr(str)(v, path))
+export const introShape = obj({
+  on: bool,
+  source: obj({ mode: lit('static', 'live', 'color', 'scenery'), presetId: optional(nullable(str)) }),
+  converge: bool,
+  convergeDuration: num,
+  from: lit('current', 'circle', 'frame'),
+  ease: lit('inOut', 'in', 'out', 'linear'),
+  transition: lit('fade', 'cut'),
+  transitionMs: num,
+})
 export const objectAccentShape = obj({
   on: bool,
   objects: accentObjectsShape,
@@ -71,7 +81,7 @@ export const padShape = obj({
 export const soundsShape = obj({ pads: arr(padShape) })
 export const timelineShape = obj({ duration: num, tracks: arr(trackShape), clips: arr(clipShape), cues: arr(cueShape) })
 export const sceneShape = obj({
-  id: str, setupId: str, name: str, version: int, mode: sceneModeShape, kind: optional(lit('static', 'live', 'color', 'scenery', 'mapping')), format: optional(int), backdrop: backdropShape, underlay: optional(underlayShape), objectAccent: optional(objectAccentShape), points: arr(pointShape), objects: arr(objectShape),
+  id: str, setupId: str, name: str, version: int, mode: sceneModeShape, kind: optional(lit('static', 'live', 'color', 'scenery', 'mapping')), format: optional(int), backdrop: backdropShape, underlay: optional(underlayShape), objectAccent: optional(objectAccentShape), intro: optional(introShape), points: arr(pointShape), objects: arr(objectShape),
   sounds: optional(soundsShape), timeline: timelineShape,
 })
 export const sceneSummaryShape = obj({ id: str, name: str, setupId: str, version: int, kind: optional(lit('static', 'live', 'color', 'scenery', 'mapping')), mode: optional(sceneModeShape) })

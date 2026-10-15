@@ -113,14 +113,13 @@ enum GoboFallback {
     }
 }
 
-/// A gobo's thumbnail: the server's render, or the native art. `metal` shows a plate as the metal disc itself.
+/// A gobo's thumbnail: the server's render of the light it projects, or the native art.
 struct GoboThumb: View {
     var gobo: String
-    var metal = false
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        CatalogThumb(metal ? model.catalog.metalThumbId(gobo) ?? gobo : gobo) {
+        CatalogThumb(gobo) {
             GoboArt(GoboFallback.art(gobo, category: model.catalog.gobo(gobo)?.browseCategory ?? ""))
         }
     }

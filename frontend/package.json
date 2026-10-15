@@ -12,7 +12,9 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "thumbs": "node scripts/render-thumbs.mjs",
-    "catalog": "vite-node scripts/sync-catalog.ts"
+    "catalog": "vite-node scripts/sync-catalog.ts",
+    "perf": "node scripts/perf.mjs",
+    "masks": "node scripts/render-masks.mjs"
   },
   "dependencies": {
     "@tanstack/react-router": "^1.120.0",

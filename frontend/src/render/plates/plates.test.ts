@@ -19,7 +19,8 @@ describe('the plate library (catalog 6)', () => {
     for (const p of PLATES) {
       const g = catalog.gobos.find((x) => x.id === p.id)!
       expect([g.name, g.description, g.source, g.category]).toEqual([p.name, p.description, p.source, p.category])
-      expect(g.metalThumb).toBe(`thumbs/${p.id}-metal.png`)
+      // (§16 masks, catalog 8) no metal thumbnail any more: tiles show the light
+      expect(g.metalThumb).toBeUndefined()
       expect(g.params?.field?.options).toEqual([...FIELD_MODES])
       expect(g.family).toBe(p.window ? 'window' : undefined)
     }

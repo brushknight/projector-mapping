@@ -10,7 +10,7 @@ import { ParamControls, resolveParams } from '../../../effect'
 import { presetApi, type Preset } from '../../../preset'
 import { stackLayers, underlayOf } from '../../../scene/lib'
 import { addLayer, applyPresetOps, convergeSource, layerPath, moveLayer, pickOne, removeLayer, setUnderlay, sortedCues, videoLayer } from '../../../scene/ops'
-import { BACKDROP_MODES, type BackdropMode, type BlendMode, type GradientStop, type Layer, type LayerKind, type Light, type LightFxKind, type SceneObject } from '../../../scene/types'
+import { BACKDROP_MODES, defaultIntro, type BackdropMode, type Intro, type BlendMode, type GradientStop, type Layer, type LayerKind, type Light, type LightFxKind, type SceneObject } from '../../../scene/types'
 import { gradientCss, layerSwatch } from '../../../scene/ui/library'
 import { formatDuration } from '../../../sound/ui/useSounds'
 import { YouTubeDialog } from '../../../video/ui/youtubeDialog'
@@ -545,6 +545,47 @@ function usePlayhead(): number {
   return t
 }
 
+/** (§20 "Step 0") the opening look and how go leaves it: a mode, a preset of it, converge or a fade. */
+function IntroControls({ intro }: { intro: Intro }) {
+  const sh = useShow()
+  const presets = (useChannel<Preset[]>(sh.hub, 'presets').doc ?? []).filter((p) => p.mode === intro.source.mode)
+  const set = (patch: Partial<Intro>) => void sh.editing.edit(() => [{ op: 'add', path: '/intro', value: { ...intro, on: true, ...patch } }])
+  const preset = presets.find((p) => p.id === intro.source.presetId)
+  return (
+    <div className={s.controls} data-testid="intro-controls">
+      <Segmented<BackdropMode> ariaLabel="opening look" size="sm" value={intro.source.mode} onChange={(v) => set({ source: { mode: v, presetId: null } })} options={BACKDROP_MODES.map((m) => ({ value: m, label: m }))} />
+      {presets.length > 0 && (
+        <Menu
+          trigger={({ toggle }) => (
+            <Pill size="sm" onClick={toggle} data-testid="intro-preset">
+              {preset ? `preset · ${preset.name}` : 'preset · as it is'}
+            </Pill>
+          )}
+          items={[
+            { key: '', label: 'as it is', on: !preset, onSelect: () => set({ source: { mode: intro.source.mode, presetId: null } }) },
+            ...presets.map((p) => ({ key: p.id, label: p.name, on: p.id === preset?.id, onSelect: () => set({ source: { mode: intro.source.mode, presetId: p.id } }) })),
+          ]}
+        />
+      )}
+      <div className={s.switchRow}>
+        <span>converge into the object</span>
+        <Switch checked={intro.converge} onChange={(v) => set({ converge: v })} ariaLabel="converge into the object" />
+      </div>
+      {intro.converge ? (
+        <>
+          <FillSlider label="converge" value={intro.convergeDuration / 10} display={`${intro.convergeDuration.toFixed(1)} s`} onChange={(v, ph) => ph === 'final' && set({ convergeDuration: Math.max(0.1, Math.round(v * 100) / 10) })} />
+          <Segmented<Intro['from']> ariaLabel="converge from" size="sm" value={intro.from} onChange={(v) => set({ from: v })} options={[{ value: 'current', label: 'its shape' }, { value: 'circle', label: 'circle' }, { value: 'frame', label: 'frame' }]} />
+        </>
+      ) : (
+        <>
+          <Segmented<Intro['transition']> ariaLabel="into the mapping" size="sm" value={intro.transition} onChange={(v) => set({ transition: v })} options={[{ value: 'fade', label: 'fade' }, { value: 'cut', label: 'cut' }]} />
+          {intro.transition === 'fade' && <FillSlider label="fade" value={intro.transitionMs / 3000} display={`${(intro.transitionMs / 1000).toFixed(1)} s`} onChange={(v, ph) => ph === 'final' && set({ transitionMs: Math.round(v * 30) * 100 })} />}
+        </>
+      )}
+    </div>
+  )
+}
+
 export function ObjectsPanel() {
   const sh = useShow()
   const t = usePlayhead()
@@ -560,7 +601,14 @@ export function ObjectsPanel() {
   const under = scene ? underlayOf(scene) : null
   // (§20) the opening: the light on air closes onto the object, then the wall holds for go
   const opening = scene ? convergeOpening(scene, sh.lastBackdrop) : null
-  const converge = () => void sh.command('show.converge', sh.lastBackdrop ? { source: sh.lastBackdrop } : {})
+  // (§20 "Step 0") the opening look: the scene's intro, or the light last on air with converge
+  const intro: Intro = scene?.intro ?? defaultIntro(sh.lastBackdrop ?? (scene && scene.mode !== 'objects' ? scene.mode : 'static'))
+  const step0 = transport?.step === 'intro'
+  const startSequence = async () => {
+    if (!scene) return
+    if (!scene.intro?.on) await sh.editing.edit(() => [{ op: 'add', path: '/intro', value: { ...intro, on: true } }])
+    await sh.command('show.sequence.start')
+  }
   const reveal = async (o: SceneObject) => {
     if (!scene) return
     const starts = objectClips(scene, o).map((c) => c.start)
@@ -577,13 +625,19 @@ export function ObjectsPanel() {
         </div>
         <ProgressBar segments={Math.max(1, cues.length)} filled={cues.length ? i + 1 : 0} label="cues" />
         <ProgressBar value={transport?.state === 'stopped' ? 0 : segFrac} label="this cue" />
-        {opening && (
+        {opening && scene && (
           <div className={s.convergeRow}>
-            <button type="button" className={s.converge} onClick={converge} disabled={!opening.ok} title={opening.ok ? 'switch the wall to the objects: the light on air closes onto the object, then holds at the next cue for go' : opening.hint} data-testid="start-converge">
-              <Icon name="converge" size={18} /> start with converge
+            {step0 && (
+              <span className={s.cueSound} data-testid="step0">
+                step 0 · the {intro.source.mode} look holds. go {intro.converge ? 'converges onto the object' : intro.transition === 'cut' ? 'cuts to the mapping' : 'fades into the mapping'}.
+              </span>
+            )}
+            <button type="button" className={s.converge} onClick={startSequence} disabled={!opening.ok} title={opening.ok ? 'put the opening look on the wall: it holds until go' : opening.hint} data-testid="start-converge">
+              <Icon name="converge" size={18} /> start sequence
             </button>
+            <IntroControls intro={intro} />
             <span className={s.dim} data-testid="converge-hint">
-              {opening.hint}
+              {opening.ok ? `the ${intro.source.mode} look holds until go, then ${intro.converge ? `closes onto the object over ${intro.convergeDuration} s` : intro.transition === 'cut' ? 'cuts to the mapping' : `fades into the mapping over ${(intro.transitionMs / 1000).toFixed(1)} s`}.` : opening.hint}
             </span>
           </div>
         )}

@@ -112,6 +112,3 @@ export const sceneryUrl = (item: SceneryItem) => `/catalog/assets/${item.asset}`
 
 /** (§15) a gobo or procedural thumbnail, rendered at build time and served by the server */
 export const thumbUrl = (id: string) => `/catalog/thumbs/${id}.png`
-
-/** (catalog 5) a plate's metal thumbnail (a grey disc with its cut-outs), or its light thumbnail for any other gobo */
-export const metalThumbUrl = (g: GoboItem) => (g.metalThumb ? `/catalog/assets/${g.metalThumb}` : thumbUrl(g.id))

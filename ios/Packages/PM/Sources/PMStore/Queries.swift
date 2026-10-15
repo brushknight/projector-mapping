@@ -28,9 +28,19 @@ public enum Queries {
         let show = try show(db)
         var state = ActiveState(show: show)
         let sceneId = try show?.activeSceneId ?? (String.fetchOne(db, sql: "SELECT id FROM scene WHERE doc IS NOT NULL ORDER BY sort LIMIT 1"))
-        if let sceneId, let doc = JSONValue.parse(try String.fetchOne(db, sql: "SELECT doc FROM scene WHERE id = ?", arguments: [sceneId])) {
-            state.sceneDoc = doc
-            state.scene = try? doc.decode(Scene.self)
+        if let sceneId {
+            // The active scene can be hundreds of KB (agent drawings). This query re-runs on every show, setup and outbox
+            // change, so reuse the decoded scene while its row is unchanged (same version and byte length).
+            let row = try Row.fetchOne(db, sql: "SELECT version, length(doc) AS n FROM scene WHERE id = ?", arguments: [sceneId])
+            let key = row.map { "\(sceneId)|\($0["version"] as Int? ?? -1)|\($0["n"] as Int? ?? -1)" }
+            if let key, let hit = SceneCache.shared.get(key) {
+                state.sceneDoc = hit.doc
+                state.scene = hit.scene
+            } else if let doc = JSONValue.parse(try String.fetchOne(db, sql: "SELECT doc FROM scene WHERE id = ?", arguments: [sceneId])) {
+                state.sceneDoc = doc
+                state.scene = try? doc.decode(Scene.self)
+                if let key { SceneCache.shared.put(key, doc: doc, scene: state.scene) }
+            }
         }
         let setupId = show?.activeSetupId ?? state.scene?.setupId
         if let setupId {
@@ -119,5 +129,26 @@ extension AppDatabase {
 
     public func read<T: Sendable>(_ fetch: @Sendable (Database) throws -> T) throws -> T {
         try reader.read(fetch)
+    }
+}
+
+
+/// The last decoded active scene, keyed by id, version and document length.
+final class SceneCache: @unchecked Sendable {
+    static let shared = SceneCache()
+    private let lock = NSLock()
+    private var key: String?
+    private var doc: JSONValue?
+    private var scene: Scene?
+
+    func get(_ k: String) -> (doc: JSONValue, scene: Scene?)? {
+        lock.lock(); defer { lock.unlock() }
+        guard k == key, let doc else { return nil }
+        return (doc, scene)
+    }
+
+    func put(_ k: String, doc: JSONValue, scene: Scene?) {
+        lock.lock(); defer { lock.unlock() }
+        key = k; self.doc = doc; self.scene = scene
     }
 }

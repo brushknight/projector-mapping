@@ -2,13 +2,14 @@
  * The light model in the Show space (protocol §15): the light lights the whole frame, attachments (gobos) block it,
  * one focus ring softens everything, the frame slide pans the picture, and motion moves it across the wall.
  */
-import { useMemo, useRef, useState, type PointerEvent as RPointerEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent } from 'react'
 import { Cap, EmptyState, FillSlider, Icon, Pill, Segmented, Switch, Tile } from '../../../../shared/components'
 import { cx } from '../../../../shared/lib/cx'
 import { pressed } from '../../../../shared/lib/pointer'
 import { newId } from '../../../../shared/lib/ids'
 import { useRaf } from '../../../../shared/lib/useRaf'
-import { metalThumbUrl, thumbUrl, type GoboItem } from '../../../catalog'
+import { thumbUrl, type GoboItem } from '../../../catalog'
+import { prefetchPlate } from '../../../../render'
 import { defaultStackLight, newAttachment, presetMotion, stackLightOf } from '../../../catalog/layers'
 import { ParamControls, resolveParams } from '../../../effect'
 import type { ParamSchema } from '../../../effect/types'
@@ -56,19 +57,49 @@ function useStack(mode: LightStack) {
 
 // ── the attachment browser ───────────────────────────────────────────────────
 
+/**
+ * (§16 masks) Fetches the plate masks of the tiles (children with `data-plate`) that scroll into view, so a pick decodes
+ * from memory instead of the network. Returns the ref for the grid.
+ */
+function usePrefetchInView<T extends HTMLElement>() {
+  const ref = useRef<T>(null)
+  useEffect(() => {
+    const el = ref.current
+    if (!el || typeof IntersectionObserver === 'undefined') return
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (!e.isIntersecting) continue
+          const id = (e.target as HTMLElement).dataset.plate
+          if (id) prefetchPlate(id)
+          io.unobserve(e.target)
+        }
+      },
+      { rootMargin: '200px' },
+    )
+    const watch = () => el.querySelectorAll<HTMLElement>('[data-plate]').forEach((c) => io.observe(c))
+    watch()
+    const mo = new MutationObserver(watch)
+    mo.observe(el, { childList: true })
+    return () => {
+      io.disconnect()
+      mo.disconnect()
+    }
+  }, [])
+  return ref
+}
+
 /** Every catalog attachment by category, with real thumbnails rendered by the engine at build time. */
 export function AttachmentBrowser({ mode, selected, onSelect }: { mode: LightStack; selected: string | null; onSelect: (id: string) => void }) {
   const sh = useShow()
   const [cat, setCat] = useState('all')
-  // (plates) a plate tile shows the metal plate itself, or the light it projects
-  const [plateView, setPlateView] = useState<'metal' | 'light'>('metal')
   const { atts } = useStack(mode)
   const gobos = sh.catalog?.gobos ?? []
   // (catalog 6) the groups come from the catalog: windows, nature, sky, patterns, beams
   const cats = [{ id: 'all', name: 'all' }, ...(sh.catalog?.goboCategories ?? [])]
   const shown = cat === 'all' ? gobos : gobos.filter((g) => g.category === cat)
-  const hasPlates = shown.some((g) => g.metalThumb)
-  const tileUrl = (g: GoboItem) => (plateView === 'metal' && g.metalThumb ? metalThumbUrl(g) : thumbUrl(g.id))
+  // (§16 masks) tiles show the light each plate projects; the masks of tiles in view are fetched ahead of a pick
+  const gridRef = usePrefetchInView<HTMLDivElement>()
   const on = new Set(atts.map((a) => a.gobo))
   const trying = sh.staticTry?.kind === 'attachment' ? sh.staticTry.gobo : null
 
@@ -105,25 +136,10 @@ export function AttachmentBrowser({ mode, selected, onSelect }: { mode: LightSta
           </Pill>
         ))}
       </div>
-      {hasPlates && (
-        <div className={s.plateView}>
-          <span className={s.dim}>plates show</span>
-          <Segmented
-            ariaLabel="plate tiles show"
-            size="sm"
-            value={plateView}
-            onChange={setPlateView}
-            options={[
-              { value: 'metal', label: 'the plate', title: 'show each plate as the metal disc with its cut-outs' },
-              { value: 'light', label: 'its light', title: 'show the light each plate projects' },
-            ]}
-          />
-        </div>
-      )}
-      <div className={s.attGrid} data-testid="attachment-grid">
+      <div className={s.attGrid} data-testid="attachment-grid" ref={gridRef}>
         {shown.map((g) => (
-          <div key={g.id} className={s.attTile}>
-            <Tile label={trying === g.id ? `trying ${g.name}` : g.name} aspect={16 / 9} on={on.has(g.id) || trying === g.id} background={`center / cover no-repeat url("${tileUrl(g)}"), var(--bg)`} onClick={() => pick(g)} testId={`gobo-${g.id}`} title={`${g.name}: ${g.description ?? ''}${g.source ? ` (${g.source})` : ''}. ${mode === 'static' ? 'Try it in the preview.' : 'Put it in front of the light (replaces the others).'}`} />
+          <div key={g.id} className={s.attTile} data-plate={g.id} onPointerEnter={() => prefetchPlate(g.id, true)} onFocus={() => prefetchPlate(g.id, true)}>
+            <Tile label={trying === g.id ? `trying ${g.name}` : g.name} aspect={16 / 9} on={on.has(g.id) || trying === g.id} background={`center / cover no-repeat url("${thumbUrl(g.id)}"), var(--bg)`} onClick={() => pick(g)} testId={`gobo-${g.id}`} title={`${g.name}: ${g.description ?? ''}${g.source ? ` (${g.source})` : ''}. ${mode === 'static' ? 'Try it in the preview.' : 'Put it in front of the light (replaces the others).'}`} />
             <button type="button" className={s.attAdd} onClick={() => stack(g)} aria-label={`add ${g.name} on top`} title={`add ${g.name} on top of what is there: masks multiply`} data-testid={`gobo-add-${g.id}`}>
               <Icon name="plus" size={12} />
             </button>

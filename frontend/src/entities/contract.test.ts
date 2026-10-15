@@ -133,13 +133,16 @@ describe('contract fixtures', () => {
     expect(scene.backdrop.static.light?.focus).toBeGreaterThan(0)
     expect(scene.backdrop.static.attachments?.[0].gobo).toBe('plate-grid-window')
     expect(scene.format).toBe(6)
+    // (§20 "Step 0") the opening step decodes
+    expect(scene.intro?.source.mode).toBe('live')
+    expect(scene.intro?.converge).toBe(true)
     expect(scene.backdrop.static.attachments?.[0].motion?.preset).toBe('sun-lr')
     const cat = read('catalog.json')
-    expect(cat.version).toBe(7)
+    expect(cat.version).toBe(8)
     expect(cat.gobos.length).toBeGreaterThanOrEqual(45)
-    // (catalog 6) every attachment is a metal plate with its metal thumbnail and the reference photo it follows
+    // (catalog 6) every attachment is a metal plate with the reference photo it follows; (catalog 8) no metal thumbnail
     for (const g of cat.gobos) {
-      expect(g.metalThumb).toBe(`thumbs/${g.id}-metal.png`)
+      expect(g.metalThumb).toBeUndefined()
       expect(g.source).toMatch(/\.png, /)
     }
     expect(cat.gobos.filter((g: { family?: string }) => g.family === 'window')).toHaveLength(13)

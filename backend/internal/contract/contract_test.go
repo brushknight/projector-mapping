@@ -272,10 +272,10 @@ func TestCatalogV4(t *testing.T) {
 		if _, ok := cat.GoboSchema(g.ID); !ok {
 			t.Errorf("gobo %s has no schema", g.ID)
 		}
-		// (catalog 6) every gobo is a metal plate: its metal thumbnail, a reference photo and a round, fill, stretch or
-		// tile light field, in one of the catalog's categories
+		// (catalog 6) every gobo is a metal plate: a reference photo and a round, fill, stretch or tile light field, in one
+		// of the catalog's categories; (catalog 8) no metal thumbnail
 		if gb != nil {
-			if gb.MetalThumb != "thumbs/"+g.ID+"-metal.png" || gb.Source == "" || gb.Params["field"].Type != "enum" || gb.Params["field"].Default != "round" {
+			if gb.MetalThumb != "" || gb.Source == "" || gb.Params["field"].Type != "enum" || gb.Params["field"].Default != "round" {
 				t.Errorf("plate %s: %+v", g.ID, gb)
 			}
 			if !strings.HasPrefix(g.ID, "plate-") || !slices.ContainsFunc(cat.GoboCategories, func(c domcatalog.Named) bool { return c.ID == gb.Category }) {

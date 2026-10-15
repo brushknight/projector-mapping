@@ -16,6 +16,7 @@ import { GENERATOR_IDS, GENERATORS } from './generators'
 import { sampleMotion } from './motion'
 import { COLOR_FS, LIGHT_FS, MASK_FS, SHAPE } from './shaders/light'
 import { PLATE_TEXTURE, plateCanvas, plateDef, plateKey } from './plates'
+import { hasMask, maskStore, MASK_TIERS, type MaskData } from './plates/masks'
 import { atlasAffines, resolveAtlas, type Affine } from './atlas'
 import { accentObjects, objectAccentOf, silhouette, silhouetteFaces } from './accent'
 import { convergeLoops, convergeStart, evaluateConverge, farDistance, CONVERGE_MAX_LOOPS, CONVERGE_MAX_VERTS, type ConvergeState } from './converge'
@@ -49,6 +50,13 @@ const WINDOW_TEXTURES = 6
 const PLATE_TEXTURES = 12
 /** (§16) frames a window geometry holds before its draft is redrawn at full size */
 const DRAFT_FRAMES = 8
+/**
+ * (§16 masks) frames a renderer keeps its last picture while a picked plate's mask decodes (about half a second at 60 fps);
+ * after that it draws the plate with the vector path
+ */
+const MASK_HOLD_FRAMES = 30
+/** a plate whose pre-rendered mask is still decoding (the renderer holds its last frame) */
+const PENDING = Symbol('pending')
 
 /** (§15) a static or live stack drawn with the light model: its light and attachments. */
 interface LightPlan {
@@ -125,6 +133,26 @@ export function sceneTargetSize(input: Pick<RenderInput, 'setup'>, maxSceneSize?
   return { width: Math.max(1, Math.round(w * cap)), height: Math.max(1, Math.round(h * cap)) }
 }
 
+/** (§20 "Step 0") True while the scene's opening look holds: the intro is on, objects mode, transport step `intro`. */
+export function isIntroStep(input: Pick<RenderInput, 'scene' | 'step' | 'mode' | 'layerOnly'>): boolean {
+  const sc = input.scene
+  return !!sc?.intro?.on && input.step === 'intro' && (input.mode ?? sc.mode) === 'objects' && !input.layerOnly
+}
+
+/**
+ * (§20 "Step 0") After GO from the opening look without converge: the look crossfades into the mapping over the first
+ * `transitionMs` of the timeline (smoothstep; `cut` is no fade). `look` is null when nothing mixes; `skipStartConverge`
+ * says the intro owns the start (its converge clips at 0 do not play).
+ */
+export function introFade(input: Pick<RenderInput, 'scene' | 'step' | 'mode' | 't'>): { look: BackdropMode | null; alpha: number; skipStartConverge: boolean } {
+  const intro = input.scene?.intro
+  if (!intro?.on || intro.converge || input.step === 'intro' || (input.mode ?? input.scene?.mode) !== 'objects') return { look: null, alpha: 1, skipStartConverge: false }
+  const T = intro.transition === 'cut' ? 0 : Math.max(0, intro.transitionMs) / 1000
+  if (T <= 0 || input.t >= T || input.t < 0) return { look: null, alpha: 1, skipStartConverge: true }
+  const u = input.t / T
+  return { look: intro.source.mode, alpha: u * u * (3 - 2 * u), skipStartConverge: true }
+}
+
 export class Renderer {
   readonly canvas: HTMLCanvasElement | OffscreenCanvas
   readonly opts: RendererOptions
@@ -152,9 +180,12 @@ export class Renderer {
   private videos: VideoCache
   private gridCanvases = new Map<string, OffscreenCanvas | HTMLCanvasElement>()
   /** (plates) mask textures of metal plates, rasterized once per plate */
-  private plateTex = new Map<string, { tex: WebGLTexture; size: number; frame: number }>()
+  private plateTex = new Map<string, { tex: WebGLTexture; size: number; frame: number; mask: boolean }>()
   /** frames rendered, for the window drafts (the engine reads no clock) */
   private frames = 0
+  /** (§16 masks) consecutive frames held while a plate mask decodes */
+  private heldFrames = 0
+  private unsubscribeMasks: (() => void) | null = null
   /** object atlas targets drawn in this render call */
   private objFrame = new Map<string, SurfaceExtra['atlas'] | null>()
   private effectProgs = new Map<string, EffectProgram>()
@@ -211,6 +242,9 @@ export class Renderer {
     this.dyn = new DynamicTextures(gl)
     this.js.onError = (key, message) => this.reportError(key.split('|')[0], message)
     this.js.onFrame = () => this.onInvalidate?.()
+    // (§16 masks) a plate mask decoded (for this or another renderer of the page): draw again
+    this.unsubscribeMasks = maskStore.subscribe(() => this.onInvalidate?.())
+    this.maxTexture = gl.getParameter(gl.MAX_TEXTURE_SIZE) as number
     this.blackTex = gl.createTexture()!
     gl.bindTexture(gl.TEXTURE_2D, this.blackTex)
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 0]))
@@ -239,9 +273,23 @@ export class Renderer {
 
   // ── public render ──────────────────────────────────────────────────────────
 
-  render(input: RenderInput) {
+  /**
+   * Draws one frame. Returns false when a live renderer (RendererOptions.hold) kept its last picture because a plate's
+   * mask is still decoding (§16 masks); the canvas then shows what it showed before (black before the first frame).
+   */
+  render(input: RenderInput): boolean {
     const gl = this.gl
     this.frames++
+    // (§20 "Step 0") while the opening look holds, objects mode draws the intro's backdrop mode full frame, nothing else
+    const introStep = isIntroStep(input)
+    if (introStep) input = { ...input, mode: input.scene!.intro!.source.mode, hideMapping: true }
+    // (§16 masks) a picked plate's mask is still decoding: keep the last picture on the canvas (no draw call leaves it as
+    // it is) for a few frames instead of drawing the frame lit without the plate
+    if (this.opts.hold && this.heldFrames < MASK_HOLD_FRAMES && this.masksPending(input)) {
+      this.heldFrames++
+      return false
+    }
+    this.heldFrames = 0
     const S = sceneTargetSize(input, this.opts.maxSceneSize)
     const scene = this.pool.get('scene', S.width, S.height, true)
     gl.disable(gl.DEPTH_TEST)
@@ -261,9 +309,11 @@ export class Renderer {
     if (input.scene && plan && !input.hideBackdrop) this.renderBackdrop(input, plan.layers, plan.level, scene, plan.light)
     // (§19) the object accent: the mapped objects' silhouettes over a backdrop mode
     const onAir = input.mode ?? input.scene?.mode ?? 'static'
-    if (input.scene && plan && !solo && !input.layerOnly && !input.hideBackdrop && onAir !== 'objects') this.renderAccent(input, input.scene, scene)
+    if (input.scene && plan && !solo && !input.layerOnly && !input.hideBackdrop && onAir !== 'objects' && !introStep) this.renderAccent(input, input.scene, scene)
     // (§20) the converge: a backdrop mode's light closing onto the objects' silhouettes, under the mapped content
-    const converges = input.scene && plan?.objects && !solo && !input.layerOnly && !input.hideBackdrop ? evaluateConverge(input.scene, input.t, input.mutedTracks) : []
+    const fade = introFade(input)
+    // (§20 "Step 0") an intro without converge owns the start: its crossfade replaces the converge clips at 0
+    const converges = input.scene && plan?.objects && !solo && !input.layerOnly && !input.hideBackdrop ? evaluateConverge(input.scene, input.t, input.mutedTracks).filter((c) => !(fade.skipStartConverge && c.clip.start <= 1e-6)) : []
     if (converges.length) this.renderConverge(input, input.scene!, scene, converges)
     this.objFrame.clear()
 
@@ -271,6 +321,8 @@ export class Renderer {
     const dynKeep = new Set<string>()
     if (input.scene && plan?.objects && !input.hideMapping && !input.layerOnly) this.renderMapping(input, input.scene, scene, keep, dynKeep)
     if (converges.length) this.renderConvergeOutline(input, input.scene!, scene, converges)
+    // (§20 "Step 0") GO without converge: the opening look crossfades into the mapping over the first transitionMs
+    if (fade.look && plan?.objects && !solo && !input.layerOnly && !input.hideBackdrop) this.renderIntroFade(input, fade.look, fade.alpha, scene)
     this.pool.prune('content:', keep)
     for (const k of this.textCanvases.keys()) if (!dynKeep.has('text:' + k)) this.textCanvases.delete(k)
     for (const k of this.drawCanvases.keys()) if (!dynKeep.has(k)) this.drawCanvases.delete(k)
@@ -282,6 +334,7 @@ export class Renderer {
 
     this.videos.endFrame()
     this.finalPass(input, scene, overlay, S)
+    return true
   }
 
   /**
@@ -405,6 +458,12 @@ export class Renderer {
         waits.push(l.media === 'video' ? this.videos.wait(url) : this.images.wait(url))
       }
     }
+    // (§16 masks) the plates' pre-rendered masks at this renderer's size
+    const full = this.plateSize()
+    for (const p of this.framePlates(input)) {
+      const def = plateDef(p.gobo)
+      if (def && hasMask(def.id, full) && (!def.window || plateKey(def, p.params) === plateKey(def, {}))) waits.push(maskStore.load(def.id, full).then(() => {}))
+    }
     await Promise.all(waits)
     // a dry render queues the JS effect frames; then wait for them
     this.jsWanted = []
@@ -441,6 +500,10 @@ export class Renderer {
     this.dyn.dispose()
     for (const t of this.plateTex.values()) gl.deleteTexture(t.tex)
     this.plateTex.clear()
+    this.unsubscribeMasks?.()
+    this.unsubscribeMasks = null
+    this.tier?.off()
+    this.tier = null
     this.js.dispose()
     this.mesh.dispose()
     for (const p of this.effectProgs.values()) if ('prog' in p) gl.deleteProgram(p.prog.prog)
@@ -494,13 +557,29 @@ export class Renderer {
     return radius < 0.75 ? src : this.blur(src, radius, key)
   }
 
-  /** Dual-Kawase blur of `src` by roughly `radius` px; returns the blurred target (or src when tiny). */
+  /**
+   * (§16 masks) How much smaller (1, 2 or 4 times) a layer that a focus ring softens by `radius` px may draw: a texel of
+   * at most a quarter of the radius (a third in a preview) is finer than anything the blur leaves.
+   */
+  private softScale(radius: number): number {
+    const q = this.opts.preview ? 3 : 4
+    return radius >= 4 * q ? 4 : radius >= 2 * q ? 2 : 1
+  }
+
+  /**
+   * Dual-Kawase blur of `src` by roughly `radius` px; returns the blurred target (or src when tiny). The blur runs at
+   * reduced resolution (each level halves it) and (§16 masks) stops upsampling at the level whose texels are still a quarter
+   * of the radius or finer: a soft picture carries no detail finer than that, the caller samples the smaller target
+   * with linear filtering, and the two most expensive passes (half and full size) are skipped for big radii. A preview
+   * renderer stops one level earlier still.
+   */
   private blur(src: Target, radius: number, key: string): Target {
     if (radius < 0.75) return src
     const gl = this.gl
     // dual Kawase with n levels spreads about 1.5 × 2^n × offset px
     const n = Math.max(1, Math.min(6, Math.floor(Math.log2(radius / 1.5))))
     const offset = Math.max(0.5, Math.min(2.5, radius / (1.5 * 2 ** n)))
+    const stop = Math.max(0, Math.min(n - 1, Math.floor(Math.log2(radius / (this.opts.preview ? 3 : 4)))))
     this.setBlend('none')
     const levels: Target[] = []
     let cur = src
@@ -515,7 +594,7 @@ export class Renderer {
       cur = t
     }
     this.upProg.use()
-    for (let i = n - 1; i >= 0; i--) {
+    for (let i = n - 1; i >= stop; i--) {
       const t = i === 0 ? this.pool.get(`${key}:out`, src.width, src.height) : levels[i - 1]
       bindTarget(gl, t)
       this.upProg.tex('u_src', 0, cur.tex)
@@ -567,14 +646,16 @@ export class Renderer {
       if (input.layerOnly ? layer.id !== input.layerOnly : !layer.visible) continue
       if (masks.includes(layer) || background.includes(layer)) continue
       if (layer.opacity <= 0) continue
-      const lt = this.pool.get('layer', target.width, target.height)
+      // (§16 masks) a layer the live layer focus softens draws smaller: the blur hides the finer detail anyway
+      const d = this.softScale(liveRadius)
+      const lt = this.pool.get(`layer:${d}`, target.width / d, target.height / d)
       bindTarget(gl, lt)
       gl.clearColor(0, 0, 0, 0)
       gl.clear(gl.COLOR_BUFFER_BIT)
       this.setBlend('none')
-      const radius = this.drawLayer(input, layer, lt, k)
+      const radius = this.drawLayer(input, layer, lt, k / d)
       if (radius === null) continue
-      const out = this.blur(lt, Math.max(radius, liveRadius), 'blur')
+      const out = this.blur(lt, Math.max(radius, liveRadius / d), `blur:${d}`)
       bindTarget(gl, target)
       this.setBlend(layer.blend)
       this.blit(out.tex)
@@ -619,8 +700,14 @@ export class Renderer {
     const ms = Math.min(1, 4096 / Math.max(W, H))
     const MW = Math.max(1, Math.round(W * ms)), MH = Math.max(1, Math.round(H * ms))
 
+    // 2 (first). the attachment focus ring (§16: 1, the default, is sharp: no blur at all); (§16 masks) a soft mask draws
+    // smaller, since its blur hides the finer detail anyway
+    const focus = Math.max(0, Math.min(1, light.focus ?? 1))
+    const radius = focusRadius(focus, k)
+    const dm = this.softScale(radius * ms)
+
     // 1. the mask: white, times each attachment
-    const mask = this.pool.get('lmask', MW, MH)
+    const mask = this.pool.get(`lmask:${dm}`, MW / dm, MH / dm)
     bindTarget(gl, mask)
     gl.clearColor(1, 1, 1, 1)
     gl.clear(gl.COLOR_BUFFER_BIT)
@@ -633,32 +720,34 @@ export class Renderer {
     }
     this.setBlend('none')
 
-    // 2. the attachment focus ring (§16: 1, the default, is sharp: no blur at all)
-    const focus = Math.max(0, Math.min(1, light.focus ?? 1))
-    const radius = focusRadius(focus, k)
-    const focused = this.focusBlur(mask, radius * ms, 'lfocus')
+    // 2. the focus blur
+    const focused = this.focusBlur(mask, (radius * ms) / dm, `lfocus:${dm}`)
     const fringe = Math.max(0, Math.min(1, light.fringe ?? 0))
     // (§16) the live shadows (tree sway, clouds…) block light the same way, softened by the live layer focus
     // (backgroundFocus) on their own and multiplied over the focused attachments, so each ring is independent
     const bgRadius = focusRadius(light.backgroundFocus ?? 1, k)
     let maskOut = focused
     if (shadows.length) {
-      if (maskOut === mask) {
-        // the sharp mask is the pooled mask itself: copy it so the shadows multiply into a target of their own
-        maskOut = this.pool.get('lmaskout', MW, MH)
-        bindTarget(gl, maskOut)
+      if (maskOut === mask || maskOut.width !== MW || maskOut.height !== MH) {
+        // the sharp mask is the pooled mask itself, and a soft one may be a smaller target (the blur stops early):
+        // copy it at full size so the shadows multiply into a target of their own at their own sharpness
+        const copy = this.pool.get('lmaskout', MW, MH)
+        bindTarget(gl, copy)
         this.setBlend('none')
-        this.blit(mask.tex)
+        this.blit(maskOut.tex)
+        maskOut = copy
       }
+      // (§16 masks) shadows softened by the live layer focus draw smaller: the blur hides the finer detail anyway
+      const d = this.softScale(bgRadius * ms)
       for (const layer of shadows) {
-        const lt = this.pool.get('lshadow', MW, MH)
+        const lt = this.pool.get(`lshadow:${d}`, MW / d, MH / d)
         bindTarget(gl, lt)
         gl.clearColor(0, 0, 0, 0)
         gl.clear(gl.COLOR_BUFFER_BIT)
         this.setBlend('none')
-        const own = this.drawLayer(input, layer, lt, k * ms)
+        const own = this.drawLayer(input, layer, lt, (k * ms) / d)
         if (own === null) continue
-        const out = this.focusBlur(lt, Math.max(own * 0.35, bgRadius) * ms, 'lshadowblur')
+        const out = this.focusBlur(lt, Math.max(own * 0.35, bgRadius * ms / d), `lshadowblur:${d}`)
         bindTarget(gl, maskOut)
         this.setBlend('multiply')
         this.blit(out.tex)
@@ -668,12 +757,14 @@ export class Renderer {
 
     // 3. the colour: (§16) the static stack's background layers when it has any, else the colour layer or the
     // light's own colour; the static background is softened by the background focus
-    const color = this.pool.get('lcolor', W, H)
+    // (§16 masks) a background the background focus softens draws smaller: the blur hides the finer detail anyway
+    const dc = plan.which === 'static' ? this.softScale(bgRadius) : 1
+    const color = this.pool.get(`lcolor:${dc}`, W / dc, H / dc)
     const bg = plan.which === 'static' ? (plan.stack.layers ?? []).filter((l) => l.visible && l.opacity > 0) : []
     bindTarget(gl, color)
-    if (bg.length) this.drawBackgroundLayers(input, bg, color, k)
-    else this.drawColorLayer(input, light, kelvin, W, H)
-    const colorOut = plan.which === 'static' ? this.focusBlur(color, bgRadius, 'lcolorblur') : color
+    if (bg.length) this.drawBackgroundLayers(input, bg, color, k / dc)
+    else this.drawColorLayer(input, light, kelvin, color.width, color.height)
+    const colorOut = plan.which === 'static' ? this.focusBlur(color, bgRadius / dc, `lcolorblur:${dc}`) : color
 
     // 4. compose onto the target, slid inside the frame
     const fx = lightFx(light.fx?.kind, input.clock, light.fx?.speed ?? 0.35, Math.floor(seed * 1000))
@@ -729,7 +820,8 @@ export class Renderer {
     p.f1('u_seed', (hashString01(att.id) + seed) * 10)
     p.f4('u_gp1', ...u.gp1)
     p.f4('u_gp2', ...u.gp2)
-    const plate = u.shape === SHAPE.plate ? this.plateTexture(att.gobo, attachmentParams(input.catalog, att)) : null
+    const got = u.shape === SHAPE.plate ? this.plateTexture(att.gobo, attachmentParams(input.catalog, att)) : null
+    const plate = got === PENDING ? null : got
     if (u.shape === SHAPE.plate) {
       if (!plate) return
       p.tex('u_plate', 0, plate)
@@ -748,25 +840,43 @@ export class Renderer {
   }
 
   /**
-   * (plates) A plate's mask texture: its vector cut-outs rasterized into one channel, mipmapped, trilinear and
-   * anisotropic. PLATE_TEXTURE (4096) px on outputs of 1200 px and up (a projector), 2048 below (previews, tiles), never
-   * past the GPU's limit. Null for an unknown plate. The newest PLATE_TEXTURES fixed plates and WINDOW_TEXTURES window
-   * geometries keep a texture (each is about 21 MB at 4096 with its mipmaps). While a window's geometry changes from
-   * frame to frame (a slider drag) it draws a quick 1024 px draft, then redraws at full size once the geometry has held
-   * for DRAFT_FRAMES frames.
+   * (plates, §16 masks) A plate's mask texture: one channel, mipmapped, trilinear and anisotropic, at this renderer's mask
+   * size (plateSize). A plate drawn with its preset geometry comes from the pre-rendered masks (plates/masks.ts),
+   * decoded off the main thread: until the full size arrives a smaller decoded size stands in, and with none yet the
+   * answer is PENDING (render() holds the last frame) unless `vectorOk`. Everything else (a reshaped window, a plate
+   * without a file, a failed load, a hold that ran out) rasterizes its vector cut-outs. The newest PLATE_TEXTURES fixed
+   * plates and WINDOW_TEXTURES window geometries keep a texture (about 21 MB each at 4096 with mipmaps). While a
+   * window's geometry changes from frame to frame (a slider drag) it draws a quick 1024 px draft, then redraws at full
+   * size once the geometry has held for DRAFT_FRAMES frames. Null for an unknown plate.
    */
-  private plateTexture(id: string, params: Record<string, unknown>): WebGLTexture | null {
+  private plateTexture(id: string, params: Record<string, unknown>, vectorOk = true): WebGLTexture | null | typeof PENDING {
     const def = plateDef(id)
     if (!def) return null
     const key = plateKey(def, params)
     const full = this.plateSize()
     const have = this.plateTex.get(key)
-    if (have && have.size === full) {
+    if (have && have.size >= full) {
       this.plateTex.delete(key)
       this.plateTex.set(key, have)
       return have.tex
     }
-    if (have && this.frames - have.frame < DRAFT_FRAMES) {
+    // (§16 masks) the pre-rendered mask of a plate at its preset geometry
+    const preset = !def.window || key === plateKey(def, {})
+    if (preset && hasMask(def.id, full) && !maskStore.didFail(def.id, full)) {
+      const m = maskStore.get(def.id, full)
+      if (m) return this.uploadMask(key, def, m, have?.tex)
+      void maskStore.load(def.id, full)
+      if (have && have.mask) return have.tex
+      for (let i = MASK_TIERS.length - 1; i >= 0; i--) {
+        const t = MASK_TIERS[i]
+        const small = t < full ? maskStore.get(def.id, t) : undefined
+        if (small) return this.uploadMask(key, def, small, have?.tex)
+      }
+      // a small size decodes fast: ask for it too, so a slow full size never holds the picture for long
+      if (full > MASK_TIERS[0]) void maskStore.load(def.id, MASK_TIERS[0])
+      if (!vectorOk) return PENDING
+    }
+    if (have && !have.mask && this.frames - have.frame < DRAFT_FRAMES) {
       // a draft that has not held long enough yet: keep it, ask for another frame to finish it
       this.onInvalidate?.()
       return have.tex
@@ -781,29 +891,141 @@ export class Renderer {
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1)
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, gl.RED, gl.UNSIGNED_BYTE, plateCanvas(def, size, params) as TexImageSource)
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4)
+    this.finishPlate(key, def, tex, size, false)
+    if (size < full) this.onInvalidate?.()
+    return tex
+  }
+
+  /** (§16 masks) Uploads a decoded mask (one byte per pixel) as the plate's texture. */
+  private uploadMask(key: string, def: NonNullable<ReturnType<typeof plateDef>>, m: MaskData, reuse?: WebGLTexture): WebGLTexture {
+    const gl = this.gl
+    const tex = reuse ?? gl.createTexture()!
+    gl.bindTexture(gl.TEXTURE_2D, tex)
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1)
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, m.size, m.size, 0, gl.RED, gl.UNSIGNED_BYTE, m.data)
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4)
+    this.finishPlate(key, def, tex, m.size, true)
+    return tex
+  }
+
+  /** Mipmaps and filters the bound plate texture, records it, and keeps only the newest few of its kind. */
+  private finishPlate(key: string, def: NonNullable<ReturnType<typeof plateDef>>, tex: WebGLTexture, size: number, mask: boolean) {
+    const gl = this.gl
     gl.generateMipmap(gl.TEXTURE_2D)
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR)
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
     const aniso = gl.getExtension('EXT_texture_filter_anisotropic')
     if (aniso) gl.texParameterf(gl.TEXTURE_2D, aniso.TEXTURE_MAX_ANISOTROPY_EXT, Math.min(16, gl.getParameter(aniso.MAX_TEXTURE_MAX_ANISOTROPY_EXT) as number))
     this.plateTex.delete(key)
-    this.plateTex.set(key, { tex, size, frame: this.frames })
-    if (size < full) this.onInvalidate?.()
-    // keep the newest few of each kind
-    const windows = def.window ? [...this.plateTex.keys()].filter((k) => k.includes('|')) : [...this.plateTex.keys()].filter((k) => !k.includes('|'))
-    for (const k of windows.slice(0, Math.max(0, windows.length - (def.window ? WINDOW_TEXTURES : PLATE_TEXTURES)))) {
+    this.plateTex.set(key, { tex, size, frame: this.frames, mask })
+    const same = def.window ? [...this.plateTex.keys()].filter((k) => k.includes('|')) : [...this.plateTex.keys()].filter((k) => !k.includes('|'))
+    for (const k of same.slice(0, Math.max(0, same.length - (def.window ? WINDOW_TEXTURES : PLATE_TEXTURES)))) {
       gl.deleteTexture(this.plateTex.get(k)!.tex)
       this.plateTex.delete(k)
     }
-    return tex
   }
 
-  /** (plates) the full mask size for this renderer's output: 4096 for a projector, 2048 for a preview or a tile */
-  private plateSize(): number {
-    const big = Math.max(this.canvas.width, this.canvas.height) >= 1200
-    const max = this.gl.getParameter(this.gl.MAX_TEXTURE_SIZE) as number
-    return Math.min(big ? PLATE_TEXTURE : PLATE_TEXTURE / 2, max)
+  /**
+   * (§20 "Step 0") Mixes the opening look (backdrop mode `look`, drawn full frame) over the objects frame in `target`:
+   * `target = look × (1 − alpha) + target × alpha`.
+   */
+  private renderIntroFade(input: RenderInput, look: BackdropMode, alpha: number, target: Target) {
+    const gl = this.gl
+    const li = { ...input, mode: look }
+    const lt = this.pool.get('introlook', target.width, target.height)
+    bindTarget(gl, lt)
+    gl.clearColor(0, 0, 0, 1)
+    gl.clear(gl.COLOR_BUFFER_BIT)
+    const p = this.plan(li, input.scene!)
+    const seeThrough = this.seeThrough
+    this.seeThrough = false
+    this.renderBackdrop(li, p.layers, p.level, lt, p.light)
+    this.seeThrough = seeThrough
+    bindTarget(gl, target)
+    gl.enable(gl.BLEND)
+    gl.blendEquation(gl.FUNC_ADD)
+    const a = Math.max(0, Math.min(1, 1 - alpha))
+    gl.blendColor(0, 0, 0, a)
+    gl.blendFunc(gl.CONSTANT_ALPHA, gl.ONE_MINUS_CONSTANT_ALPHA)
+    this.blit(lt.tex)
+    this.setBlend('none')
   }
+
+  /**
+   * (§16 masks) The light stacks this input draws: the on-air (or underlay) stack and the sources of the converges in
+   * effect.
+   */
+  private lightPlans(input: RenderInput): LightPlan[] {
+    const scene = input.scene
+    if (!scene || input.hideBackdrop || (input.solo && input.solo.surfaceIds.length)) return []
+    const out: LightPlan[] = []
+    if (isIntroStep(input)) input = { ...input, mode: scene.intro!.source.mode }
+    const p = this.plan(input, scene)
+    if (p.light) out.push(p.light)
+    // (§20 "Step 0") the opening look a crossfade draws
+    const look = introFade(input).look
+    if (look === 'static' || look === 'live') {
+      const lp = lightPlan(scene, look)
+      if (lp && !out.some((o) => o.which === look)) out.push(lp)
+    }
+    if (p.objects && !input.layerOnly) {
+      for (const c of evaluateConverge(scene, input.t, input.mutedTracks)) {
+        const src = c.params.source
+        if ((src === 'static' || src === 'live') && !out.some((o) => o.which === src)) {
+          const lp = lightPlan(scene, src)
+          if (lp) out.push(lp)
+        }
+      }
+    }
+    return out
+  }
+
+  /** (§16 masks) The visible plate attachments of the input's light stacks. */
+  private framePlates(input: RenderInput): Array<{ gobo: string; params: Record<string, unknown> }> {
+    const out: Array<{ gobo: string; params: Record<string, unknown> }> = []
+    for (const lp of this.lightPlans(input))
+      for (const att of lp.stack.attachments ?? []) {
+        if (att.visible === false || (att.opacity ?? 1) <= 0) continue
+        if (attachmentUniforms(input.catalog, att)?.shape !== SHAPE.plate) continue
+        out.push({ gobo: att.gobo, params: attachmentParams(input.catalog, att) })
+      }
+    return out
+  }
+
+  /** (§16 masks) True while a plate this input draws waits for its first decoded mask (render() holds the last frame). */
+  private masksPending(input: RenderInput): boolean {
+    let pending = false
+    for (const p of this.framePlates(input)) if (this.plateTexture(p.gobo, p.params, false) === PENDING) pending = true
+    return pending
+  }
+
+  /** (§16 masks) True when every plate this input draws has its full-size mask (perf checks and offscreen renders). */
+  masksReady(input: RenderInput): boolean {
+    const full = this.plateSize()
+    return this.framePlates(input).every((p) => {
+      const def = plateDef(p.gobo)
+      if (!def) return true
+      return (this.plateTex.get(plateKey(def, p.params))?.size ?? 0) >= full
+    })
+  }
+
+  /**
+   * (plates, §16 masks) The mask size for this renderer's output: 4096 for a projector (1200 px and up), 2048 below; a
+   * preview renderer (RendererOptions.preview) takes 1024 (2048 past 1100 px). Never past the GPU's limit.
+   */
+  private plateSize(): number {
+    const long = Math.max(this.canvas.width, this.canvas.height)
+    const want = this.opts.preview ? (long > 1100 ? PLATE_TEXTURE / 2 : PLATE_TEXTURE / 4) : long >= 1200 ? PLATE_TEXTURE : PLATE_TEXTURE / 2
+    const size = Math.min(want, this.maxTexture)
+    // tell the page's mask store which size this renderer draws (tile prefetches decode that size)
+    if (this.tier?.size !== size) {
+      this.tier?.off()
+      this.tier = { size, off: maskStore.useTier(size) }
+    }
+    return size
+  }
+  private tier: { size: number; off: () => void } | null = null
+  private maxTexture = 4096
 
   /** Draws a light's colour (its own CCT or HSI colour, a gradient or a generator) into the bound target. */
   /**

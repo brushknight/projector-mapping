@@ -7,6 +7,8 @@ export interface Transport {
   startedAt: number
   offset: number
   cue: number
+  /** (§20 "Step 0") `intro` while the scene's opening look holds; `timeline` or absent otherwise */
+  step?: 'intro' | 'timeline'
 }
 
 export interface Show {

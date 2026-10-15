@@ -225,12 +225,12 @@ import PMTestSupport
                 #expect(try #require(env.d).decode(WireError.self).code == "stale")
                 #expect(env.v == 421)
             case "cmd":
-                #expect(["show.go", "scene.mode", "setup.testPattern", "sound.play", "show.audio", "show.converge"].contains(env.d?["name"]?.string ?? ""))
+                #expect(["show.go", "scene.mode", "setup.testPattern", "sound.play", "show.audio", "show.converge", "show.sequence.start"].contains(env.d?["name"]?.string ?? ""))
                 if env.d?["name"]?.string == "show.converge" {
                     #expect(env.d?["args"]?["source"] == "static" && env.d?["args"]?["objectId"] == "obj_cube" && env.d?["args"]?["duration"] == 2)
                 }
             case "ack":
-                #expect(env.re == "c-78" || env.re == "c-90" || env.re == "c-95")
+                #expect(env.re == "c-78" || env.re == "c-90" || env.re == "c-95" || env.re == "c-96")
                 if env.re == "c-90" { #expect(env.d?["playId"] == "ply_k2m9x0aa" && env.d?["outputs"] == 1) }
             case "sound.play":
                 #expect(env.ch == nil)
@@ -252,7 +252,10 @@ import PMTestSupport
 
     @Test func catalogKeepsParamOrder() throws {
         let cat = try Catalog.decode(Data(contentsOf: Fixtures.catalogURL))
-        #expect(cat.version == 7)
+        #expect(cat.version == 8)
+        // (§20 "Step 0") the opening step and the transport step decode
+        let sc = try JSONDecoder().decode(Scene.self, from: Fixtures.data("scene"))
+        #expect(sc.intro?.source.mode == "live" && sc.intro?.converge == true && sc.intro?.on == false && sc.intro?.transitionMs == 600)
         // (§20) the converge effect and its params, in order
         let converge = try #require(cat.effects.first { $0.id == "converge" })
         #expect(converge.params["from"]?["default"] == "current" && converge.params["outline"]?["type"] == "boolean")
@@ -262,7 +265,7 @@ import PMTestSupport
         #expect(cat.videoParams["audio"]?.label == "sound" && cat.photoParams["brightness"]?.default == 0.9)
         let drawing = try #require(cat.effects.first { $0.id == "drawing" })
         #expect(drawing.params["strokes"]?["type"] == "strokes")
-        #expect(cat.gobos.count >= 45 && cat.gobos.allSatisfy { $0.id.hasPrefix("plate-") && $0.metalThumb != nil && $0.source != nil })
+        #expect(cat.gobos.count >= 45 && cat.gobos.allSatisfy { $0.id.hasPrefix("plate-") && $0.metalThumb == nil && $0.source != nil })
         #expect(cat.procedural("tree-sway")?.params.items.map(\.key) == ["wind", "gust", "focus", "seed"])
         #expect(cat.photoParams.items.map(\.key) == ["blur", "brightness", "warmth", "drift"])
         #expect(cat.gradientParams.items.map(\.key) == ["angle", "drift", "grain", "brightness"])

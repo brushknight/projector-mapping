@@ -102,16 +102,63 @@ struct ObjectsTab: View {
         }
     }
 
-    /// (§20) The opening: the light that was on air closes onto the object, then the wall holds for GO.
+    /// (§20 "Step 0") The opening: the opening look holds on the wall until GO, which converges onto the object or
+    /// fades (or cuts) into the mapping. The controls pick the look, a preset of it and how GO leaves it.
     var convergeButton: some View {
         let target = model.scene?.objects.first(where: \.visible)?.name
-        return VStack(spacing: 6) {
-            WideButton("start with converge", icon: .converge, iconSize: 20, on: target != nil, height: 50, font: .pmMono(15, .bold)) {
-                if target == nil { model.flash("Map an object first: the light needs a shape to close onto.") } else { model.startConverge() }
+        let intro = model.intro
+        let live = model.hub.isLive
+        let step0 = model.active.show?.transport.inIntro == true
+        let presets = model.presets(intro.source.mode)
+        let how = intro.converge ? "closes onto \(target ?? "the object") over \(introSeconds(intro.convergeDuration))"
+            : intro.transition == "cut" ? "cuts to the mapping" : "fades into the mapping"
+        return VStack(spacing: 10) {
+            if step0 {
+                Text("step 0 · the \(intro.source.mode) look holds. go \(intro.converge ? "converges" : intro.transition == "cut" ? "cuts" : "fades").")
+                    .font(.pm(13)).tracking(0.2).foregroundStyle(Palette.ink)
+                    .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 2)
             }
-            .accessibilityLabel("start with converge")
-            .accessibilityHint("the \(model.convergeSource) light closes onto the object, then holds for go")
-            Text(target.map { "the \(model.convergeSource) light closes onto \($0), then holds for go" } ?? "map an object first")
+            WideButton("start sequence", icon: .converge, iconSize: 20, on: target != nil, height: 50, font: .pmMono(15, .bold)) {
+                if target == nil { model.flash("Map an object first: the light needs a shape to close onto.") } else { model.startSequence() }
+            }
+            .accessibilityLabel("start sequence")
+            .accessibilityHint("the \(intro.source.mode) look holds on the wall until go, then \(how)")
+            Segmented(SceneMode.backdrops, selected: SceneMode.backdrops.firstIndex(of: intro.source.mode) ?? 0, height: 30) { i in
+                model.editIntro { $0.source = .init(mode: SceneMode.backdrops[i]) }
+            }
+            .accessibilityLabel("opening look")
+            .disabled(!live)
+            if !presets.isEmpty {
+                Menu {
+                    Button("as it is") { model.editIntro { $0.source.presetId = nil } }
+                    ForEach(presets) { p in Button(p.name) { model.editIntro { $0.source.presetId = p.id } } }
+                } label: {
+                    Pill { Text("preset · \(presets.first { $0.id == intro.source.presetId }?.name ?? "as it is")") }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .disabled(!live)
+            }
+            Toggle("converge into the object", isOn: Binding(get: { intro.converge }, set: { v in model.editIntro { $0.converge = v } }))
+                .toggleStyle(PMSwitchStyle())
+                .disabled(!live)
+            if intro.converge {
+                FillSlider("converge", icon: .softness, value: min(1, intro.convergeDuration / 10), enabled: live, format: { introSeconds(max(0.1, ($0 * 100).rounded() / 10)) }) { _ in
+                } onEnd: { f in model.editIntro { $0.convergeDuration = max(0.1, (f * 100).rounded() / 10) } }
+                Segmented(["its shape", "circle", "frame"], selected: Intro.froms.firstIndex(of: intro.from) ?? 0, height: 30) { i in
+                    model.editIntro { $0.from = Intro.froms[i] }
+                }
+                .accessibilityLabel("converge from")
+            } else {
+                Segmented(["fade", "cut"], selected: intro.transition == "cut" ? 1 : 0, height: 30) { i in
+                    model.editIntro { $0.transition = i == 1 ? "cut" : "fade" }
+                }
+                .accessibilityLabel("into the mapping")
+                if intro.transition == "fade" {
+                    FillSlider("fade", icon: .softness, value: min(1, intro.transitionMs / 3000), enabled: live, format: { introSeconds(($0 * 30).rounded() / 10) }) { _ in
+                    } onEnd: { f in model.editIntro { $0.transitionMs = (f * 30).rounded() * 100 } }
+                }
+            }
+            Text(target.map { _ in "the \(intro.source.mode) look holds until go, then \(how)" } ?? "map an object first")
                 .font(.pm(12)).tracking(0.2).foregroundStyle(Palette.dim)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 2)
@@ -248,3 +295,6 @@ struct GoButton: View {
         .accessibilityLabel("go to the next cue")
     }
 }
+
+/// "2.0 s" (step 0 durations).
+func introSeconds(_ v: Double) -> String { String(format: "%.1f s", v) }

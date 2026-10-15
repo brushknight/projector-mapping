@@ -1,5 +1,6 @@
 export * from './types'
 export { Renderer, renderFrameToBlob, photoUrl, sceneTargetSize, surfaceFlatSize, soloSurfaces } from './engine'
+export { warmPlateMasks, prefetchPlate, maskStore } from './plates/masks'
 export * from './atlas'
 export { makeGridCanvas } from './textures'
 export { drawStrokes, parseStrokes, strokePath, strokeLengths, cutPath, pathLength, makeDrawingCanvas } from './effects/drawing'

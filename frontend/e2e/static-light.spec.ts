@@ -38,7 +38,7 @@ test('attachments: browse by category, pick one, add one on top', async ({ page,
   await expect(page.getByTestId('on-air-label')).toContainText('blinds + tree with leaves')
 })
 
-test('plates: the metal plate or its light, pick one, fill the frame', async ({ page, request }) => {
+test('plates: tiles show the light, pick one, fill the frame', async ({ page, request }) => {
   await page.goto('/editor/show')
   await page.getByTestId('mode-tab-static').click()
   await page.getByTestId('att-cat-beams').click()
@@ -46,11 +46,11 @@ test('plates: the metal plate or its light, pick one, fill the frame', async ({ 
   const sun = page.getByTestId('gobo-plate-sunburst')
   await expect(sun).toBeVisible()
   const bg = () => sun.locator('span').first().evaluate((el) => (el as HTMLElement).style.background)
-  // tiles show the plate itself until you ask for its light
-  expect(await bg()).toContain('plate-sunburst-metal.png')
-  expect(await page.evaluate(async () => (await fetch('/catalog/assets/thumbs/plate-sunburst-metal.png')).ok)).toBe(true)
-  await page.getByRole('group', { name: 'plate tiles show' }).getByRole('button', { name: 'its light' }).click()
-  await expect.poll(bg).toContain('thumbs/plate-sunburst.png')
+  // (§16 masks) tiles show the light each plate projects; there is no metal view any more
+  expect(await bg()).toContain('thumbs/plate-sunburst.png')
+  await expect(page.getByRole('group', { name: 'plate tiles show' })).toHaveCount(0)
+  // (§16 masks) its pre-rendered masks are served as catalog files
+  expect(await page.evaluate(async () => (await fetch('/catalog/assets/masks/plate-sunburst-1024.png')).ok)).toBe(true)
   await sun.click()
   await page.getByTestId('static-try-use').click()
   await expect.poll(async () => (await stat(request)).attachments.map((a) => a.gobo)).toEqual(['plate-sunburst'])

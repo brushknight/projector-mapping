@@ -350,9 +350,22 @@ public final class LiveHub {
         if let p = try? d.decode(CalibrationProgress.self), d["total"] != nil || d["step"] != nil { calibration[id] = p }
     }
 
+    /// Live values from other devices, coalesced: the latest value per channel and path, written at most 10×/s.
+    private var incomingParams: [String: (channel: String, path: String, value: JSONValue)] = [:]
+    private var incomingFlush: Task<Void, Never>?
+
     private func param(_ env: Envelope) {
         guard let ch = env.ch, let p = try? env.d?.decode(ParamMessage.self) else { return }
-        try? db.applyParam(channel: ch, path: p.path, value: p.value)
+        incomingParams[ch + "\u{1}" + p.path] = (ch, p.path, p.value)
+        guard incomingFlush == nil else { return }
+        incomingFlush = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(100))
+            guard let self else { return }
+            let pending = self.incomingParams
+            self.incomingParams = [:]
+            self.incomingFlush = nil
+            for (_, v) in pending { try? self.db.applyParam(channel: v.channel, path: v.path, value: v.value) }
+        }
     }
 
     private func patched(_ env: Envelope) {
@@ -438,7 +451,10 @@ public final class LiveHub {
     }
 
     private func deliver(_ out: ParamThrottle.Out) {
-        try? db.applyParam(channel: out.channel, path: out.path, value: out.value)
+        // No local database write per drag tick: the scene can be hundreds of KB (agent drawings), and rewriting it
+        // 60×/s on the main thread made every slider lag. The control shows its own value while dragging; the server's
+        // commit (`patched`, ~200 ms after the drag settles) updates the store once. Offline/demo still applies locally.
+        if status != .online { try? db.applyParam(channel: out.channel, path: out.path, value: out.value) }
         if status == .online {
             emit(Envelope(t: MessageType.param, ch: out.channel, d: ["path": .string(out.path), "value": out.value]))
         }

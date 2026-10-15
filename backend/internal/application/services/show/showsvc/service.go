@@ -48,6 +48,13 @@ type Service struct {
 	sounds SoundLookup
 	// loopPlays maps the play id of each looping pad that plays now to its pad id
 	loopPlays map[string]string
+	// presets applies a preset to a scene (UsePresets); nil skips an intro's preset
+	presets func(ctx context.Context, presetID, sceneID string) error
+}
+
+// UsePresets lets show.sequence.start apply the intro's preset (protocol §20 "Step 0").
+func (s *Service) UsePresets(apply func(ctx context.Context, presetID, sceneID string) error) {
+	s.presets = apply
 }
 
 // SoundLookup finds library sounds (the asset service).
@@ -241,6 +248,21 @@ func (s *Service) Do(ctx context.Context, action string, args json.RawMessage, b
 			return st, err
 		}
 		cues := cuesOf(sc)
+		// (§20 "Step 0") GO leaves the opening look: converge (the clip at 0) or crossfade into the mapping, playing
+		// from 0; back from the first cue returns to it
+		intro := sc.Intro != nil && sc.Intro.On
+		if action == "go" && st.Transport.InIntro() {
+			st.Transport = show.Transport{State: show.Playing, StartedAt: now, Offset: 0, Cue: scene.IntroGoCue(sc), Step: show.StepTimeline}
+			if len(cues) > 0 && st.Preview == nil {
+				defer s.cueSound(ctx, sc, 0)
+			}
+			break
+		}
+		if action == "back" && intro && (st.Transport.InIntro() || (st.Transport.State != show.Stopped && st.Transport.Cue == 0)) {
+			st.Transport = show.Transport{State: show.Paused, Offset: 0, Cue: 0, Step: show.StepIntro}
+			break
+		}
+		st.Transport.Step = ""
 		switch action {
 		case "play":
 			st.Transport = show.Play(st.Transport, now)
@@ -310,6 +332,48 @@ func (s *Service) Do(ctx context.Context, action string, args json.RawMessage, b
 		if fresh, err := s.scenes.Scene(ctx, sc.ID); err == nil {
 			defer s.cueSound(ctx, fresh, 0)
 		}
+	case "sequence.start":
+		// (§20 "Step 0") the opening look holds on the wall until GO: the scene's intro (made from the backdrop on
+		// air when it has none), its preset applied, the converge clip set, objects mode; the transport waits in step 0
+		id := a.SceneID
+		if id == "" {
+			id = st.ActiveSceneID
+		}
+		if id == "" {
+			return st, app_errors.NoScene("No active scene.")
+		}
+		sc, err := s.scenes.Scene(ctx, id)
+		if err != nil {
+			return st, err
+		}
+		// the intro's preset first (applying a preset puts its mode on air; the sequence then puts objects back)
+		if in := sc.Intro; in != nil && in.On && in.Source.PresetID != nil && *in.Source.PresetID != "" && s.presets != nil {
+			if err := s.presets(ctx, *in.Source.PresetID, sc.ID); err != nil {
+				s.log.Warn("sequence preset", "preset", *in.Source.PresetID, "err", err)
+			} else if fresh, err := s.scenes.Scene(ctx, sc.ID); err == nil {
+				sc = fresh
+			}
+		}
+		plan, err := scene.StartSequence(sc, services.NewID)
+		if err != nil {
+			var ce scene.ErrConverge
+			if errors.As(err, &ce) {
+				return st, app_errors.BadRequest("%s", ce.Msg)
+			}
+			return st, err
+		}
+		if len(plan.Ops) > 0 {
+			if _, err := s.scenes.Patch(ctx, scenessvc.PatchCmd{SceneID: sc.ID, Base: sc.Version, Ops: plan.Ops, By: by}); err != nil {
+				return st, err
+			}
+		}
+		if sc.ID != st.ActiveSceneID {
+			st.ActiveSceneID, st.ActiveSetupID = sc.ID, sc.SetupID
+			st.Audio = s.clearLoops(st.Audio)
+		}
+		st.Preview = nil
+		st.Transport = show.Transport{State: show.Paused, Offset: 0, Cue: 0, Step: show.StepIntro}
+		s.log.Info("sequence", "scene", sc.ID, "source", plan.Intro.Source.Mode, "converge", plan.Intro.Converge)
 	case "solo":
 		solo, err := soloOf(a.SurfaceIDs, a.Fill, a.Seconds, now)
 		if err != nil {

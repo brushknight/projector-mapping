@@ -20,8 +20,10 @@ type Scene struct {
 	Underlay Underlay `json:"underlay"`
 	// ObjectAccent draws the objects' silhouettes over a backdrop mode (protocol §19); nil (absent) is off.
 	ObjectAccent *ObjectAccent `json:"objectAccent,omitempty"`
-	Points       []Point       `json:"points"`
-	Objects      []Object      `json:"objects"`
+	// Intro is the opening step, step 0 of a sequence (protocol §20 "Step 0"); nil (absent) is none.
+	Intro   *Intro   `json:"intro,omitempty"`
+	Points  []Point  `json:"points"`
+	Objects []Object `json:"objects"`
 	// Sounds is the scene's soundboard (protocol §14); always written, absent decodes to no pads.
 	Sounds   Sounds   `json:"sounds"`
 	Timeline Timeline `json:"timeline"`

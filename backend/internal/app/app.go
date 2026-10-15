@@ -120,6 +120,10 @@ func New(ctx context.Context, o Options) (*App, error) {
 	}
 	a.Assets = NewAssetsModule(db, filepath.Join(cfg.DataDir, "assets"), mt)
 	a.Show.Service.UseAudio(a.Hub, a.Assets.Service)
+	a.Show.Service.UsePresets(func(ctx context.Context, presetID, sceneID string) error {
+		_, err := a.Scenes.Presets.Apply(ctx, presetID, sceneID, "server")
+		return err
+	})
 	a.Sounds = NewSoundsModule(a.Assets.Service, pub)
 	a.Videos = NewVideosModule(db, a.Assets.Service, mt, pub, log, filepath.Join(cfg.DataDir, "tmp"))
 	a.Devices = NewDevicesModule(db, pub, a.Hub, cfg.Port)

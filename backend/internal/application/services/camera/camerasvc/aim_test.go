@@ -45,10 +45,12 @@ func TestMoved(t *testing.T) {
 	}
 }
 
-type memRepo struct{ m map[string]*camera.Calibration }
+type memRepo struct {
+	m map[string]*camera.Calibration
+}
 
 func (r *memRepo) Get(_ context.Context, id string) (*camera.Calibration, error) { return r.m[id], nil }
-func (r *memRepo) Save(_ context.Context, c *camera.Calibration) error         { r.m[c.ID] = c; return nil }
+func (r *memRepo) Save(_ context.Context, c *camera.Calibration) error           { r.m[c.ID] = c; return nil }
 func (r *memRepo) Running(context.Context) ([]*camera.Calibration, error) {
 	var out []*camera.Calibration
 	for _, c := range r.m {
@@ -61,7 +63,7 @@ func (r *memRepo) Running(context.Context) ([]*camera.Calibration, error) {
 
 type pubRec struct{ msgs []realtime.Message }
 
-func (p *pubRec) Publish(ch string, m realtime.Message)              { p.msgs = append(p.msgs, m) }
+func (p *pubRec) Publish(ch string, m realtime.Message)                 { p.msgs = append(p.msgs, m) }
 func (p *pubRec) PublishExcept(ch string, m realtime.Message, _ string) { p.msgs = append(p.msgs, m) }
 
 // TestRecoverFailsInterruptedCalibrations: a calibration left "running" by a server that died is failed on start and

@@ -533,12 +533,6 @@
   align-items: center;
   justify-content: space-between;
 }
-.plateView {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: var(--fs-sm);
-}
 .addTile {
   position: relative;
   aspect-ratio: 16 / 10;

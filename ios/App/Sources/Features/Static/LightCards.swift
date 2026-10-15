@@ -207,20 +207,25 @@ struct LensCard: View {
 
 /// The categorized attachment browser (catalog 6: every attachment is a metal plate, grouped as the catalog's
 /// `goboCategories` say: windows, nature, sky, patterns, beams). A tap puts that one attachment in front of the light;
-/// "add on top" stacks another (masks multiply). Plate tiles show the metal plate itself, or the light it projects.
+/// "add on top" stacks another (masks multiply). (§16 masks) Tiles show the light each plate projects; a tap rings the tile
+/// and plays a selection haptic at once, and the patch follows in the background.
 struct AttachmentBrowser: View {
     var mode: String
     @Binding var selected: String?
     @Environment(AppModel.self) private var model
     @State private var category: String?
     @State private var addOnTop = false
-    @State private var plateLight = false
+    /// the last tap added on top (the others stay on) rather than replaced them
+    @State private var tappedAdds = false
+    private let picked = OptimisticPick()
 
     var body: some View {
         let cats = model.catalog.goboCategories.filter { !model.catalog.gobos(in: $0.id).isEmpty }
         let current = category ?? model.attachments(mode).last.flatMap { model.catalog.gobo($0.gobo)?.browseCategory } ?? cats.first?.id ?? "windows"
         let items = model.catalog.gobos(in: current)
-        let onWall = Set(model.attachments(mode).map(\.gobo))
+        let wall = model.attachments(mode).map(\.gobo)
+        let tapped = picked.show(nil)
+        let onWall = Set(wall).union(tapped.map { [$0] } ?? [])
         VStack(alignment: .leading, spacing: 10) {
             CapRow("attachments", "\(model.catalog.gobos.count)")
             ScrollView(.horizontal) {
@@ -231,17 +236,9 @@ struct AttachmentBrowser: View {
             }
             .scrollIndicators(.hidden)
             .padding(.horizontal, -16)
-            if items.contains(where: { $0.metalThumb != nil }) {
-                HStack(spacing: 10) {
-                    Text("plates show").font(.pm(12)).foregroundStyle(Palette.dim)
-                    Segmented(["the plate", "its light"], selected: plateLight ? 1 : 0, height: 30) { plateLight = $0 == 1 }
-                        .accessibilityLabel("plate tiles show")
-                }
-                .padding(.horizontal, 2)
-            }
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 12) {
                 ForEach(items) { g in
-                    AttachmentTile(item: g, on: onWall.contains(g.id), metal: !plateLight) { pick(g, add: addOnTop) }
+                    AttachmentTile(item: g, on: tapped.map { $0 == g.id || (tappedAdds && onWall.contains(g.id)) } ?? onWall.contains(g.id)) { pick(g, add: addOnTop) }
                         .contextMenu {
                             Button("put only this one on", systemImage: "square") { pick(g, add: false) }
                             Button("add it on top", systemImage: "square.2.layers.3d") { pick(g, add: true) }
@@ -265,6 +262,7 @@ struct AttachmentBrowser: View {
             }
             .padding(.horizontal, 2)
         }
+        .onChange(of: wall) { picked.settle() }
     }
 
     /// A tap swaps what is in front of the light and keeps the user's settings: the light (focus, intensity, colour,
@@ -275,31 +273,35 @@ struct AttachmentBrowser: View {
         let list = model.attachments(mode)
         let a = add ? model.catalog.newAttachment(g) : AttachmentSwap.replacing(list.first { $0.id == selected } ?? list.last, with: g, catalog: model.catalog)
         guard let json = try? JSONValue(encoding: a) else { return }
+        tappedAdds = add
         if add {
-            model.edit(.addAttachment(mode: mode, attachment: json))
+            picked.tap(g.id)
+            model.editSoon(.addAttachment(mode: mode, attachment: json))
         } else {
             if list.count == 1, list[0].gobo == g.id { selected = list[0].id; return }
-            model.edit(.replaceAttachments(mode: mode, attachments: [json]))
+            picked.tap(g.id)
+            model.pickFast(path: ScenePath.attachments(mode), value: [json], fallback: .replaceAttachments(mode: mode, attachments: [json]))
         }
         selected = a.id
         addOnTop = false
     }
 }
 
-/// A 16:9 attachment tile: the server's render (or the native art) and its name.
+/// A 16:9 attachment tile: the server's render of the light it projects (or the native art) and its name. A tap plays
+/// a selection haptic (§16 masks).
 struct AttachmentTile: View {
     var item: GoboItem
     var on: Bool
-    /// a plate shows the metal plate itself instead of its light
-    var metal = false
     var action: () -> Void
+    @State private var taps = 0
+    @Environment(AppModel.self) private var model
 
     var body: some View {
-        Button(action: action) {
+        Button(action: { taps += 1; action() }) {
             VStack(alignment: .leading, spacing: 6) {
                 Color.clear
                     .aspectRatio(16 / 10, contentMode: .fit)
-                    .overlay { GoboThumb(gobo: item.id, metal: metal) }
+                    .overlay { GoboThumb(gobo: item.id) }
                     .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                     .selectionRing(on, radius: 14)
                 Text(item.name).font(.pm(12)).tracking(0.2).lineLimit(1)
@@ -308,6 +310,7 @@ struct AttachmentTile: View {
             }
         }
         .buttonStyle(.plain)
+        .sensoryFeedback(trigger: taps) { _, _ in model.haptics ? .selection : nil }
         .accessibilityLabel(item.name)
         .accessibilityHint(item.description)
         .accessibilityAddTraits(on ? .isSelected : [])

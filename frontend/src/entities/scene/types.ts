@@ -168,6 +168,22 @@ export type AccentFillMode = 'light' | 'cut' | 'only'
  * faces, no inner edges, no details) as a crisp line with a glow, and an optional fill. One setting per scene; it
  * applies in every backdrop mode (static, live, color, scenery), never in objects mode.
  */
+/** (§20 "Step 0") the opening look that holds until GO, and how GO goes into the mapping */
+export interface Intro {
+  on: boolean
+  source: { mode: BackdropMode; presetId?: string | null }
+  converge: boolean
+  convergeDuration: number
+  from: 'current' | 'circle' | 'frame'
+  ease: 'inOut' | 'in' | 'out' | 'linear'
+  transition: 'fade' | 'cut'
+  transitionMs: number
+}
+
+export function defaultIntro(mode: BackdropMode = 'static'): Intro {
+  return { on: true, source: { mode, presetId: null }, converge: true, convergeDuration: 2, from: 'current', ease: 'inOut', transition: 'fade', transitionMs: 600 }
+}
+
 export interface ObjectAccent {
   on: boolean
   /** "all" or object ids */
@@ -406,6 +422,8 @@ export interface Scene {
   underlay?: Underlay
   /** (§19) optional on the wire; absent = DEFAULT_OBJECT_ACCENT (off) */
   objectAccent?: ObjectAccent
+  /** (§20 "Step 0") the opening step of a sequence; absent = none */
+  intro?: Intro
   points: Point[]
   objects: SceneObject[]
   /** (§14) the soundboard; optional on the wire (absent = { pads: [] }) */

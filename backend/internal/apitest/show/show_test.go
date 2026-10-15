@@ -14,6 +14,7 @@ type transport struct {
 	StartedAt int64   `json:"startedAt"`
 	Offset    float64 `json:"offset"`
 	Cue       int     `json:"cue"`
+	Step      string  `json:"step"`
 }
 
 type showState struct {

@@ -12,6 +12,7 @@ struct SceneryTab: View {
     @State private var moviePick: PhotosPickerItem?
     @State private var uploading = false
     @State private var videoProgress: Double?
+    private let picked = OptimisticPick()
 
     static let categories = ["nature", "city", "interior", "studio", "mine", "videos"]
 
@@ -54,7 +55,7 @@ struct SceneryTab: View {
                 }
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 10) {
                     ForEach(category == "mine" ? [] : ordered) { s in
-                        ImageCard(s.name, on: found?.element.ref == s.id, action: { choose(s.id, name: s.name, layer: found?.element) }) {
+                        ImageCard(s.name, on: picked.show(found?.element.ref) == s.id, action: { choose(s.id, name: s.name, layer: found?.element) }) {
                             SceneryImage(ref: s.id).blur(radius: 1.5).scaleEffect(1.018)
                         }
                     }
@@ -70,6 +71,7 @@ struct SceneryTab: View {
                 Text("photos · unsplash").font(.pm(12)).foregroundStyle(Palette.dim).frame(maxWidth: .infinity)
             }
         }
+        .onChange(of: found?.element.ref) { picked.settle() }
         .onChange(of: pick) { _, item in
             guard let item else { return }
             Task { await upload(item, layer: found?.element) }
@@ -90,7 +92,9 @@ struct SceneryTab: View {
     /// Picking a photo replaces the scenery stack with that one photo and keeps blur, brightness, warmth and drift.
     func choose(_ ref: String, name: String, layer: Layer?) {
         if let layer, layer.ref == ref, model.layers("scenery").count == 1 { return }
-        model.edit(.replaceStack(mode: "scenery", layers: [StackPick.photo(ref: ref, name: name, defaults: Catalog.defaults(model.catalog.photoParams), keeping: layer, id: NewID.make("lay"))]))
+        picked.tap(ref)
+        let pickedLayer = StackPick.photo(ref: ref, name: name, defaults: Catalog.defaults(model.catalog.photoParams), keeping: layer, id: NewID.make("lay"))
+        model.pickFast(path: ScenePath.layers("scenery"), value: (try? JSONValue(encoding: pickedLayer)).map { [$0] } ?? [], fallback: .replaceStack(mode: "scenery", layers: [pickedLayer]))
     }
 
     // MARK: Videos

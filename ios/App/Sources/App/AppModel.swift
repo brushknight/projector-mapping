@@ -343,6 +343,31 @@ final class AppModel {
 
     /// (§20) `cmd show.converge { source }`: the opening of the sequence. The server switches the wall to objects,
     /// closes that light onto the object (inserting a 2 s converge at 0 when the timeline has none) and holds for GO.
+    // MARK: Step 0 (protocol §20)
+
+    /// The scene's opening step, or the one a sequence would make: the light last on air, converging.
+    var intro: Intro { active.scene?.intro ?? Intro(source: .init(mode: convergeSource)) }
+
+    /// Writes the whole intro (`add /intro`), on.
+    func editIntro(_ change: (inout Intro) -> Void) {
+        var i = intro
+        change(&i)
+        i.on = true
+        guard let v = try? JSONValue(encoding: i) else { return }
+        edit(.raw([.add("/intro", v)]))
+    }
+
+    /// `cmd show.sequence.start`: the opening look holds on the wall until GO (the intro is written first when the
+    /// scene has none, so it opens with the light last on air).
+    func startSequence() {
+        guard hub.isLive else { flash("Not connected to the projector."); return }
+        if active.scene?.intro?.on != true { editIntro { _ in } }
+        Task { @MainActor in
+            await Task.yield()
+            self.command("show.sequence.start")
+        }
+    }
+
     func startConverge() {
         guard hub.isLive else { flash("Not connected to the projector."); return }
         var args: JSONObject = [:]
@@ -376,6 +401,25 @@ final class AppModel {
     func edit(_ intent: SceneIntent) {
         guard let id = sceneId else { flash("No scene is active on the projector."); return }
         hub.edit(sceneId: id, intent)
+    }
+
+    /// (§16 masks) `edit` on the next turn of the main run loop: a tile pick updates the UI (ring, haptic) first and writes
+    /// the store and sends the patch right after, so the tap never waits for them.
+    /// A gallery pick that swaps a whole list (a stack's layers, the attachments) and should reach the wall at once:
+    /// sent as a live value like a slider (the server forwards it to the output immediately and commits ~200 ms later),
+    /// so it never waits for the local store to rebuild a large scene. Falls back to a queued edit when the path does not
+    /// exist yet or the hub is offline.
+    func pickFast(path: String, value: JSONValue, fallback: SceneIntent) {
+        if active.sceneDoc?.value(at: path) != nil, param(path, value) { return }
+        editSoon(fallback)
+    }
+
+    func editSoon(_ intent: SceneIntent) {
+        guard sceneId != nil else { flash("No scene is active on the projector."); return }
+        Task { @MainActor in
+            await Task.yield()
+            self.edit(intent)
+        }
     }
 
     /// Show control: commands go straight to the hub (never queued).

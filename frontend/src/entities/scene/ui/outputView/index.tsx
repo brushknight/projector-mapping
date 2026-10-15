@@ -17,7 +17,7 @@ export function OutputView({ label, badge, maxWidth = 1280 }: { label?: ReactNod
   const size = ed.setup ? sceneSize(ed.setup.output) : { width: 1920, height: 1080 }
   useEffect(() => {
     try {
-      r.current = new Renderer(canvasRef.current!, { space: 'scene', maxSceneSize: maxWidth, transparent: true })
+      r.current = new Renderer(canvasRef.current!, { space: 'scene', maxSceneSize: maxWidth, transparent: true, hold: true })
     } catch {
       r.current = null
     }
@@ -32,7 +32,7 @@ export function OutputView({ label, badge, maxWidth = 1280 }: { label?: ReactNod
     if (!rr || !c || !ed.setup) return
     const w = Math.min(maxWidth, Math.round(c.clientWidth * (window.devicePixelRatio || 1)) || 640)
     rr.setSize(w, Math.max(1, Math.round((w * size.height) / size.width)))
-    rr.render({ setup: ed.setup, scene: ed.scene, catalog: ed.catalog, effects: ed.userEffects, t: playheadNow(ed.hub, ed.show), clock: ambientClock(ed.hub), now: ed.hub.serverNow(), blackout: 0 })
+    rr.render({ setup: ed.setup, scene: ed.scene, catalog: ed.catalog, effects: ed.userEffects, t: playheadNow(ed.hub, ed.show), step: ed.show?.transport.step ?? null, clock: ambientClock(ed.hub), now: ed.hub.serverNow(), blackout: 0 })
   }, 30)
   const pts = new Map((ed.scene?.points ?? []).map((p) => [p.id, p]))
   return (

@@ -6,7 +6,8 @@
   "state": "playing",
   "startedAt": 1791700000123456789,
   "offset": 6.4,
-  "cue": 1
+  "cue": 1,
+  "step": "timeline"
  },
  "version": 77,
  "solo": {

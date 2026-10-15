@@ -27,6 +27,11 @@ export interface RenderInput {
   catalog: Catalog | null
   /** user and agent effects (kind glsl | js), looked up by id; built-ins come from the engine */
   effects?: EffectDef[]
+  /**
+   * (§20 "Step 0") the transport step (`show.transport.step`): `intro` draws the scene's opening look while it holds;
+   * absent or `timeline` is the timeline as always
+   */
+  step?: 'intro' | 'timeline' | null
   /** timeline playhead, seconds (clips, effects' u_time) */
   t: number
   /** ambient clock, seconds (backdrop animation, light fx); keeps running while the transport is stopped */
@@ -87,6 +92,17 @@ export interface RendererOptions {
    * frame stays opaque (alpha 1) unless a YouTube layer shows, so nothing else changes.
    */
   transparent?: boolean
+  /**
+   * (§16 masks) a light renderer for the phone's previews and tiles: plate masks from the small tier (1024, 2048 past
+   * 1100 px), focus blurs at a quarter of the resolution with the radius scaled to the preview's size
+   */
+  preview?: boolean
+  /**
+   * (§16 masks) a live view that draws every frame (/out, /preview, the editor's wall views): while a picked plate's mask
+   * decodes, render() keeps the last picture (up to about half a second) instead of drawing the plate's vector path
+   * on the main thread. One-off and shared renderers (thumbnails) leave it off.
+   */
+  hold?: boolean
 }
 
 export interface EffectError {

@@ -130,7 +130,12 @@ func (h *Handler) catalogFile(c echo.Context) error {
 	if _, err := fs.Stat(h.catalog, name); err != nil {
 		return app_errors.NotFound("Catalog file %s does not exist.", name)
 	}
-	c.Response().Header().Set("Cache-Control", "public, max-age=86400")
+	if strings.HasPrefix(name, "masks/") {
+		// (§16 masks) plate masks: their URLs carry a hash of the files (?v=), so a changed mask is a new URL
+		c.Response().Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	} else {
+		c.Response().Header().Set("Cache-Control", "public, max-age=86400")
+	}
 	http.ServeFileFS(c.Response(), c.Request(), h.catalog, name)
 	return nil
 }

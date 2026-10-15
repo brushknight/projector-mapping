@@ -55,8 +55,8 @@ the light (it replaces what is there); use the **+** on a tile (hold it on the p
 - **Patterns** (10): hearts, rainbow arch, swirl, rings, bubbles, squiggles, dots, maze, pixel cloud, crossed lines.
 - **Beams** (7): sunburst, radial, radial burst, fan rays, starburst cross, slit, circle.
 
-Tiles show the plate itself, a grey disc with its cut-outs. Switch **plates show** to **its light** to see what each
-one projects. Every plate has:
+Tiles show the light each plate projects. Picking one is instant: the projector, the editor and the phone load the
+plate's pre-rendered mask instead of drawing it, and the phone gives a light tap of feedback. Every plate has:
 
 - **rotation, scale, left / right, up / down**: where it sits in the beam;
 - **blocks**: how much light it stops (all of it for metal, less for a glass gobo);
@@ -122,8 +122,9 @@ Plates live in `frontend/src/render/plates/`: `replicas.ts` (the Amaran sets), `
    0.84) and a `seed`. A new window is a preset in `windows.ts`: only the geometry values that differ from the plain
    window.
 5. Run `npm run catalog` (writes the plates into `contract/catalog.json`), `npm test` (the plate tests check the
-   catalog and the sources), `npm run thumbs -- plate-<name>` (its two thumbnails) and `cd ../backend && make
-   catalog`.
+   catalog and the sources), `npm run thumbs -- plate-<name>` (its thumbnail), `npm run masks -- plate-<name>` (its
+   pre-rendered masks at 4096, 2048 and 1024 px, and `maskIndex.ts`) and `cd ../backend && make catalog`. A plate
+   without masks still works: the renderers draw its vector path, only slower.
 
 `plateSvg(def, 'metal' | 'mask', hole, params)` turns a plate into a standalone SVG when you want to look at it
 outside the app.

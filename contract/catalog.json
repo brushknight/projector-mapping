@@ -1,5 +1,5 @@
 {
-  "version": 7,
+  "version": 8,
   "paramSchemaNote": "each param: {type: number|integer|boolean|color|enum|string|strokes, min?, max?, step?, default, label?, unit?, options?}; strokes is an array of drawing strokes (protocol §1, effect drawing); an attachment's params validate against goboParams merged with its gobo's own params; a generator layer or colour layer validates against its colorGenerators params",
   "light": {
     "params": {
@@ -195,7 +195,6 @@
       "description": "two sashes side by side with a grid of panes",
       "category": "windows",
       "thumb": "thumbs/plate-grid-window.png",
-      "metalThumb": "thumbs/plate-grid-window-metal.png",
       "source": "amaran-as-gb-m-set1.png, MO10",
       "family": "window",
       "params": {
@@ -377,7 +376,6 @@
       "description": "a tall round-headed window with a fan light",
       "category": "windows",
       "thumb": "thumbs/plate-arched-window.png",
-      "metalThumb": "thumbs/plate-arched-window-metal.png",
       "source": "amaran-as-gb-m-set1.png, MO11",
       "family": "window",
       "params": {
@@ -559,7 +557,6 @@
       "description": "a window seen at an angle, panes in perspective",
       "category": "windows",
       "thumb": "thumbs/plate-skewed-window.png",
-      "metalThumb": "thumbs/plate-skewed-window-metal.png",
       "source": "amaran-as-gb-m-set1.png, MO09",
       "family": "window",
       "params": {
@@ -741,7 +738,6 @@
       "description": "an arched window: a head split by two spokes over a grid of panes",
       "category": "windows",
       "thumb": "thumbs/plate-palace-window.png",
-      "metalThumb": "thumbs/plate-palace-window-metal.png",
       "source": "set-b-17-paper-plates.png, Palace Window (88)",
       "family": "window",
       "params": {
@@ -923,7 +919,6 @@
       "description": "a low window in perspective rising to the right, like light from a setting sun",
       "category": "windows",
       "thumb": "thumbs/plate-setting-sun.png",
-      "metalThumb": "thumbs/plate-setting-sun-metal.png",
       "source": "set-b-17-paper-plates.png, Setting sun (75)",
       "family": "window",
       "params": {
@@ -1105,7 +1100,6 @@
       "description": "a window cast at a slant, wide at the top",
       "category": "windows",
       "thumb": "thumbs/plate-slanted-window.png",
-      "metalThumb": "thumbs/plate-slanted-window-metal.png",
       "source": "set-4-windows-closeup.png, skewed grid window",
       "family": "window",
       "params": {
@@ -1287,7 +1281,6 @@
       "description": "a tall window of five by five panes",
       "category": "windows",
       "thumb": "thumbs/plate-tall-grid-window.png",
-      "metalThumb": "thumbs/plate-tall-grid-window-metal.png",
       "source": "set-4-windows-closeup.png, 4×6 grid window (the photo shows 5 × 5 panes)",
       "family": "window",
       "params": {
@@ -1469,7 +1462,6 @@
       "description": "three sashes of leaded diamond panes",
       "category": "windows",
       "thumb": "thumbs/plate-diamond-window.png",
-      "metalThumb": "thumbs/plate-diamond-window-metal.png",
       "source": "set-4-windows-closeup.png, diamond-lattice triple window",
       "family": "window",
       "params": {
@@ -1651,7 +1643,6 @@
       "description": "a round lattice of diamonds with framed inner squares",
       "category": "windows",
       "thumb": "thumbs/plate-window-grid-iii.png",
-      "metalThumb": "thumbs/plate-window-grid-iii-metal.png",
       "source": "set-b-17-paper-plates.png, Window grid III (56)",
       "family": "window",
       "params": {
@@ -1833,7 +1824,6 @@
       "description": "horizontal blind slats held by two ladder tapes",
       "category": "windows",
       "thumb": "thumbs/plate-blinds.png",
-      "metalThumb": "thumbs/plate-blinds-metal.png",
       "source": "set-b-17-paper-plates.png, Blinds (9)",
       "family": "window",
       "params": {
@@ -2015,7 +2005,6 @@
       "description": "wide horizontal slats with thin bars between",
       "category": "windows",
       "thumb": "thumbs/plate-slat-blinds.png",
-      "metalThumb": "thumbs/plate-slat-blinds-metal.png",
       "source": "set-4-windows-closeup.png, horizontal slat blinds",
       "family": "window",
       "params": {
@@ -2197,7 +2186,6 @@
       "description": "a field of very fine vertical lines",
       "category": "windows",
       "thumb": "thumbs/plate-fine-vertical-lines.png",
-      "metalThumb": "thumbs/plate-fine-vertical-lines-metal.png",
       "source": "set-4-windows-closeup.png, fine vertical lines",
       "family": "window",
       "params": {
@@ -2379,7 +2367,6 @@
       "description": "a field of very fine horizontal lines",
       "category": "windows",
       "thumb": "thumbs/plate-fine-horizontal-lines.png",
-      "metalThumb": "thumbs/plate-fine-horizontal-lines-metal.png",
       "source": "set-4-windows-closeup.png, fine horizontal lines",
       "family": "window",
       "params": {
@@ -2561,7 +2548,6 @@
       "description": "wide horizontal slats in a round field",
       "category": "windows",
       "thumb": "thumbs/plate-louvre.png",
-      "metalThumb": "thumbs/plate-louvre-metal.png",
       "source": "amaran-as-gb-m-set1.png, MO06",
       "params": {
         "field": {
@@ -2591,7 +2577,6 @@
       "description": "short sticks scattered every way, some forked",
       "category": "nature",
       "thumb": "thumbs/plate-scattered-sticks.png",
-      "metalThumb": "thumbs/plate-scattered-sticks-metal.png",
       "source": "amaran-as-gb-m-set1.png, MO13; also set-a-six-plates.png, scattered sticks",
       "params": {
         "field": {
@@ -2621,7 +2606,6 @@
       "description": "rows of thin wavy slivers, like light off water",
       "category": "nature",
       "thumb": "thumbs/plate-water-ripples.png",
-      "metalThumb": "thumbs/plate-water-ripples-metal.png",
       "source": "amaran-as-gb-m-set2.png, MO15",
       "params": {
         "field": {
@@ -2651,7 +2635,6 @@
       "description": "licking flame tongues over a big fire",
       "category": "nature",
       "thumb": "thumbs/plate-flames.png",
-      "metalThumb": "thumbs/plate-flames-metal.png",
       "source": "amaran-as-gb-m-set2.png, MO19",
       "params": {
         "field": {
@@ -2681,7 +2664,6 @@
       "description": "trunks and twigs of a bare tree against the light",
       "category": "nature",
       "thumb": "thumbs/plate-bare-branches.png",
-      "metalThumb": "thumbs/plate-bare-branches-metal.png",
       "source": "amaran-as-gb-m-set2.png, MO21",
       "params": {
         "field": {
@@ -2711,7 +2693,6 @@
       "description": "fronds of long narrow leaflets hanging from the top",
       "category": "nature",
       "thumb": "thumbs/plate-fern-leaves.png",
-      "metalThumb": "thumbs/plate-fern-leaves-metal.png",
       "source": "amaran-as-gb-m-set2.png, MO22",
       "params": {
         "field": {
@@ -2741,7 +2722,6 @@
       "description": "a dense breakup of small leafy shards",
       "category": "nature",
       "thumb": "thumbs/plate-foliage-breakup.png",
-      "metalThumb": "thumbs/plate-foliage-breakup-metal.png",
       "source": "amaran-as-gb-m-set2.png, MO23",
       "params": {
         "field": {
@@ -2771,7 +2751,6 @@
       "description": "a wide fire of slender wavy flame tongues",
       "category": "nature",
       "thumb": "thumbs/plate-bonfire.png",
-      "metalThumb": "thumbs/plate-bonfire-metal.png",
       "source": "set-a-six-plates.png, flames",
       "params": {
         "field": {
@@ -2801,7 +2780,6 @@
       "description": "big ragged patches of light, like sun through a canopy",
       "category": "nature",
       "thumb": "thumbs/plate-leaf-breakup.png",
-      "metalThumb": "thumbs/plate-leaf-breakup-metal.png",
       "source": "set-a-six-plates.png, foliage breakup",
       "params": {
         "field": {
@@ -2831,7 +2809,6 @@
       "description": "small irregular blobs packed in a disc",
       "category": "nature",
       "thumb": "thumbs/plate-breakup.png",
-      "metalThumb": "thumbs/plate-breakup-metal.png",
       "source": "set-2-closeup.png, breakup blobs",
       "params": {
         "field": {
@@ -2861,7 +2838,6 @@
       "description": "jagged cracks branching out from a dense centre",
       "category": "nature",
       "thumb": "thumbs/plate-cracked-branches.png",
-      "metalThumb": "thumbs/plate-cracked-branches-metal.png",
       "source": "set-2-closeup.png, cracked branches",
       "params": {
         "field": {
@@ -2891,7 +2867,6 @@
       "description": "short vine sprigs with small paired leaves",
       "category": "nature",
       "thumb": "thumbs/plate-vine-leaves.png",
-      "metalThumb": "thumbs/plate-vine-leaves-metal.png",
       "source": "set-2-closeup.png, vine leaves",
       "params": {
         "field": {
@@ -2921,7 +2896,6 @@
       "description": "a branching tree with small oval leaves all round",
       "category": "nature",
       "thumb": "thumbs/plate-tree-with-leaves.png",
-      "metalThumb": "thumbs/plate-tree-with-leaves-metal.png",
       "source": "set-3-closeup.png, tree with leaves",
       "params": {
         "field": {
@@ -2951,7 +2925,6 @@
       "description": "ragged palm fronds in a Y with loose slivers",
       "category": "nature",
       "thumb": "thumbs/plate-jungle.png",
-      "metalThumb": "thumbs/plate-jungle-metal.png",
       "source": "set-b-17-paper-plates.png, Jungle (10)",
       "params": {
         "field": {
@@ -2981,7 +2954,6 @@
       "description": "thin vertical streaks of many lengths",
       "category": "sky",
       "thumb": "thumbs/plate-rain-lines.png",
-      "metalThumb": "thumbs/plate-rain-lines-metal.png",
       "source": "amaran-as-gb-m-set1.png, MO07",
       "params": {
         "field": {
@@ -3011,7 +2983,6 @@
       "description": "ten crisp snowflakes of three sizes",
       "category": "sky",
       "thumb": "thumbs/plate-snowflakes.png",
-      "metalThumb": "thumbs/plate-snowflakes-metal.png",
       "source": "amaran-as-gb-m-set2.png, MO16",
       "params": {
         "field": {
@@ -3041,7 +3012,6 @@
       "description": "two forked lightning bolts",
       "category": "sky",
       "thumb": "thumbs/plate-lightning.png",
-      "metalThumb": "thumbs/plate-lightning-metal.png",
       "source": "amaran-as-gb-m-set2.png, MO17",
       "params": {
         "field": {
@@ -3071,7 +3041,6 @@
       "description": "stars in loose clusters, sparkles and two little nebulae",
       "category": "sky",
       "thumb": "thumbs/plate-starfield.png",
-      "metalThumb": "thumbs/plate-starfield-metal.png",
       "source": "amaran-as-gb-m-set2.png, MO18",
       "params": {
         "field": {
@@ -3101,7 +3070,6 @@
       "description": "fine trails bursting from a point and drooping",
       "category": "sky",
       "thumb": "thumbs/plate-firework-burst.png",
-      "metalThumb": "thumbs/plate-firework-burst-metal.png",
       "source": "amaran-as-gb-m-set2.png, MO20",
       "params": {
         "field": {
@@ -3131,7 +3099,6 @@
       "description": "a crescent moon among small stars",
       "category": "sky",
       "thumb": "thumbs/plate-moon-and-stars.png",
-      "metalThumb": "thumbs/plate-moon-and-stars-metal.png",
       "source": "set-a-six-plates.png, moon and stars",
       "params": {
         "field": {
@@ -3161,7 +3128,6 @@
       "description": "a cluster of eight armed asterisk stars",
       "category": "sky",
       "thumb": "thumbs/plate-eight-point-stars.png",
-      "metalThumb": "thumbs/plate-eight-point-stars-metal.png",
       "source": "set-a-six-plates.png, 8-point stars",
       "params": {
         "field": {
@@ -3191,7 +3157,6 @@
       "description": "a dense cloud of dots and four point sparkles",
       "category": "sky",
       "thumb": "thumbs/plate-stardust.png",
-      "metalThumb": "thumbs/plate-stardust-metal.png",
       "source": "set-3-closeup.png, star and dot field",
       "params": {
         "field": {
@@ -3221,7 +3186,6 @@
       "description": "five point stars of many sizes and two small crescents",
       "category": "sky",
       "thumb": "thumbs/plate-stars.png",
-      "metalThumb": "thumbs/plate-stars-metal.png",
       "source": "set-3-closeup.png, stars",
       "params": {
         "field": {
@@ -3251,7 +3215,6 @@
       "description": "a loose cluster of small snowflakes",
       "category": "sky",
       "thumb": "thumbs/plate-snowflake-field.png",
-      "metalThumb": "thumbs/plate-snowflake-field-metal.png",
       "source": "set-b-17-paper-plates.png, Snowflake (42)",
       "params": {
         "field": {
@@ -3281,7 +3244,6 @@
       "description": "one big six-arm snowflake with chevron barbs",
       "category": "sky",
       "thumb": "thumbs/plate-big-snowflake.png",
-      "metalThumb": "thumbs/plate-big-snowflake-metal.png",
       "source": "set-b-17-paper-plates.png, Big snowflake (110)",
       "params": {
         "field": {
@@ -3311,7 +3273,6 @@
       "description": "an open field crossed by thin wires",
       "category": "patterns",
       "thumb": "thumbs/plate-crossed-lines.png",
-      "metalThumb": "thumbs/plate-crossed-lines-metal.png",
       "source": "amaran-as-gb-m-set1.png, MO12",
       "params": {
         "field": {
@@ -3341,7 +3302,6 @@
       "description": "a cloud of square pixels",
       "category": "patterns",
       "thumb": "thumbs/plate-pixel-cloud.png",
-      "metalThumb": "thumbs/plate-pixel-cloud-metal.png",
       "source": "amaran-as-gb-m-set1.png, MO14",
       "params": {
         "field": {
@@ -3371,7 +3331,6 @@
       "description": "three crescent rings woven over and under",
       "category": "patterns",
       "thumb": "thumbs/plate-rings.png",
-      "metalThumb": "thumbs/plate-rings-metal.png",
       "source": "amaran-as-gb-m-set2.png, MO24",
       "params": {
         "field": {
@@ -3401,7 +3360,6 @@
       "description": "five nested arch bands like a rainbow",
       "category": "patterns",
       "thumb": "thumbs/plate-rainbow-arch.png",
-      "metalThumb": "thumbs/plate-rainbow-arch-metal.png",
       "source": "set-2-closeup.png, rainbow arch",
       "params": {
         "field": {
@@ -3431,7 +3389,6 @@
       "description": "a cluster of hearts of many sizes",
       "category": "patterns",
       "thumb": "thumbs/plate-hearts.png",
-      "metalThumb": "thumbs/plate-hearts-metal.png",
       "source": "set-2-closeup.png, hearts",
       "params": {
         "field": {
@@ -3461,7 +3418,6 @@
       "description": "a pinwheel of striped sectors, like a ball of yarn",
       "category": "patterns",
       "thumb": "thumbs/plate-swirl.png",
-      "metalThumb": "thumbs/plate-swirl-metal.png",
       "source": "set-3-closeup.png, swirl blades",
       "params": {
         "field": {
@@ -3491,7 +3447,6 @@
       "description": "round bubbles of many sizes packed in a disc",
       "category": "patterns",
       "thumb": "thumbs/plate-bubbles.png",
-      "metalThumb": "thumbs/plate-bubbles-metal.png",
       "source": "set-b-17-paper-plates.png, Bubble (11)",
       "params": {
         "field": {
@@ -3521,7 +3476,6 @@
       "description": "worm-like squiggles packed in a disc",
       "category": "patterns",
       "thumb": "thumbs/plate-squiggles.png",
-      "metalThumb": "thumbs/plate-squiggles-metal.png",
       "source": "set-b-17-paper-plates.png, Dream (8)",
       "params": {
         "field": {
@@ -3551,7 +3505,6 @@
       "description": "a five by five grid of round holes",
       "category": "patterns",
       "thumb": "thumbs/plate-dots.png",
-      "metalThumb": "thumbs/plate-dots-metal.png",
       "source": "set-b-17-paper-plates.png, Dots (7)",
       "params": {
         "field": {
@@ -3581,7 +3534,6 @@
       "description": "a tall panel of meander keys and coin lattice",
       "category": "patterns",
       "thumb": "thumbs/plate-maze.png",
-      "metalThumb": "thumbs/plate-maze-metal.png",
       "source": "set-b-17-paper-plates.png, Wan (26)",
       "params": {
         "field": {
@@ -3611,7 +3563,6 @@
       "description": "thin rays round an empty centre, long and short in turn",
       "category": "beams",
       "thumb": "thumbs/plate-sunburst.png",
-      "metalThumb": "thumbs/plate-sunburst-metal.png",
       "source": "amaran-as-gb-m-set1.png, MO05; also set-a-six-plates.png, sunburst and set-b-17-paper-plates.png, Radiant light (80)",
       "params": {
         "field": {
@@ -3641,7 +3592,6 @@
       "description": "wedge rays fanning up from below",
       "category": "beams",
       "thumb": "thumbs/plate-fan-rays.png",
-      "metalThumb": "thumbs/plate-fan-rays-metal.png",
       "source": "amaran-as-gb-m-set1.png, MO08",
       "params": {
         "field": {
@@ -3671,7 +3621,6 @@
       "description": "tapered wedge rays on a ring round a dark centre",
       "category": "beams",
       "thumb": "thumbs/plate-radial-burst.png",
-      "metalThumb": "thumbs/plate-radial-burst-metal.png",
       "source": "set-2-closeup.png, radial burst",
       "params": {
         "field": {
@@ -3701,7 +3650,6 @@
       "description": "a long thin cross with a burst of spikes where the lines meet",
       "category": "beams",
       "thumb": "thumbs/plate-starburst-cross.png",
-      "metalThumb": "thumbs/plate-starburst-cross-metal.png",
       "source": "set-3-closeup.png, starburst cross",
       "params": {
         "field": {
@@ -3731,7 +3679,6 @@
       "description": "one straight slit of light across the field",
       "category": "beams",
       "thumb": "thumbs/plate-slit.png",
-      "metalThumb": "thumbs/plate-slit-metal.png",
       "source": "set-3-closeup.png, single line slit; also set-b-17-paper-plates.png, Gap (2)",
       "params": {
         "field": {
@@ -3761,7 +3708,6 @@
       "description": "one round hole in the middle",
       "category": "beams",
       "thumb": "thumbs/plate-circle.png",
-      "metalThumb": "thumbs/plate-circle-metal.png",
       "source": "set-b-17-paper-plates.png, Circle (3)",
       "params": {
         "field": {
@@ -3791,7 +3737,6 @@
       "description": "fine lines converging on a small centre",
       "category": "beams",
       "thumb": "thumbs/plate-radial.png",
-      "metalThumb": "thumbs/plate-radial-metal.png",
       "source": "set-b-17-paper-plates.png, Radial (14)",
       "params": {
         "field": {

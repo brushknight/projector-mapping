@@ -19,7 +19,8 @@ const catalog = JSON.parse(readFileSync(path, 'utf8'))
 /** the focus a plate starts with: crisp, and sharper still for the fine lines */
 const FOCUS: Record<string, number> = { 'plate-fine-vertical-lines': 0.9, 'plate-fine-horizontal-lines': 0.9 }
 
-catalog.version = 6
+// (§16 masks) catalog 8 dropped the metal thumbnails; never lower the version this script finds
+catalog.version = Math.max(catalog.version ?? 0, 8)
 catalog.goboCategories = PLATE_CATEGORIES
 catalog.windowParamGroups = WINDOW_PARAM_GROUPS
 catalog.gobos = PLATES.map((p) => {
@@ -35,7 +36,6 @@ catalog.gobos = PLATES.map((p) => {
     description: p.description,
     category: p.category,
     thumb: `thumbs/${p.id}.png`,
-    metalThumb: `thumbs/${p.id}-metal.png`,
     source: p.source,
     ...(p.window ? { family: 'window' } : {}),
     params,

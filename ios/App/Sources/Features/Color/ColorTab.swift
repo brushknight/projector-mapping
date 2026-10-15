@@ -5,6 +5,7 @@ import PMDesign
 /// Board `phone-color`: gradient cards, the colour stops (tap to edit), drift, film grain and brightness.
 struct ColorTab: View {
     @Environment(AppModel.self) private var model
+    private let picked = OptimisticPick()
 
     var body: some View {
         let found = model.layers("color").enumerated().first { $0.element.kind == "gradient" }
@@ -13,7 +14,7 @@ struct ColorTab: View {
             Hero { BackdropArt(focus: .gradient) } leading: { OnAirLabel(detail: found?.element.name) } trailing: { FormatLabel() }
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 10) {
                 ForEach(model.catalog.gradients) { g in
-                    ImageCard(g.name, on: found?.element.ref == g.id, aspect: 1, action: { choose(g, layer: found?.element) }) {
+                    ImageCard(g.name, on: picked.show(found?.element.ref) == g.id, aspect: 1, action: { choose(g, layer: found?.element) }) {
                         GradientSwatch(item: g)
                     }
                 }
@@ -25,12 +26,15 @@ struct ColorTab: View {
             }
             PresetsSection(mode: "color")
         }
+        .onChange(of: found?.element.ref) { picked.settle() }
     }
 
     /// Picking a gradient replaces the color stack with that one gradient.
     func choose(_ g: GradientItem, layer: Layer?) {
         if let layer, layer.ref == g.id, model.layers("color").count == 1 { return }
-        model.edit(.replaceStack(mode: "color", layers: [StackPick.gradient(ref: g.id, name: g.name, defaults: g.defaults, keeping: layer, id: NewID.make("lay"))]))
+        picked.tap(g.id)
+        let pickedLayer = StackPick.gradient(ref: g.id, name: g.name, defaults: g.defaults, keeping: layer, id: NewID.make("lay"))
+        model.pickFast(path: ScenePath.layers("color"), value: (try? JSONValue(encoding: pickedLayer)).map { [$0] } ?? [], fallback: .replaceStack(mode: "color", layers: [pickedLayer]))
     }
 
     func stops(_ layer: Layer) -> [GradientStop] { (try? layer.params["stops"]?.decode([GradientStop].self)) ?? [] }

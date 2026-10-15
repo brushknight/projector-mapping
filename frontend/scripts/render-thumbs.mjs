@@ -1,7 +1,7 @@
 /**
  * Renders the catalog thumbnails (protocol §15 "Thumbnails") with the real engine in headless Chromium and writes
  * them to backend/internal/catalog/assets/thumbs/<id>.png, which the server embeds and serves at
- * /catalog/thumbs/<id>.png; a metal plate also gets <id>-metal.png, the plate itself (dev/plate-harness.html).
+ * /catalog/thumbs/<id>.png (the light a plate projects; catalog 8 dropped the metal views).
  * (§16) A procedural layer with `animThumb` also gets <id>-anim.jpg, a looping strip of `animFrames` frames
  * (dev/anim-harness.html) that the phone's live gallery animates.
  * Run after changing a gobo, a plate or a procedural layer: `npm run thumbs` (or `npm run thumbs -- plate-` for the
@@ -37,8 +37,6 @@ try {
   page.on('pageerror', (e) => console.error('page error:', e.message))
   const jobs = [
     ...catalog.gobos.map((g) => ({ id: g.id, q: `gobo=${g.id}` })),
-    // (plates) the metal plate itself: a grey disc with its cut-outs, on a transparent ground
-    ...catalog.gobos.filter((g) => g.metalThumb).map((g) => ({ id: g.metalThumb.replace(/^thumbs\/|\.png$/g, ''), q: `plate=${g.id}`, page: 'plate-harness' })),
     // lightning flashes at 6.55 s; everything else is mid-motion at 7.5 s
     ...catalog.procedural.map((p) => ({ id: p.id, q: `proc=${p.id}&clock=${p.id === 'lightning' ? 6.55 : 7.5}` })),
     // (§16) the animated strips: a 3 s loop around the still's moment (lightning: a window with a flash in it)

@@ -9,7 +9,7 @@ import (
 )
 
 // Actions are the names of POST /show/{action} and cmd show.{action}.
-var Actions = []string{"go", "back", "play", "pause", "stop", "seek", "blackout", "activate", "solo", "preview", "audio", "converge"}
+var Actions = []string{"go", "back", "play", "pause", "stop", "seek", "blackout", "activate", "solo", "preview", "audio", "converge", "sequence.start"}
 
 // PlayIn is cmd sound.play: a pad of a scene (default the active one) or a library sound, at volume (0..1, default
 // 1, multiplying the pad's).

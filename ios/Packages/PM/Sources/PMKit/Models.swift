@@ -575,6 +575,8 @@ public struct Scene: Codable, Sendable, Hashable, Identifiable {
     public var underlay: Underlay
     /// (§19) The object accent; nil when the scene has none (off).
     public var objectAccent: ObjectAccent?
+    /// (§20 "Step 0") The opening step; nil when the scene has none.
+    public var intro: Intro?
     public var points: [ScenePoint]
     public var objects: [MapObject]
     public var timeline: Timeline
@@ -604,6 +606,7 @@ public struct Scene: Codable, Sendable, Hashable, Identifiable {
         }
         underlay = c.v(.underlay, Underlay())
         objectAccent = c.opt(.objectAccent)
+        intro = c.opt(.intro)
         points = c.v(.points, [])
         objects = c.v(.objects, [])
         let k: String? = c.opt(.kind)
@@ -694,10 +697,15 @@ public struct Transport: Codable, Sendable, Hashable {
     public var startedAt: Int64
     public var offset: Double
     public var cue: Int
+    /// (§20 "Step 0") `intro` while the opening look holds; nil or `timeline` otherwise.
+    public var step: String?
 
-    public init(state: String = "stopped", startedAt: Int64 = 0, offset: Double = 0, cue: Int = 0) {
-        self.state = state; self.startedAt = startedAt; self.offset = offset; self.cue = cue
+    public init(state: String = "stopped", startedAt: Int64 = 0, offset: Double = 0, cue: Int = 0, step: String? = nil) {
+        self.state = state; self.startedAt = startedAt; self.offset = offset; self.cue = cue; self.step = step
     }
+
+    /// The opening look holds (step 0).
+    public var inIntro: Bool { step == "intro" }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -707,6 +715,7 @@ public struct Transport: Codable, Sendable, Hashable {
         startedAt = exact ?? approx.map { Int64($0) } ?? 0
         offset = c.v(.offset, 0)
         cue = c.v(.cue, 0)
+        step = c.opt(.step)
     }
 
     /// The playhead in seconds for a server clock reading (Unix ms, already offset-corrected).

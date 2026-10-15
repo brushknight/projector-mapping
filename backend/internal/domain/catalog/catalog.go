@@ -203,7 +203,8 @@ type Gobo struct {
 	Description string `json:"description"`
 	Category    string `json:"category"`
 	Thumb       string `json:"thumb"`
-	// MetalThumb is a plate's metal thumbnail, the plate itself (catalog version 5; every gobo since version 6).
+	// MetalThumb was a plate's metal thumbnail (catalog versions 5 to 7); catalog 8 (§16 masks) dropped it. Kept so older
+	// documents decode.
 	MetalThumb string `json:"metalThumb,omitempty"`
 	// Source names the reference photo a design follows: "<file in design/refs/gobo-plates>, <label>" (catalog 6).
 	Source string `json:"source,omitempty"`

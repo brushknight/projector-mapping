@@ -63,7 +63,7 @@ export function Stage() {
     const c = canvasRef.current
     if (!c) return
     try {
-      const r = new Renderer(c, { space: 'scene', preserveDrawingBuffer: true, maxSceneSize: 1920 })
+      const r = new Renderer(c, { space: 'scene', preserveDrawingBuffer: true, maxSceneSize: 1920, hold: true })
       // report each broken user or agent effect once
       const seen = new Set<string>()
       r.onEffectError = (e) => {

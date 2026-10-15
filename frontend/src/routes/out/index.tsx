@@ -9,7 +9,7 @@ import { activeSolo, ambientClock, playheadNow, showAudio, useBlackout } from '.
 import { activeTestPattern, sceneSize } from '../../entities/setup'
 import { useAudioClient } from '../../entities/sound/audioHooks'
 import { YouTubeBackdrop } from '../../entities/video/youtube'
-import { activeYouTube, Renderer, type OutlineFlash, type OutputPattern } from '../../render'
+import { activeYouTube, Renderer, warmPlateMasks, type OutlineFlash, type OutputPattern } from '../../render'
 import { youtubeVolume } from '../../render/youtube'
 import { Icon } from '../../shared/components'
 import { setAuthToken } from '../../shared/lib/http'
@@ -66,7 +66,7 @@ export function OutPage() {
   useEffect(() => {
     const canvas = canvasRef.current!
     try {
-      renderer.current = new Renderer(canvas, { space: 'physical', preserveDrawingBuffer: true, transparent: true })
+      renderer.current = new Renderer(canvas, { space: 'physical', preserveDrawingBuffer: true, transparent: true, hold: true })
     } catch (e) {
       setGlError(e instanceof Error ? e.message : String(e))
       return
@@ -81,6 +81,16 @@ export function OutPage() {
       window.removeEventListener('resize', size)
       renderer.current?.dispose()
       renderer.current = null
+    }
+  }, [])
+
+  // (§16 masks) warm the plate masks at idle (the small size stands in while a picked plate's full mask decodes)
+  useEffect(() => {
+    const a = warmPlateMasks(1024)
+    const b = warmPlateMasks(4096)
+    return () => {
+      a()
+      b()
     }
   }, [])
 
@@ -190,6 +200,7 @@ export function OutPage() {
         catalog: L.catalog,
         effects: L.effects,
         t: playheadNow(hub, L.show),
+        step: L.show?.transport.step ?? null,
         clock: ambientClock(hub),
         now: hub.serverNow(),
         blackout: blackout.step(now),

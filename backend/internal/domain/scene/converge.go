@@ -100,6 +100,8 @@ type ConvergeIn struct {
 	Duration float64
 	ObjectID string
 	Source   string
+	// From and Ease of an inserted clip (default current, inOut); the intro sets them (§20 "Step 0")
+	From, Ease string
 }
 
 // ConvergePlan is what show.converge does to a scene: the patch, the clip it uses, the backdrop mode it records as
@@ -221,8 +223,15 @@ func Converge(sc *Scene, in ConvergeIn, newID func(prefix string) string) (Conve
 			p.Ops = append(p.Ops, docpatch.Add("/timeline/tracks/-", Track{ID: trackID, Name: name + " · converge", Target: target}))
 		}
 		p.ClipID, p.Inserted = newID("clp"), true
+		from, ease := in.From, in.Ease
+		if from == "" {
+			from = "current"
+		}
+		if ease == "" {
+			ease = "inOut"
+		}
 		clip := Clip{ID: p.ClipID, TrackID: trackID, Effect: EffectConverge, Start: 0, End: p.End,
-			Params: map[string]any{"from": "current", "source": p.Source, "ease": "inOut", "edge": 6.0, "outline": false}}
+			Params: map[string]any{"from": from, "source": p.Source, "ease": ease, "edge": 6.0, "outline": false}}
 		p.Ops = append(p.Ops, docpatch.Add("/timeline/clips/-", clip))
 	}
 	// cues: one starts at 0, one waits at or after the converge's end (GO plays on from it)

@@ -337,6 +337,20 @@
   "re": "c-95"
  },
  {
+  "t": "cmd",
+  "id": "c-96",
+  "d": {
+   "name": "show.sequence.start",
+   "args": {
+    "sceneId": "scn_desk"
+   }
+  }
+ },
+ {
+  "t": "ack",
+  "re": "c-96"
+ },
+ {
   "t": "snapshot",
   "ch": "sounds",
   "v": 1791700000123,

@@ -20,7 +20,19 @@ type Transport struct {
 	StartedAt int64   `json:"startedAt"`
 	Offset    float64 `json:"offset"`
 	Cue       int     `json:"cue"`
+	// Step is "intro" while the scene's opening look holds (step 0, protocol §20 "Step 0"); "timeline" (or absent)
+	// otherwise.
+	Step string `json:"step,omitempty"`
 }
+
+// Transport steps.
+const (
+	StepIntro    = "intro"
+	StepTimeline = "timeline"
+)
+
+// InIntro tells whether the opening look holds (step 0).
+func (t Transport) InIntro() bool { return t.Step == StepIntro }
 
 // Preview is a draft the projector plays instead of the live scene (agent preview, "projector_show draft_frame").
 type Preview struct {

@@ -25,6 +25,10 @@ func Register(s *mcp.Server, env *tools.Env) {
 			"switches the wall to objects mode, uses the converge clip at t = 0 or inserts one (duration seconds, default 2, onto object or the first object; " +
 			"\"all\" for every object), then plays from 0 and holds at the first cue after it for GO. The light closes from its own shape onto the object's silhouette. " +
 			"Needs \"agent may go live\"."}, convergeStart)
+	tools.Add(s, env, &mcp.Tool{Name: "sequence_start", Title: "Start the sequence",
+		Description: "Puts step 0 on the wall (protocol §20 \"Step 0\"): the scene's opening look (intro_set; without one, the backdrop on air with converge on) " +
+			"holds, animated, until GO; GO then converges onto the object or crossfades into the mapping and plays to the first cue. Back from the first cue returns to step 0. " +
+			"Needs \"agent may go live\"."}, sequenceStart)
 	tools.Add(s, env, &mcp.Tool{Name: "projector_show", Title: "Show something on the projector",
 		Description: "Puts a test pattern (white, black, gray stripes), surface outlines, or a frame of your draft on the projector; off returns to normal. Needs \"agent may preview\"."}, projectorShow)
 }
@@ -96,6 +100,22 @@ func convergeStart(ctx context.Context, e *tools.Env, in convergeIn) (*mcp.CallT
 		return nil, err
 	}
 	return tools.JSON(fmt.Sprintf("The wall converges onto the object and holds at the next cue for GO (show %s).", st.Transport.State), st), nil
+}
+
+type sequenceIn struct {
+	Scene string `json:"scene,omitempty" jsonschema:"scene id; default the scene on the wall"`
+}
+
+func sequenceStart(ctx context.Context, e *tools.Env, in sequenceIn) (*mcp.CallToolResult, error) {
+	if err := e.NeedLive(ctx); err != nil {
+		return nil, err
+	}
+	args, _ := json.Marshal(map[string]any{"sceneId": in.Scene})
+	st, err := e.D.Show.Do(ctx, "sequence.start", args, "agent:"+e.S.AgentName())
+	if err != nil {
+		return nil, err
+	}
+	return tools.JSON("Step 0 holds on the wall: the opening look waits for GO.", st), nil
 }
 
 type showIn struct {

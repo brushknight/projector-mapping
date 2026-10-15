@@ -116,7 +116,7 @@ public struct GoboItem: Decodable, Sendable, Hashable, Identifiable {
     public var family: String?
     /// Relative to `/catalog/assets/`, e.g. `thumbs/window-4.png`.
     public var thumb: String?
-    /// (catalog 5, plates) the metal plate itself, e.g. `thumbs/plate-sunburst-metal.png`.
+    /// (catalog 5 to 7) the metal plate itself; catalog 8 dropped it (decoded for older catalogs, unused).
     public var metalThumb: String?
     /// (catalog 5, plates) the real plate the design follows.
     public var source: String?
@@ -489,12 +489,6 @@ public struct Catalog: Decodable, Sendable, Hashable {
         guard let item = self.gobo(gobo), item.isWindow else { return [] }
         let grouped = Set(windowParamGroups.flatMap(\.params))
         return item.params.items.map(\.key).filter { grouped.isEmpty ? $0 != "field" : grouped.contains($0) }
-    }
-
-    /// (catalog 5) The thumbnail id of a plate's metal picture (the plate itself), nil for other gobos.
-    public func metalThumbId(_ id: String) -> String? {
-        guard let path = gobo(id)?.metalThumb, path.hasPrefix("thumbs/"), path.hasSuffix(".png") else { return nil }
-        return String(path.dropFirst(7).dropLast(4))
     }
 
     /// The params an attachment of `item` starts with: the gobo's own defaults, then `goboParams` defaults overridden
