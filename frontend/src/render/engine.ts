@@ -14,7 +14,8 @@ import type { Attachment, ContentLayer, Layer, LayerStack, Point, Scene, SceneOb
 import { attachmentUniforms } from './attachments'
 import { GENERATOR_IDS, GENERATORS } from './generators'
 import { sampleMotion } from './motion'
-import { COLOR_FS, LIGHT_FS, MASK_FS } from './shaders/light'
+import { COLOR_FS, LIGHT_FS, MASK_FS, SHAPE } from './shaders/light'
+import { plateCanvas, plateDef } from './plates'
 import { atlasAffines, resolveAtlas, type Affine } from './atlas'
 import { CONTENT_FS, MAX_STOPS } from './shaders/content'
 import { BUILTINS } from './effects/builtins'
@@ -128,6 +129,8 @@ export class Renderer {
   private lightProg: GLProgram
   private videos: VideoCache
   private gridCanvases = new Map<string, OffscreenCanvas | HTMLCanvasElement>()
+  /** (plates) mask textures of metal plates, rasterized once per plate */
+  private plateTex = new Map<string, WebGLTexture>()
   /** object atlas targets drawn in this render call */
   private objFrame = new Map<string, SurfaceExtra['atlas'] | null>()
   private effectProgs = new Map<string, EffectProgram>()
@@ -400,6 +403,8 @@ export class Renderer {
     this.images.dispose()
     this.videos.dispose()
     this.dyn.dispose()
+    for (const t of this.plateTex.values()) gl.deleteTexture(t)
+    this.plateTex.clear()
     this.js.dispose()
     this.mesh.dispose()
     for (const p of this.effectProgs.values()) if ('prog' in p) gl.deleteProgram(p.prog.prog)
@@ -663,12 +668,47 @@ export class Renderer {
     p.f1('u_depth', u.depth)
     p.f1('u_opacity', Math.max(0, Math.min(1, att.opacity ?? 1)))
     p.f1('u_seed', (hashString01(att.id) + seed) * 10)
-    p.f4('u_gp0', ...u.gp0)
     p.f4('u_gp1', ...u.gp1)
     p.f4('u_gp2', ...u.gp2)
+    const plate = u.shape === SHAPE.plate ? this.plateTexture(att.gobo) : null
+    if (u.shape === SHAPE.plate) {
+      if (!plate) return
+      p.tex('u_plate', 0, plate)
+      p.f4('u_gp0', u.gp0[0], u.gp0[1], aspect, u.gp0[3])
+    } else {
+      p.f4('u_gp0', ...u.gp0)
+    }
     this.setBlend('multiply')
     this.drawFullscreen()
     this.setBlend('none')
+    if (plate) gl.bindTexture(gl.TEXTURE_2D, null)
+  }
+
+  /**
+   * (plates) A plate's mask texture: its vector cut-outs rasterized once (2048 px, one channel, mipmapped, repeating
+   * for tile mode). Null for an unknown plate. Kept for the renderer's life (a few MB each).
+   */
+  private plateTexture(id: string): WebGLTexture | null {
+    const have = this.plateTex.get(id)
+    if (have) return have
+    const def = plateDef(id)
+    if (!def) return null
+    const gl = this.gl
+    const tex = gl.createTexture()!
+    gl.bindTexture(gl.TEXTURE_2D, tex)
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false)
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1)
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, gl.RED, gl.UNSIGNED_BYTE, plateCanvas(def) as TexImageSource)
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4)
+    gl.generateMipmap(gl.TEXTURE_2D)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT)
+    const aniso = gl.getExtension('EXT_texture_filter_anisotropic')
+    if (aniso) gl.texParameterf(gl.TEXTURE_2D, aniso.TEXTURE_MAX_ANISOTROPY_EXT, 4)
+    this.plateTex.set(id, tex)
+    return tex
   }
 
   /** Draws a light's colour (its own CCT or HSI colour, a gradient or a generator) into the bound target. */

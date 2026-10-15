@@ -109,10 +109,14 @@ public struct GoboItem: Decodable, Sendable, Hashable, Identifiable {
     public var id: String
     public var name: String
     public var description: String
-    /// `windows` | `blinds` | `nature` | `patterns` | `spots` (v3 catalogs say other things; see `browseCategory`).
+    /// `windows` | `blinds` | `nature` | `patterns` | `spots` | `plates` (v3 catalogs say other things; see `browseCategory`).
     public var category: String
     /// Relative to `/catalog/assets/`, e.g. `thumbs/window-4.png`.
     public var thumb: String?
+    /// (catalog 5, plates) the metal plate itself, e.g. `thumbs/plate-sunburst-metal.png`.
+    public var metalThumb: String?
+    /// (catalog 5, plates) the real plate the design follows.
+    public var source: String?
     /// The gobo's own shape params (panes, slats…).
     public var params: ParamList
     /// Scale and rotation a new attachment of this gobo starts with.
@@ -129,13 +133,15 @@ public struct GoboItem: Decodable, Sendable, Hashable, Identifiable {
         description = c.v(.description, "")
         category = c.v(.category, "shadows")
         thumb = c.opt(.thumb)
+        metalThumb = c.opt(.metalThumb)
+        source = c.opt(.source)
         params = c.v(.params, ParamList())
         attachment = c.v(.attachment, Start())
         focus = c.opt(.focus)
         defaults = c.v(.defaults, [:])
     }
 
-    enum CodingKeys: String, CodingKey { case id, name, description, category, thumb, params, attachment, focus, defaults }
+    enum CodingKeys: String, CodingKey { case id, name, description, category, thumb, metalThumb, source, params, attachment, focus, defaults }
 
     /// The browser category: the v4 one, or a guess for a v3 catalog.
     public var browseCategory: String {
@@ -151,7 +157,7 @@ public struct GoboItem: Decodable, Sendable, Hashable, Identifiable {
 }
 
 public struct GoboCategory: Decodable, Sendable, Hashable, Identifiable {
-    public static let known = ["windows", "blinds", "nature", "patterns", "spots"]
+    public static let known = ["windows", "blinds", "nature", "patterns", "spots", "plates"]
     public var id: String
     public var name: String
     public init(id: String, name: String) { self.id = id; self.name = name }
@@ -413,6 +419,12 @@ public struct Catalog: Decodable, Sendable, Hashable {
     public func thumbId(_ id: String) -> String {
         let path = gobo(id)?.thumb ?? procedural(id)?.thumb
         guard let path, path.hasPrefix("thumbs/"), path.hasSuffix(".png") else { return id }
+        return String(path.dropFirst(7).dropLast(4))
+    }
+
+    /// (catalog 5) The thumbnail id of a plate's metal picture (the plate itself), nil for other gobos.
+    public func metalThumbId(_ id: String) -> String? {
+        guard let path = gobo(id)?.metalThumb, path.hasPrefix("thumbs/"), path.hasSuffix(".png") else { return nil }
         return String(path.dropFirst(7).dropLast(4))
     }
 

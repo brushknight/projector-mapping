@@ -1,7 +1,9 @@
 /**
  * Renders the catalog thumbnails (protocol §15 "Thumbnails") with the real engine in headless Chromium and writes
  * them to backend/internal/catalog/assets/thumbs/<id>.png, which the server embeds and serves at
- * /catalog/thumbs/<id>.png. Run after changing a gobo or a procedural layer: `npm run thumbs`.
+ * /catalog/thumbs/<id>.png; a metal plate also gets <id>-metal.png, the plate itself (dev/plate-harness.html).
+ * Run after changing a gobo, a plate or a procedural layer: `npm run thumbs` (or `npm run thumbs -- plate-` for the
+ * ids that contain `plate-`).
  * Never opens a window (headless only).
  */
 import { spawn } from 'node:child_process'
@@ -33,13 +35,16 @@ try {
   page.on('pageerror', (e) => console.error('page error:', e.message))
   const jobs = [
     ...catalog.gobos.map((g) => ({ id: g.id, q: `gobo=${g.id}` })),
+    // (plates) the metal plate itself: a grey disc with its cut-outs, on a transparent ground
+    ...catalog.gobos.filter((g) => g.metalThumb).map((g) => ({ id: g.metalThumb.replace(/^thumbs\/|\.png$/g, ''), q: `plate=${g.id}`, page: 'plate-harness' })),
     // lightning flashes at 6.55 s; everything else is mid-motion at 7.5 s
     ...catalog.procedural.map((p) => ({ id: p.id, q: `proc=${p.id}&clock=${p.id === 'lightning' ? 6.55 : 7.5}` })),
   ]
-  for (const j of jobs) {
-    await page.goto(`http://localhost:${port}/dev/render-harness.html?w=${W}&h=${H}&${j.q}`)
+  const only = process.argv.slice(2)
+  for (const j of jobs.filter((j) => !only.length || only.some((o) => j.id.includes(o)))) {
+    await page.goto(`http://localhost:${port}/dev/${j.page ?? 'render-harness'}.html?w=${W}&h=${H}&${j.q}`)
     await page.waitForFunction(() => window.__done === true, null, { timeout: 60000 })
-    writeFileSync(resolve(out, `${j.id}.png`), await page.locator('#c').screenshot())
+    writeFileSync(resolve(out, `${j.id}.png`), await page.locator('#c').screenshot({ omitBackground: !!j.page }))
     console.log('thumb', j.id)
   }
   await browser.close()

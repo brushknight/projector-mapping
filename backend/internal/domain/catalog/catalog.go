@@ -191,7 +191,11 @@ type Gobo struct {
 	Description string `json:"description"`
 	Category    string `json:"category"`
 	Thumb       string `json:"thumb"`
-	Params      Schema `json:"params"`
+	// MetalThumb is a plate's metal thumbnail, the plate itself (catalog version 5, category plates).
+	MetalThumb string `json:"metalThumb,omitempty"`
+	// Source names the real plate a design follows (catalog version 5, plates).
+	Source string `json:"source,omitempty"`
+	Params Schema `json:"params"`
 	// Attachment is the scale and rotation a new attachment of this gobo starts with.
 	Attachment struct {
 		Scale    float64 `json:"scale"`

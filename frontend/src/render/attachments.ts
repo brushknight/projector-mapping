@@ -4,6 +4,7 @@
  */
 import type { Catalog } from '../entities/catalog/types'
 import type { Attachment } from '../entities/scene/types'
+import { fieldCode, PLATES, plateField } from './plates'
 import { SHAPE } from './shaders/light'
 
 type Vec4 = [number, number, number, number]
@@ -11,7 +12,8 @@ type P = (k: string, d: number) => number
 
 interface ShapeOf {
   shape: number
-  slots: (p: P) => { gp0: Vec4; gp1?: Vec4; gp2?: Vec4 }
+  /** `p` reads a number param, `v` any param (enums) */
+  slots: (p: P, v: (k: string) => unknown) => { gp0: Vec4; gp1?: Vec4; gp2?: Vec4 }
 }
 
 /** mullion param 0..1 → bar width in gobo units */
@@ -59,6 +61,10 @@ export const ATTACHMENT_SHAPES: Record<string, ShapeOf> = {
     slots: (p) => ({ gp0: [p('top', 0.3), p('bottom', 0.3), p('left', 0.35), p('right', 0.35)], gp1: [p('topAngle', 0), p('bottomAngle', 0), p('leftAngle', 0), p('rightAngle', 0)] }),
   },
   iris: { shape: SHAPE.iris, slots: (p) => ({ gp0: [p('iris', 0.5), p('edge', 0.05), 0, 0] }) },
+  // (plates) metal gobo plates: the mask texture of the plate; gp0.z (the frame aspect) is filled in by the engine
+  ...Object.fromEntries(
+    PLATES.map((def): [string, ShapeOf] => [def.id, { shape: SHAPE.plate, slots: (_p, v) => ({ gp0: [fieldCode(v('field') ?? 'round'), plateField(def), 1, 0] }) }]),
+  ),
 }
 
 export const ATTACHMENT_IDS = Object.keys(ATTACHMENT_SHAPES)
@@ -83,7 +89,7 @@ export function attachmentUniforms(catalog: Catalog | null, att: Pick<Attachment
     const v = Number(params[k])
     return Number.isFinite(v) ? v : d
   }
-  const s = def.slots(p)
+  const s = def.slots(p, (k) => params[k])
   return {
     shape: def.shape,
     gp0: s.gp0,

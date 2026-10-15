@@ -259,7 +259,7 @@ func TestCatalogV4(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cat.Version < 4 || len(cat.Gobos) < 33 || cat.StackLight.Kelvin != 5600 || cat.GoboParams["throw"].Type != "number" {
+	if cat.Version < 5 || len(cat.Gobos) < 76 || cat.StackLight.Kelvin != 5600 || cat.GoboParams["throw"].Type != "number" {
 		t.Fatalf("catalog %d: %d gobos, stackLight %+v", cat.Version, len(cat.Gobos), cat.StackLight)
 	}
 	for _, g := range cat.Gobos {
@@ -269,6 +269,12 @@ func TestCatalogV4(t *testing.T) {
 		}
 		if _, ok := cat.GoboSchema(g.ID); !ok {
 			t.Errorf("gobo %s has no schema", g.ID)
+		}
+		// (catalog 5) a metal plate has its metal thumbnail and a round, fill, stretch or tile light field
+		if gb != nil && gb.Category == "plates" {
+			if gb.MetalThumb != "thumbs/"+g.ID+"-metal.png" || gb.Params["field"].Type != "enum" || gb.Params["field"].Default != "round" {
+				t.Errorf("plate %s: %+v", g.ID, gb)
+			}
 		}
 	}
 	// the merged schema: goboParams, the gobo's own params, the gobo's defaults over goboParams defaults

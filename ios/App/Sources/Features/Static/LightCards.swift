@@ -200,14 +200,16 @@ struct LensCard: View {
 
 // MARK: - Attachments
 
-/// The categorized attachment browser: windows, blinds, nature, patterns, spots. A tap puts that one attachment in
-/// front of the light; "add on top" stacks another (masks multiply).
+/// The categorized attachment browser: windows, blinds, nature, patterns, spots, plates. A tap puts that one attachment
+/// in front of the light; "add on top" stacks another (masks multiply). Plate tiles show the metal plate itself, or
+/// the light it projects.
 struct AttachmentBrowser: View {
     var mode: String
     @Binding var selected: String?
     @Environment(AppModel.self) private var model
     @State private var category: String?
     @State private var addOnTop = false
+    @State private var plateLight = false
 
     var body: some View {
         let cats = model.catalog.goboCategories.filter { !model.catalog.gobos(in: $0.id).isEmpty }
@@ -224,16 +226,28 @@ struct AttachmentBrowser: View {
             }
             .scrollIndicators(.hidden)
             .padding(.horizontal, -16)
+            if items.contains(where: { $0.metalThumb != nil }) {
+                HStack(spacing: 10) {
+                    Text("plates show").font(.pm(12)).foregroundStyle(Palette.dim)
+                    Segmented(["the plate", "its light"], selected: plateLight ? 1 : 0, height: 30) { plateLight = $0 == 1 }
+                        .accessibilityLabel("plate tiles show")
+                }
+                .padding(.horizontal, 2)
+            }
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 12) {
                 ForEach(items) { g in
-                    AttachmentTile(item: g, on: onWall.contains(g.id)) { pick(g, add: addOnTop) }
+                    AttachmentTile(item: g, on: onWall.contains(g.id), metal: !plateLight) { pick(g, add: addOnTop) }
                         .contextMenu {
                             Button("put only this one on", systemImage: "square") { pick(g, add: false) }
                             Button("add it on top", systemImage: "square.2.layers.3d") { pick(g, add: true) }
                         } preview: {
                             VStack(alignment: .leading, spacing: 6) {
                                 GoboThumb(gobo: g.id).frame(width: 288, height: 162).clipped()
-                                Text(g.description).font(.pm(13)).foregroundStyle(Palette.ink).padding(10)
+                                Text(g.description).font(.pm(13)).foregroundStyle(Palette.ink).padding(.horizontal, 10).padding(.top, 10)
+                                if let source = g.source {
+                                    Text(source).font(.pm(12)).foregroundStyle(Palette.dim).padding(.horizontal, 10)
+                                }
+                                Spacer().frame(height: 4)
                             }
                             .background(Palette.card)
                         }
@@ -272,6 +286,8 @@ struct AttachmentBrowser: View {
 struct AttachmentTile: View {
     var item: GoboItem
     var on: Bool
+    /// a plate shows the metal plate itself instead of its light
+    var metal = false
     var action: () -> Void
 
     var body: some View {
@@ -279,7 +295,7 @@ struct AttachmentTile: View {
             VStack(alignment: .leading, spacing: 6) {
                 Color.clear
                     .aspectRatio(16 / 10, contentMode: .fit)
-                    .overlay { GoboThumb(gobo: item.id) }
+                    .overlay { GoboThumb(gobo: item.id, metal: metal) }
                     .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                     .selectionRing(on, radius: 14)
                 Text(item.name).font(.pm(12)).tracking(0.2).lineLimit(1)
@@ -354,6 +370,7 @@ struct AttachmentControls: View {
         let live = model.hub.isLive
         let specs = model.catalog.stackLight.attachmentParams
         let shape = model.catalog.shapeParams(a.gobo).filter { $0.spec.isNumeric }
+        let choices = model.catalog.shapeParams(a.gobo).filter { $0.spec.type == "enum" && !($0.spec.options ?? []).isEmpty }
         Card {
             HStack {
                 Text(a.name.isEmpty ? a.gobo : a.name).capStyle()
@@ -374,6 +391,18 @@ struct AttachmentControls: View {
                     var next = spec.value(at: f)
                     next = key == "rotation" ? next.rounded() : round2(next)
                     model.attachmentParam(mode, a.id, [key], .number(next))
+                }
+            }
+            ForEach(choices) { p in
+                let options = p.spec.options ?? []
+                let current = a.params[p.key]?.string ?? p.spec.default?.string ?? options.first ?? ""
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(p.spec.label ?? p.key).font(.pm(12)).foregroundStyle(Palette.dim).padding(.horizontal, 2)
+                    Segmented(options.map { Self.choiceLabel(p.key, $0) }, selected: options.firstIndex(of: current) ?? 0, height: 30) { n in
+                        model.attachmentParam(mode, a.id, ["params", p.key], .string(options[n]))
+                    }
+                    .disabled(!live)
+                    .accessibilityLabel(p.spec.label ?? p.key)
                 }
             }
             if !shape.isEmpty {
@@ -402,6 +431,11 @@ struct AttachmentControls: View {
                 }
             }
         }
+    }
+
+    /// Friendlier words for a few enum values: a plate's `fill` light field fills the frame.
+    static func choiceLabel(_ key: String, _ v: String) -> String {
+        key == "field" && v == "fill" ? "fill frame" : v
     }
 
     func value(_ a: Attachment, _ key: String) -> Double {

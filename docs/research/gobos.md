@@ -158,7 +158,8 @@ means a faint, soft glow that follows the pattern, brighter toward the source an
 
 ## 7. What projmap replicates
 
-A curated library of 33 attachments. Each entry names the real-world analogue it imitates.
+A curated library of 33 attachments drawn by the shader, plus the 43 metal plates of section 8. Each entry names
+the real-world analogue it imitates.
 
 | group | attachment | real analogue | extra parameters |
 | --- | --- | --- | --- |
@@ -203,6 +204,67 @@ Parameters every attachment exposes:
 - **haze**: visible glow following the open areas [P5].
 - **colour**: CCT presets from the sun table (sunrise 2000 K, golden hour 3200 K, noon 5600 K, blue hour 10000 K).
 - **frame depth**: second, wider penumbra edge per [W7][P1].
+
+## 8. The plate set (catalog 5)
+
+The reference for the `plates` category is the amaran AS-GB-M SET1 and SET2 M-size metal plates (MO05 to MO24; the
+user's photos are in `design/refs/gobo-plates/`). M-size plates have about a 48 to 50 mm image area [R1][G2]; the
+plates draw that area as a round field of radius about 0.84 of the plate, so 1 plate unit is about 29 mm and the
+0.012 minimum opening and bridge width is about 0.35 mm, within what laser-cut steel holds. Steel needs bridges for
+islands [W2], so every design ties its islands to the rim: ring slots and woven rings break where one passes under
+another, the stained-glass bosses hang on four ties, bamboo node slits leave two side bridges, monstera slits stop
+short of the midrib, curtain folds stop short of the tie back. Scattered designs keep their openings apart (a merged
+ring of openings would drop a piece of metal), and the trails of the firework never cross.
+
+The renderer projects the round field by default (the spotlight's aperture); `field: fill | stretch | tile` makes a
+plate cover a 16:9 frame like a wide projector. Scattered designs fill the whole square for that; designs that sit
+in the field (windows, sunburst) simply grow.
+
+| id | name | follows | how it is drawn |
+| --- | --- | --- | --- |
+| `plate-sunburst` | sunburst | MO05 | 34 thin rays, long and short in turn, round an empty centre |
+| `plate-louvre` | louvre | MO06 | wide horizontal slats in a smaller field (0.74) |
+| `plate-rain-lines` | rain lines | MO07 | about 21 thin vertical streaks of random length |
+| `plate-fan-rays` | fan rays | MO08 | 9 wedges from a vanishing point below the plate, bars 30 % of each step |
+| `plate-skewed-window` | skewed window | MO09 | a 4 × 6 window in perspective, columns widening to the right |
+| `plate-grid-window` | 6-pane grid window | MO10 | two sashes of 2 × 4 panes |
+| `plate-arched-window` | arched window | MO11 | 3 × 4 panes under a round head with a fan light |
+| `plate-crossed-lines` | crossed lines | MO12 | an open field crossed by 58 thin wires, all tied to the rim |
+| `plate-scattered-sticks` | scattered sticks | MO13 | short sticks, a fifth of them forked |
+| `plate-pixel-cloud` | pixel cloud | MO14 | square pixels on a grid, a noisy cloud in a wide band |
+| `plate-water-ripples` | water ripples | MO15 | rows of tapered wavy slivers |
+| `plate-snowflakes` | snowflakes | MO16 | ten six-armed flakes in three styles |
+| `plate-lightning` | lightning | MO17 | two jagged bolts with side strikes that never loop back |
+| `plate-starfield` | starfield | MO18 | clustered dots, three sparkles and two little nebulae |
+| `plate-flames` | flames | MO19 | licking tongues kept apart, a big fire with a dark heart tied below |
+| `plate-firework-burst` | firework burst | MO20 | trails from a core, drooping with distance |
+| `plate-bare-branches` | bare branches | MO21 | an open field crossed by branching metal trees from the rim |
+| `plate-fern-leaves` | fern leaves | MO22 | five fronds of long narrow leaflets hanging from the top |
+| `plate-foliage-breakup` | foliage breakup | MO23 | a Voronoi breakup of ragged shards with a metal web |
+| `plate-rings` | rings | MO24 | three crescent rings woven over and under |
+| `plate-curved-venetian` | curved venetian | original | bowed slats opening up towards the bottom |
+| `plate-bamboo-stalks` | bamboo stalks | original | metal stalks with bridged node slits and leaf sprays |
+| `plate-palm-silhouette` | palm silhouette | original | two palms with feathered fronds against an open sky |
+| `plate-monstera` | monstera leaves | original | four split leaves on stalks from the rim |
+| `plate-jungle-breakup` | jungle breakup | original | vines from the rim carrying big leaves of three kinds |
+| `plate-stained-glass` | stained-glass grid | original | square panes, diamond cames, ringed bosses on four ties |
+| `plate-moroccan-arch` | Moroccan arch lattice | original | pointed horseshoe arches and eight pointed stars |
+| `plate-honeycomb` | honeycomb | original | hexagon cells with an even web |
+| `plate-concentric` | concentric circles | original | ring slots, each held by three staggered bridges |
+| `plate-spiral` | spiral | original | a double spiral slot |
+| `plate-skyline` | cityscape skyline | original | towers with lit windows and a water tower against an open sky |
+| `plate-starburst-fine` | starburst fine | original | 48 narrow wedge rays |
+| `plate-starburst-bold` | starburst bold | original | 16 wide wedge rays |
+| `plate-deco-fan` | Art Deco fan | original | a rising sun of cells in three bands, rays and stripes |
+| `plate-diagonal-blinds` | diagonal blinds | original | slats at 35 degrees |
+| `plate-portholes` | porthole grid | original | round holes in a hex grid with crossed bars |
+| `plate-god-rays` | god rays | original | shafts fanning down from a cloud band with a broken silver lining |
+| `plate-wave-lines` | wave lines | original | wavy slots |
+| `plate-triangles` | abstract triangles | original | scattered, turned triangles kept apart |
+| `plate-dapple-fine` | dappled light fine | original | many small soft spots clustered by noise |
+| `plate-dapple-bold` | dappled light bold | original | fewer, bigger spots |
+| `plate-mesh-fence` | mesh fence | original | a chain link of diamond holes |
+| `plate-curtain-window` | window with curtains | original | a 2 × 3 window, tied-back curtains with fold slits, a scalloped valance |
 
 ## Sources
 

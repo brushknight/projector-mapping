@@ -223,13 +223,13 @@ import PMTestSupport
 
     @Test func catalogKeepsParamOrder() throws {
         let cat = try Catalog.decode(Data(contentsOf: Fixtures.catalogURL))
-        #expect(cat.version == 4)
+        #expect(cat.version == 5)
         #expect(cat.videoParams.items.map(\.key) == ["blur", "brightness", "warmth", "drift", "start", "end", "audio", "volume"])
         #expect(cat.videoParams["blur"]?.default == 0.2)
         #expect(cat.videoDefaults["audio"] == false && cat.videoDefaults["brightness"] == 0.8)
         let drawing = try #require(cat.effects.first { $0.id == "drawing" })
         #expect(drawing.params["strokes"]?["type"] == "strokes")
-        #expect(cat.gobos.count == 33)
+        #expect(cat.gobos.count == 76)
         #expect(cat.procedural("tree-sway")?.params.items.map(\.key) == ["wind", "gust", "focus", "seed"])
         #expect(cat.photoParams.items.map(\.key) == ["blur", "brightness", "warmth", "drift"])
         #expect(cat.gradientParams.items.map(\.key) == ["angle", "drift", "grain", "brightness"])

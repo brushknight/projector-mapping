@@ -99,6 +99,7 @@ enum GoboFallback {
         default: break
         }
         switch category {
+        case "plates": return "spot"
         case "windows": return "window"
         case "blinds": return "blinds"
         case "nature": return "tree"
@@ -108,13 +109,14 @@ enum GoboFallback {
     }
 }
 
-/// A gobo's thumbnail: the server's render, or the native art.
+/// A gobo's thumbnail: the server's render, or the native art. `metal` shows a plate as the metal disc itself.
 struct GoboThumb: View {
     var gobo: String
+    var metal = false
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        CatalogThumb(gobo) {
+        CatalogThumb(metal ? model.catalog.metalThumbId(gobo) ?? gobo : gobo) {
             GoboArt(GoboFallback.art(gobo, category: model.catalog.gobo(gobo)?.browseCategory ?? ""))
         }
     }

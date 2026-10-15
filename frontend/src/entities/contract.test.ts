@@ -134,8 +134,13 @@ describe('contract fixtures', () => {
     expect(scene.backdrop.static.attachments?.[0].gobo).toBe('window')
     expect(scene.backdrop.static.attachments?.[0].motion?.preset).toBe('sun-lr')
     const cat = read('catalog.json')
-    expect(cat.version).toBe(4)
+    expect(cat.version).toBe(5)
     expect(cat.gobos.length).toBeGreaterThanOrEqual(30)
+    // (catalog 5) metal plates carry their metal thumbnail; the replicas say where they come from
+    const plates = cat.gobos.filter((g: { category: string }) => g.category === 'plates')
+    expect(plates.length).toBe(43)
+    for (const g of plates) expect(g.metalThumb).toBe(`thumbs/${g.id}-metal.png`)
+    expect(plates.filter((g: { source?: string }) => g.source?.startsWith('inspired by Amaran AS-GB-M MO'))).toHaveLength(20)
     for (const g of cat.gobos) expect(cat.goboCategories.map((c: { id: string }) => c.id)).toContain(g.category)
     expect(cat.motionPresets.map((m: { id: string }) => m.id)).toEqual(['sun-lr', 'sun-rl', 'drift', 'sway', 'rise', 'set'])
     // an attachment needs its gobo

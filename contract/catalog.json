@@ -1,5 +1,5 @@
 {
- "version": 4,
+ "version": 5,
  "paramSchemaNote": "each param: {type: number|integer|boolean|color|enum|string|strokes, min?, max?, step?, default, label?, unit?, options?}; strokes is an array of drawing strokes (protocol §1, effect drawing); an attachment's params validate against goboParams merged with its gobo's own params; a generator layer or colour layer validates against its colorGenerators params",
  "light": {
   "params": {
@@ -186,6 +186,10 @@
   {
    "id": "spots",
    "name": "spots"
+  },
+  {
+   "id": "plates",
+   "name": "plates"
   }
  ],
  "gobos": [
@@ -1341,6 +1345,1273 @@
     "rotation": 0
    },
    "focus": 0.95,
+   "defaults": {
+    "depth": 0
+   }
+  },
+  {
+   "id": "plate-sunburst",
+   "name": "sunburst",
+   "description": "thin rays round an empty centre, long and short in turn",
+   "category": "plates",
+   "thumb": "thumbs/plate-sunburst.png",
+   "metalThumb": "thumbs/plate-sunburst-metal.png",
+   "source": "inspired by Amaran AS-GB-M MO05",
+   "params": {
+    "field": {
+     "type": "enum",
+     "options": [
+      "round",
+      "fill",
+      "stretch",
+      "tile"
+     ],
+     "default": "round",
+     "label": "light field"
+    }
+   },
+   "attachment": {
+    "scale": 1,
+    "rotation": 0
+   },
+   "focus": 0.82,
+   "defaults": {
+    "depth": 0
+   }
+  },
+  {
+   "id": "plate-louvre",
+   "name": "louvre",
+   "description": "wide horizontal slats in a round field",
+   "category": "plates",
+   "thumb": "thumbs/plate-louvre.png",
+   "metalThumb": "thumbs/plate-louvre-metal.png",
+   "source": "inspired by Amaran AS-GB-M MO06",
+   "params": {
+    "field": {
+     "type": "enum",
+     "options": [
+      "round",
+      "fill",
+      "stretch",
+      "tile"
+     ],
+     "default": "round",
+     "label": "light field"
+    }
+   },
+   "attachment": {
+    "scale": 1,
+    "rotation": 0
+   },
+   "focus": 0.82,
+   "defaults": {
+    "depth": 0
+   }
+  },
+  {
+   "id": "plate-rain-lines",
+   "name": "rain lines",
+   "description": "thin vertical streaks of many lengths",
+   "category": "plates",
+   "thumb": "thumbs/plate-rain-lines.png",
+   "metalThumb": "thumbs/plate-rain-lines-metal.png",
+   "source": "inspired by Amaran AS-GB-M MO07",
+   "params": {
+    "field": {
+     "type": "enum",
+     "options": [
+      "round",
+      "fill",
+      "stretch",
+      "tile"
+     ],
+     "default": "round",
+     "label": "light field"
+    }
+   },
+   "attachment": {
+    "scale": 1,
+    "rotation": 0
+   },
+   "focus": 0.82,
+   "defaults": {
+    "depth": 0
+   }
+  },
+  {
+   "id": "plate-fan-rays",
+   "name": "fan rays",
+   "description": "wedge rays fanning up from below",
+   "category": "plates",
+   "thumb": "thumbs/plate-fan-rays.png",
+   "metalThumb": "thumbs/plate-fan-rays-metal.png",
+   "source": "inspired by Amaran AS-GB-M MO08",
+   "params": {
+    "field": {
+     "type": "enum",
+     "options": [
+      "round",
+      "fill",
+      "stretch",
+      "tile"
+     ],
+     "default": "round",
+     "label": "light field"
+    }
+   },
+   "attachment": {
+    "scale": 1,
+    "rotation": 0
+   },
+   "focus": 0.82,
+   "defaults": {
+    "depth": 0
+   }
+  },
+  {
+   "id": "plate-skewed-window",
+   "name": "skewed window",
+   "description": "a window seen at an angle, panes in perspective",
+   "category": "plates",
+   "thumb": "thumbs/plate-skewed-window.png",
+   "metalThumb": "thumbs/plate-skewed-window-metal.png",
+   "source": "inspired by Amaran AS-GB-M MO09",
+   "params": {
+    "field": {
+     "type": "enum",
+     "options": [
+      "round",
+      "fill",
+      "stretch",
+      "tile"
+     ],
+     "default": "round",
+     "label": "light field"
+    }
+   },
+   "attachment": {
+    "scale": 1,
+    "rotation": 0
+   },
+   "focus": 0.82,
+   "defaults": {
+    "depth": 0
+   }
+  },
+  {
+   "id": "plate-grid-window",
+   "name": "6-pane grid window",
+   "description": "two sashes side by side with a grid of panes",
+   "category": "plates",
+   "thumb": "thumbs/plate-grid-window.png",
+   "metalThumb": "thumbs/plate-grid-window-metal.png",
+   "source": "inspired by Amaran AS-GB-M MO10",
+   "params": {
+    "field": {
+     "type": "enum",
+     "options": [
+      "round",
+      "fill",
+      "stretch",
+      "tile"
+     ],
+     "default": "round",
+     "label": "light field"
+    }
+   },
+   "attachment": {
+    "scale": 1,
+    "rotation": 0
+   },
+   "focus": 0.82,
+   "defaults": {
+    "depth": 0
+   }
+  },
+  {
+   "id": "plate-arched-window",
+   "name": "arched window",
+   "description": "a tall round-headed window with a fan light",
+   "category": "plates",
+   "thumb": "thumbs/plate-arched-window.png",
+   "metalThumb": "thumbs/plate-arched-window-metal.png",
+   "source": "inspired by Amaran AS-GB-M MO11",
+   "params": {
+    "field": {
+     "type": "enum",
+     "options": [
+      "round",
+      "fill",
+      "stretch",
+      "tile"
+     ],
+     "default": "round",
+     "label": "light field"
+    }
+   },
+   "attachment": {
+    "scale": 1,
+    "rotation": 0
+   },
+   "focus": 0.82,
+   "defaults": {
+    "depth": 0
+   }
+  },
+  {
+   "id": "plate-crossed-lines",
+   "name": "crossed lines",
+   "description": "an open field crossed by thin wires",
+   "category": "plates",
+   "thumb": "thumbs/plate-crossed-lines.png",
+   "metalThumb": "thumbs/plate-crossed-lines-metal.png",
+   "source": "inspired by Amaran AS-GB-M MO12",
+   "params": {
+    "field": {
+     "type": "enum",
+     "options": [
+      "round",
+      "fill",
+      "stretch",
+      "tile"
+     ],
+     "default": "round",
+     "label": "light field"
+    }
+   },
+   "attachment": {
+    "scale": 1,
+    "rotation": 0
+   },
+   "focus": 0.82,
+   "defaults": {
+    "depth": 0
+   }
+  },
+  {
+   "id": "plate-scattered-sticks",
+   "name": "scattered sticks",
+   "description": "short sticks scattered every way, some forked",
+   "category": "plates",
+   "thumb": "thumbs/plate-scattered-sticks.png",
+   "metalThumb": "thumbs/plate-scattered-sticks-metal.png",
+   "source": "inspired by Amaran AS-GB-M MO13",
+   "params": {
+    "field": {
+     "type": "enum",
+     "options": [
+      "round",
+      "fill",
+      "stretch",
+      "tile"
+     ],
+     "default": "round",
+     "label": "light field"
+    }
+   },
+   "attachment": {
+    "scale": 1,
+    "rotation": 0
+   },
+   "focus": 0.82,
+   "defaults": {
+    "depth": 0
+   }
+  },
+  {
+   "id": "plate-pixel-cloud",
+   "name": "pixel cloud",
+   "description": "a cloud of square pixels",
+   "category": "plates",
+   "thumb": "thumbs/plate-pixel-cloud.png",
+   "metalThumb": "thumbs/plate-pixel-cloud-metal.png",
+   "source": "inspired by Amaran AS-GB-M MO14",
+   "params": {
+    "field": {
+     "type": "enum",
+     "options": [
+      "round",
+      "fill",
+      "stretch",
+      "tile"
+     ],
+     "default": "round",
+     "label": "light field"
+    }
+   },
+   "attachment": {
+    "scale": 1,
+    "rotation": 0
+   },
+   "focus": 0.82,
+   "defaults": {
+    "depth": 0
+   }
+  },
+  {
+   "id": "plate-water-ripples",
+   "name": "water ripples",
+   "description": "rows of thin wavy slivers, like light off water",
+   "category": "plates",
+   "thumb": "thumbs/plate-water-ripples.png",
+   "metalThumb": "thumbs/plate-water-ripples-metal.png",
+   "source": "inspired by Amaran AS-GB-M MO15",
+   "params": {
+    "field": {
+     "type": "enum",
+     "options": [
+      "round",
+      "fill",
+      "stretch",
+      "tile"
+     ],
+     "default": "round",
+     "label": "light field"
+    }
+   },
+   "attachment": {
+    "scale": 1,
+    "rotation": 0
+   },
+   "focus": 0.82,
+   "defaults": {
+    "depth": 0
+   }
+  },
+  {
+   "id": "plate-snowflakes",
+   "name": "snowflakes",
+   "description": "ten crisp snowflakes of three sizes",
+   "category": "plates",
+   "thumb": "thumbs/plate-snowflakes.png",
+   "metalThumb": "thumbs/plate-snowflakes-metal.png",
+   "source": "inspired by Amaran AS-GB-M MO16",
+   "params": {
+    "field": {
+     "type": "enum",
+     "options": [
+      "round",
+      "fill",
+      "stretch",
+      "tile"
+     ],
+     "default": "round",
+     "label": "light field"
+    }
+   },
+   "attachment": {
+    "scale": 1,
+    "rotation": 0
+   },
+   "focus": 0.82,
+   "defaults": {
+    "depth": 0
+   }
+  },
+  {
+   "id": "plate-lightning",
+   "name": "lightning",
+   "description": "two forked lightning bolts",
+   "category": "plates",
+   "thumb": "thumbs/plate-lightning.png",
+   "metalThumb": "thumbs/plate-lightning-metal.png",
+   "source": "inspired by Amaran AS-GB-M MO17",
+   "params": {
+    "field": {
+     "type": "enum",
+     "options": [
+      "round",
+      "fill",
+      "stretch",
+      "tile"
+     ],
+     "default": "round",
+     "label": "light field"
+    }
+   },
+   "attachment": {
+    "scale": 1,
+    "rotation": 0
+   },
+   "focus": 0.82,
+   "defaults": {
+    "depth": 0
+   }
+  },
+  {
+   "id": "plate-starfield",
+   "name": "starfield",
+   "description": "stars in loose clusters, sparkles and two little nebulae",
+   "category": "plates",
+   "thumb": "thumbs/plate-starfield.png",
+   "metalThumb": "thumbs/plate-starfield-metal.png",
+   "source": "inspired by Amaran AS-GB-M MO18",
+   "params": {
+    "field": {
+     "type": "enum",
+     "options": [
+      "round",
+      "fill",
+      "stretch",
+      "tile"
+     ],
+     "default": "round",
+     "label": "light field"
+    }
+   },
+   "attachment": {
+    "scale": 1,
+    "rotation": 0
+   },
+   "focus": 0.82,
+   "defaults": {
+    "depth": 0
+   }
+  },
+  {
+   "id": "plate-flames",
+   "name": "flames",
+   "description": "licking flame tongues over a big fire",
+   "category": "plates",
+   "thumb": "thumbs/plate-flames.png",
+   "metalThumb": "thumbs/plate-flames-metal.png",
+   "source": "inspired by Amaran AS-GB-M MO19",
+   "params": {
+    "field": {
+     "type": "enum",
+     "options": [
+      "round",
+      "fill",
+      "stretch",
+      "tile"
+     ],
+     "default": "round",
+     "label": "light field"
+    }
+   },
+   "attachment": {
+    "scale": 1,
+    "rotation": 0
+   },
+   "focus": 0.82,
+   "defaults": {
+    "depth": 0
+   }
+  },
+  {
+   "id": "plate-firework-burst",
+   "name": "firework burst",
+   "description": "fine trails bursting from a point and drooping",
+   "category": "plates",
+   "thumb": "thumbs/plate-firework-burst.png",
+   "metalThumb": "thumbs/plate-firework-burst-metal.png",
+   "source": "inspired by Amaran AS-GB-M MO20",
+   "params": {
+    "field": {
+     "type": "enum",
+     "options": [
+      "round",
+      "fill",
+      "stretch",
+      "tile"
+     ],
+     "default": "round",
+     "label": "light field"
+    }
+   },
+   "attachment": {
+    "scale": 1,
+    "rotation": 0
+   },
+   "focus": 0.82,
+   "defaults": {
+    "depth": 0
+   }
+  },
+  {
+   "id": "plate-bare-branches",
+   "name": "bare branches",
+   "description": "trunks and twigs of a bare tree against the light",
+   "category": "plates",
+   "thumb": "thumbs/plate-bare-branches.png",
+   "metalThumb": "thumbs/plate-bare-branches-metal.png",
+   "source": "inspired by Amaran AS-GB-M MO21",
+   "params": {
+    "field": {
+     "type": "enum",
+     "options": [
+      "round",
+      "fill",
+      "stretch",
+      "tile"
+     ],
+     "default": "round",
+     "label": "light field"
+    }
+   },
+   "attachment": {
+    "scale": 1,
+    "rotation": 0
+   },
+   "focus": 0.82,
+   "defaults": {
+    "depth": 0
+   }
+  },
+  {
+   "id": "plate-fern-leaves",
+   "name": "fern leaves",
+   "description": "fronds of long narrow leaflets hanging from the top",
+   "category": "plates",
+   "thumb": "thumbs/plate-fern-leaves.png",
+   "metalThumb": "thumbs/plate-fern-leaves-metal.png",
+   "source": "inspired by Amaran AS-GB-M MO22",
+   "params": {
+    "field": {
+     "type": "enum",
+     "options": [
+      "round",
+      "fill",
+      "stretch",
+      "tile"
+     ],
+     "default": "round",
+     "label": "light field"
+    }
+   },
+   "attachment": {
+    "scale": 1,
+    "rotation": 0
+   },
+   "focus": 0.82,
+   "defaults": {
+    "depth": 0
+   }
+  },
+  {
+   "id": "plate-foliage-breakup",
+   "name": "foliage breakup",
+   "description": "a dense breakup of small leafy shards",
+   "category": "plates",
+   "thumb": "thumbs/plate-foliage-breakup.png",
+   "metalThumb": "thumbs/plate-foliage-breakup-metal.png",
+   "source": "inspired by Amaran AS-GB-M MO23",
+   "params": {
+    "field": {
+     "type": "enum",
+     "options": [
+      "round",
+      "fill",
+      "stretch",
+      "tile"
+     ],
+     "default": "round",
+     "label": "light field"
+    }
+   },
+   "attachment": {
+    "scale": 1,
+    "rotation": 0
+   },
+   "focus": 0.82,
+   "defaults": {
+    "depth": 0
+   }
+  },
+  {
+   "id": "plate-rings",
+   "name": "rings",
+   "description": "three crescent rings woven over and under",
+   "category": "plates",
+   "thumb": "thumbs/plate-rings.png",
+   "metalThumb": "thumbs/plate-rings-metal.png",
+   "source": "inspired by Amaran AS-GB-M MO24",
+   "params": {
+    "field": {
+     "type": "enum",
+     "options": [
+      "round",
+      "fill",
+      "stretch",
+      "tile"
+     ],
+     "default": "round",
+     "label": "light field"
+    }
+   },
+   "attachment": {
+    "scale": 1,
+    "rotation": 0
+   },
+   "focus": 0.82,
+   "defaults": {
+    "depth": 0
+   }
+  },
+  {
+   "id": "plate-curved-venetian",
+   "name": "curved venetian",
+   "description": "venetian blinds bowed across a curved wall",
+   "category": "plates",
+   "thumb": "thumbs/plate-curved-venetian.png",
+   "metalThumb": "thumbs/plate-curved-venetian-metal.png",
+   "params": {
+    "field": {
+     "type": "enum",
+     "options": [
+      "round",
+      "fill",
+      "stretch",
+      "tile"
+     ],
+     "default": "round",
+     "label": "light field"
+    }
+   },
+   "attachment": {
+    "scale": 1,
+    "rotation": 0
+   },
+   "focus": 0.82,
+   "defaults": {
+    "depth": 0
+   }
+  },
+  {
+   "id": "plate-bamboo-stalks",
+   "name": "bamboo stalks",
+   "description": "bamboo stalks and leaf sprays against the light",
+   "category": "plates",
+   "thumb": "thumbs/plate-bamboo-stalks.png",
+   "metalThumb": "thumbs/plate-bamboo-stalks-metal.png",
+   "params": {
+    "field": {
+     "type": "enum",
+     "options": [
+      "round",
+      "fill",
+      "stretch",
+      "tile"
+     ],
+     "default": "round",
+     "label": "light field"
+    }
+   },
+   "attachment": {
+    "scale": 1,
+    "rotation": 0
+   },
+   "focus": 0.82,
+   "defaults": {
+    "depth": 0
+   }
+  },
+  {
+   "id": "plate-palm-silhouette",
+   "name": "palm silhouette",
+   "description": "two palm trees against a bright sky",
+   "category": "plates",
+   "thumb": "thumbs/plate-palm-silhouette.png",
+   "metalThumb": "thumbs/plate-palm-silhouette-metal.png",
+   "params": {
+    "field": {
+     "type": "enum",
+     "options": [
+      "round",
+      "fill",
+      "stretch",
+      "tile"
+     ],
+     "default": "round",
+     "label": "light field"
+    }
+   },
+   "attachment": {
+    "scale": 1,
+    "rotation": 0
+   },
+   "focus": 0.82,
+   "defaults": {
+    "depth": 0
+   }
+  },
+  {
+   "id": "plate-monstera",
+   "name": "monstera leaves",
+   "description": "split monstera leaves on long stalks",
+   "category": "plates",
+   "thumb": "thumbs/plate-monstera.png",
+   "metalThumb": "thumbs/plate-monstera-metal.png",
+   "params": {
+    "field": {
+     "type": "enum",
+     "options": [
+      "round",
+      "fill",
+      "stretch",
+      "tile"
+     ],
+     "default": "round",
+     "label": "light field"
+    }
+   },
+   "attachment": {
+    "scale": 1,
+    "rotation": 0
+   },
+   "focus": 0.82,
+   "defaults": {
+    "depth": 0
+   }
+  },
+  {
+   "id": "plate-jungle-breakup",
+   "name": "jungle breakup",
+   "description": "vines and big leaves, a dense canopy with light between",
+   "category": "plates",
+   "thumb": "thumbs/plate-jungle-breakup.png",
+   "metalThumb": "thumbs/plate-jungle-breakup-metal.png",
+   "params": {
+    "field": {
+     "type": "enum",
+     "options": [
+      "round",
+      "fill",
+      "stretch",
+      "tile"
+     ],
+     "default": "round",
+     "label": "light field"
+    }
+   },
+   "attachment": {
+    "scale": 1,
+    "rotation": 0
+   },
+   "focus": 0.82,
+   "defaults": {
+    "depth": 0
+   }
+  },
+  {
+   "id": "plate-stained-glass",
+   "name": "stained-glass grid",
+   "description": "square panes with diamond cames and ringed bosses",
+   "category": "plates",
+   "thumb": "thumbs/plate-stained-glass.png",
+   "metalThumb": "thumbs/plate-stained-glass-metal.png",
+   "params": {
+    "field": {
+     "type": "enum",
+     "options": [
+      "round",
+      "fill",
+      "stretch",
+      "tile"
+     ],
+     "default": "round",
+     "label": "light field"
+    }
+   },
+   "attachment": {
+    "scale": 1,
+    "rotation": 0
+   },
+   "focus": 0.82,
+   "defaults": {
+    "depth": 0
+   }
+  },
+  {
+   "id": "plate-moroccan-arch",
+   "name": "Moroccan arch lattice",
+   "description": "rows of pointed horseshoe arches and stars",
+   "category": "plates",
+   "thumb": "thumbs/plate-moroccan-arch.png",
+   "metalThumb": "thumbs/plate-moroccan-arch-metal.png",
+   "params": {
+    "field": {
+     "type": "enum",
+     "options": [
+      "round",
+      "fill",
+      "stretch",
+      "tile"
+     ],
+     "default": "round",
+     "label": "light field"
+    }
+   },
+   "attachment": {
+    "scale": 1,
+    "rotation": 0
+   },
+   "focus": 0.82,
+   "defaults": {
+    "depth": 0
+   }
+  },
+  {
+   "id": "plate-honeycomb",
+   "name": "honeycomb",
+   "description": "hexagon cells with an even web",
+   "category": "plates",
+   "thumb": "thumbs/plate-honeycomb.png",
+   "metalThumb": "thumbs/plate-honeycomb-metal.png",
+   "params": {
+    "field": {
+     "type": "enum",
+     "options": [
+      "round",
+      "fill",
+      "stretch",
+      "tile"
+     ],
+     "default": "round",
+     "label": "light field"
+    }
+   },
+   "attachment": {
+    "scale": 1,
+    "rotation": 0
+   },
+   "focus": 0.82,
+   "defaults": {
+    "depth": 0
+   }
+  },
+  {
+   "id": "plate-concentric",
+   "name": "concentric circles",
+   "description": "ring slots held by staggered bridges",
+   "category": "plates",
+   "thumb": "thumbs/plate-concentric.png",
+   "metalThumb": "thumbs/plate-concentric-metal.png",
+   "params": {
+    "field": {
+     "type": "enum",
+     "options": [
+      "round",
+      "fill",
+      "stretch",
+      "tile"
+     ],
+     "default": "round",
+     "label": "light field"
+    }
+   },
+   "attachment": {
+    "scale": 1,
+    "rotation": 0
+   },
+   "focus": 0.82,
+   "defaults": {
+    "depth": 0
+   }
+  },
+  {
+   "id": "plate-spiral",
+   "name": "spiral",
+   "description": "a double spiral slot from the centre out",
+   "category": "plates",
+   "thumb": "thumbs/plate-spiral.png",
+   "metalThumb": "thumbs/plate-spiral-metal.png",
+   "params": {
+    "field": {
+     "type": "enum",
+     "options": [
+      "round",
+      "fill",
+      "stretch",
+      "tile"
+     ],
+     "default": "round",
+     "label": "light field"
+    }
+   },
+   "attachment": {
+    "scale": 1,
+    "rotation": 0
+   },
+   "focus": 0.82,
+   "defaults": {
+    "depth": 0
+   }
+  },
+  {
+   "id": "plate-skyline",
+   "name": "cityscape skyline",
+   "description": "towers with lit windows against an open sky",
+   "category": "plates",
+   "thumb": "thumbs/plate-skyline.png",
+   "metalThumb": "thumbs/plate-skyline-metal.png",
+   "params": {
+    "field": {
+     "type": "enum",
+     "options": [
+      "round",
+      "fill",
+      "stretch",
+      "tile"
+     ],
+     "default": "round",
+     "label": "light field"
+    }
+   },
+   "attachment": {
+    "scale": 1,
+    "rotation": 0
+   },
+   "focus": 0.82,
+   "defaults": {
+    "depth": 0
+   }
+  },
+  {
+   "id": "plate-starburst-fine",
+   "name": "starburst fine",
+   "description": "forty eight narrow rays from the centre",
+   "category": "plates",
+   "thumb": "thumbs/plate-starburst-fine.png",
+   "metalThumb": "thumbs/plate-starburst-fine-metal.png",
+   "params": {
+    "field": {
+     "type": "enum",
+     "options": [
+      "round",
+      "fill",
+      "stretch",
+      "tile"
+     ],
+     "default": "round",
+     "label": "light field"
+    }
+   },
+   "attachment": {
+    "scale": 1,
+    "rotation": 0
+   },
+   "focus": 0.82,
+   "defaults": {
+    "depth": 0
+   }
+  },
+  {
+   "id": "plate-starburst-bold",
+   "name": "starburst bold",
+   "description": "sixteen wide rays from the centre",
+   "category": "plates",
+   "thumb": "thumbs/plate-starburst-bold.png",
+   "metalThumb": "thumbs/plate-starburst-bold-metal.png",
+   "params": {
+    "field": {
+     "type": "enum",
+     "options": [
+      "round",
+      "fill",
+      "stretch",
+      "tile"
+     ],
+     "default": "round",
+     "label": "light field"
+    }
+   },
+   "attachment": {
+    "scale": 1,
+    "rotation": 0
+   },
+   "focus": 0.82,
+   "defaults": {
+    "depth": 0
+   }
+  },
+  {
+   "id": "plate-deco-fan",
+   "name": "Art Deco fan",
+   "description": "a rising sun of cells with rays and stripes",
+   "category": "plates",
+   "thumb": "thumbs/plate-deco-fan.png",
+   "metalThumb": "thumbs/plate-deco-fan-metal.png",
+   "params": {
+    "field": {
+     "type": "enum",
+     "options": [
+      "round",
+      "fill",
+      "stretch",
+      "tile"
+     ],
+     "default": "round",
+     "label": "light field"
+    }
+   },
+   "attachment": {
+    "scale": 1,
+    "rotation": 0
+   },
+   "focus": 0.82,
+   "defaults": {
+    "depth": 0
+   }
+  },
+  {
+   "id": "plate-diagonal-blinds",
+   "name": "diagonal blinds",
+   "description": "blinds at a slant",
+   "category": "plates",
+   "thumb": "thumbs/plate-diagonal-blinds.png",
+   "metalThumb": "thumbs/plate-diagonal-blinds-metal.png",
+   "params": {
+    "field": {
+     "type": "enum",
+     "options": [
+      "round",
+      "fill",
+      "stretch",
+      "tile"
+     ],
+     "default": "round",
+     "label": "light field"
+    }
+   },
+   "attachment": {
+    "scale": 1,
+    "rotation": 0
+   },
+   "focus": 0.82,
+   "defaults": {
+    "depth": 0
+   }
+  },
+  {
+   "id": "plate-portholes",
+   "name": "porthole grid",
+   "description": "round portholes with crossed bars",
+   "category": "plates",
+   "thumb": "thumbs/plate-portholes.png",
+   "metalThumb": "thumbs/plate-portholes-metal.png",
+   "params": {
+    "field": {
+     "type": "enum",
+     "options": [
+      "round",
+      "fill",
+      "stretch",
+      "tile"
+     ],
+     "default": "round",
+     "label": "light field"
+    }
+   },
+   "attachment": {
+    "scale": 1,
+    "rotation": 0
+   },
+   "focus": 0.82,
+   "defaults": {
+    "depth": 0
+   }
+  },
+  {
+   "id": "plate-god-rays",
+   "name": "god rays",
+   "description": "shafts of light fanning down from behind clouds",
+   "category": "plates",
+   "thumb": "thumbs/plate-god-rays.png",
+   "metalThumb": "thumbs/plate-god-rays-metal.png",
+   "params": {
+    "field": {
+     "type": "enum",
+     "options": [
+      "round",
+      "fill",
+      "stretch",
+      "tile"
+     ],
+     "default": "round",
+     "label": "light field"
+    }
+   },
+   "attachment": {
+    "scale": 1,
+    "rotation": 0
+   },
+   "focus": 0.82,
+   "defaults": {
+    "depth": 0
+   }
+  },
+  {
+   "id": "plate-wave-lines",
+   "name": "wave lines",
+   "description": "wavy line slots across the field",
+   "category": "plates",
+   "thumb": "thumbs/plate-wave-lines.png",
+   "metalThumb": "thumbs/plate-wave-lines-metal.png",
+   "params": {
+    "field": {
+     "type": "enum",
+     "options": [
+      "round",
+      "fill",
+      "stretch",
+      "tile"
+     ],
+     "default": "round",
+     "label": "light field"
+    }
+   },
+   "attachment": {
+    "scale": 1,
+    "rotation": 0
+   },
+   "focus": 0.82,
+   "defaults": {
+    "depth": 0
+   }
+  },
+  {
+   "id": "plate-triangles",
+   "name": "abstract triangles",
+   "description": "triangles of many sizes, scattered and turned",
+   "category": "plates",
+   "thumb": "thumbs/plate-triangles.png",
+   "metalThumb": "thumbs/plate-triangles-metal.png",
+   "params": {
+    "field": {
+     "type": "enum",
+     "options": [
+      "round",
+      "fill",
+      "stretch",
+      "tile"
+     ],
+     "default": "round",
+     "label": "light field"
+    }
+   },
+   "attachment": {
+    "scale": 1,
+    "rotation": 0
+   },
+   "focus": 0.82,
+   "defaults": {
+    "depth": 0
+   }
+  },
+  {
+   "id": "plate-dapple-fine",
+   "name": "dappled light fine",
+   "description": "many small soft spots, as under a canopy",
+   "category": "plates",
+   "thumb": "thumbs/plate-dapple-fine.png",
+   "metalThumb": "thumbs/plate-dapple-fine-metal.png",
+   "params": {
+    "field": {
+     "type": "enum",
+     "options": [
+      "round",
+      "fill",
+      "stretch",
+      "tile"
+     ],
+     "default": "round",
+     "label": "light field"
+    }
+   },
+   "attachment": {
+    "scale": 1,
+    "rotation": 0
+   },
+   "focus": 0.82,
+   "defaults": {
+    "depth": 0
+   }
+  },
+  {
+   "id": "plate-dapple-bold",
+   "name": "dappled light bold",
+   "description": "fewer big soft spots, as under a canopy",
+   "category": "plates",
+   "thumb": "thumbs/plate-dapple-bold.png",
+   "metalThumb": "thumbs/plate-dapple-bold-metal.png",
+   "params": {
+    "field": {
+     "type": "enum",
+     "options": [
+      "round",
+      "fill",
+      "stretch",
+      "tile"
+     ],
+     "default": "round",
+     "label": "light field"
+    }
+   },
+   "attachment": {
+    "scale": 1,
+    "rotation": 0
+   },
+   "focus": 0.82,
+   "defaults": {
+    "depth": 0
+   }
+  },
+  {
+   "id": "plate-mesh-fence",
+   "name": "mesh fence",
+   "description": "a chain link fence of diamond holes",
+   "category": "plates",
+   "thumb": "thumbs/plate-mesh-fence.png",
+   "metalThumb": "thumbs/plate-mesh-fence-metal.png",
+   "params": {
+    "field": {
+     "type": "enum",
+     "options": [
+      "round",
+      "fill",
+      "stretch",
+      "tile"
+     ],
+     "default": "round",
+     "label": "light field"
+    }
+   },
+   "attachment": {
+    "scale": 1,
+    "rotation": 0
+   },
+   "focus": 0.82,
+   "defaults": {
+    "depth": 0
+   }
+  },
+  {
+   "id": "plate-curtain-window",
+   "name": "window with curtains",
+   "description": "a window with curtains tied back and a valance",
+   "category": "plates",
+   "thumb": "thumbs/plate-curtain-window.png",
+   "metalThumb": "thumbs/plate-curtain-window-metal.png",
+   "params": {
+    "field": {
+     "type": "enum",
+     "options": [
+      "round",
+      "fill",
+      "stretch",
+      "tile"
+     ],
+     "default": "round",
+     "label": "light field"
+    }
+   },
+   "attachment": {
+    "scale": 1,
+    "rotation": 0
+   },
+   "focus": 0.82,
    "defaults": {
     "depth": 0
    }

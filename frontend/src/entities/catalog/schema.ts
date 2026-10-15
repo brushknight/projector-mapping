@@ -11,7 +11,7 @@ export const catalogShape = obj({
   stackLight: optional(obj({ params: schema, kelvin: num, attachmentParams: schema })),
   goboParams: optional(schema),
   goboCategories: optional(arr(obj({ id: str, name: str }))),
-  gobos: arr(obj({ ...item, thumb: optional(str), params: optional(schema), attachment: optional(obj({ scale: num, rotation: num })), focus: optional(num), defaults: optional(record(num)) })),
+  gobos: arr(obj({ ...item, thumb: optional(str), metalThumb: optional(str), source: optional(str), params: optional(schema), attachment: optional(obj({ scale: num, rotation: num })), focus: optional(num), defaults: optional(record(num)) })),
   procedural: arr(obj({ ...item, animated: bool, params: schema, thumb: optional(str) })),
   gradients: arr(obj({ ...item, defaults: obj({ stops: arr(obj({ color: str, pos: num })), angle: num, drift: num, grain: num, brightness: num }) })),
   gradientParams: schema,

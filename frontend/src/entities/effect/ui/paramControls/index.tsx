@@ -84,5 +84,6 @@ export function ParamControl({ name, spec, value, onChange }: { name: string; sp
 /** Friendlier words for a few enum values (trace: border → "along border"). */
 function enumLabel(param: string, v: string): string {
   if (param === 'mode' && v === 'border') return 'along border'
+  if (param === 'field' && v === 'fill') return 'fill frame'
   return v
 }

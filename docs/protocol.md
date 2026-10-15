@@ -958,9 +958,10 @@ timestamp, on subscribe and on every change.
 ## 15. Light, attachments, motion, scene kinds, viewer and agent live edits (2026-10-15)
 
 Additive on decode: every new field is optional and decodes to the default given here, so older documents load. The
-server upgrades stored scenes on start (below). The catalog `version` is 4. Fixtures: `scene.json` (static and live
-stacks with `light` and `attachments`, a motion, `kind`), `preset.json` (a static preset), `scene-summary.json`,
-`settings.json`, `ws-messages.json` (a slide `param` and a motion `patch`), and `catalog.json` itself.
+server upgrades stored scenes on start (below). The catalog `version` is 4 (5 with the plates, below). Fixtures:
+`scene.json` (static and live stacks with `light` and `attachments`, a motion, `kind`), `preset.json` (a static
+preset), `scene-summary.json`, `settings.json`, `ws-messages.json` (a slide `param` and a motion `patch`), and
+`catalog.json` itself.
 
 ### The light model
 
@@ -1040,8 +1041,8 @@ rejects layers in the static stack).
 ### Catalog version 4
 
 - `gobos` items: `{ id, name, description, category, thumb, params, attachment: { scale, rotation }, focus,
-  defaults }`. `category`: `windows` | `blinds` | `nature` | `patterns` | `spots` (listed with display names in
-  `goboCategories`). `thumb` is relative to `/catalog/assets/` (see Thumbnails). `attachment` holds the scale and
+  defaults }`. `category`: `windows` | `blinds` | `nature` | `patterns` | `spots`, and `plates` since version 5
+  (listed with display names in `goboCategories`). `thumb` is relative to `/catalog/assets/` (see Thumbnails). `attachment` holds the scale and
   rotation a new attachment of this gobo starts with, `focus` the focus that suits it, `defaults` overrides of
   `goboParams` defaults. The old ids stay (`window` is the 6-pane window, `tree` the medium leaves, `spot` the hard
   round spot). 33 attachments, see `docs/research/gobos.md`.
@@ -1055,6 +1056,30 @@ rejects layers in the static stack).
 - `motionPresets`: `[{ id, name, description, motion }]` (`sun-lr`, `sun-rl`, `drift`, `sway`, `rise`, `set`), the
   exact Motion a preset chip writes (with `startedAt` set by the client). `motionEasings`, `motionLoops`: the enums.
 - `sceneKinds`: `[{ id, name, mode, description }]`; `sceneTemplates`: `[{ id, kind, name, description }]`.
+
+### Catalog version 5: metal plates (2026-10-15)
+
+Additive: catalog `version` 5 adds a gobo category and two optional item fields; nothing else changes on the wire.
+
+- `goboCategories` gains `{ "id": "plates", "name": "plates" }`. A **plate** is a round laser-cut metal gobo: its
+  cut-outs let light through inside a round light field, the metal blocks it. 43 plates, ids `plate-<name>`
+  (`docs/research/gobos.md` §8 lists them).
+- A plate item carries `metalThumb` (relative to `/catalog/assets/`, `thumbs/<id>-metal.png`: the plate itself, a
+  grey disc with its cut-outs on a transparent ground) next to `thumb` (the light it projects), and, when the design
+  follows a real plate, `source` (for example `"inspired by Amaran AS-GB-M MO05"`). Other gobos have neither.
+- Every plate has one param of its own, **`field`** (enum `round` | `fill` | `stretch` | `tile`, default `round`,
+  label "light field"): `round` projects the round field of a spotlight's aperture; `fill` scales the plate's
+  square to cover the frame without distortion ("fill frame"); `stretch` stretches the square to the frame's
+  aspect; `tile` repeats the plate across the frame at its size. `defaults` sets `depth` 0. `throw`, `skew`,
+  `rotation`, `scale`, `offsetX`/`offsetY`, `opacity` and motion apply as for every attachment.
+- Renderers: a plate is vector paths in plate space (the unit circle, y down, viewBox `-1 -1 2 2`, field radius
+  per plate, about 0.84) rasterized once into a 2048 px mask texture; at scale 1 the field is 0.9 of the frame
+  height. The web engine keeps the sources in `frontend/src/render/plates/`. Other clients show the thumbnails.
+- `GET /catalog/thumbs/<id>-metal.png` serves the metal thumbnail like any other thumbnail.
+- Clients: the attachment browser gets a "plates" category; its tiles show the metal plate by default with a toggle
+  to show the light instead. The attachment card shows `field` as a segmented control (`fill` reads "fill frame").
+- MCP: `catalog_get { section: "gobos" }` lists plates with `category: "plates"` and `source`; `attachment_add`
+  and `gobo_set` take a plate id and `params.field`.
 
 ### Motion
 
@@ -1142,7 +1167,7 @@ when it has one. The viewer and the editor share nothing but the server.
 ### Thumbnails
 
 `GET /catalog/thumbs/<id>.png` (no auth, immutable cache headers): a 384 × 216 PNG of a gobo (one attachment under a
-warm light) or a procedural layer, rendered by the web engine at build time and embedded in the server
+warm light) or a procedural layer (and, for a plate, `<id>-metal.png`: the metal plate itself), rendered by the web engine at build time and embedded in the server
 (`/catalog/assets/thumbs/<id>.png` serves the same file; catalog items carry `thumb`). 404 for unknown ids.
 
 ### Settings

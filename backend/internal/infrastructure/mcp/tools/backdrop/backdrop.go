@@ -245,8 +245,12 @@ func catalogGet(ctx context.Context, e *tools.Env, in catalogIn) (*mcp.CallToolR
 			out := []map[string]any{}
 			for _, it := range c.Gobos {
 				g := c.Gobo(it.ID)
-				out = append(out, map[string]any{"id": g.ID, "name": g.Name, "category": g.Category, "description": g.Description,
-					"params": compactSchema(g.Params), "defaults": g.Defaults, "scale": g.Attachment.Scale, "rotation": g.Attachment.Rotation, "focus": g.Focus})
+				item := map[string]any{"id": g.ID, "name": g.Name, "category": g.Category, "description": g.Description,
+					"params": compactSchema(g.Params), "defaults": g.Defaults, "scale": g.Attachment.Scale, "rotation": g.Attachment.Rotation, "focus": g.Focus}
+				if g.Source != "" {
+					item["source"] = g.Source
+				}
+				out = append(out, item)
 			}
 			return map[string]any{"items": out, "goboParams": compactSchema(c.GoboParams), "light": compactSchema(c.StackLight.Params),
 				"attachment": compactSchema(c.StackLight.AttachmentParams), "kelvin": c.StackLight.Kelvin}, nil

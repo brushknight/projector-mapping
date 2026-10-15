@@ -7,7 +7,7 @@ import PMTestSupport
 @Suite struct LightModelTests {
     @Test func catalogV4() throws {
         let cat = try Catalog.decode(Data(contentsOf: Fixtures.catalogURL))
-        #expect(cat.goboCategories.map(\.id) == ["windows", "blinds", "nature", "patterns", "spots"])
+        #expect(cat.goboCategories.map(\.id) == ["windows", "blinds", "nature", "patterns", "spots", "plates"])
         #expect(cat.gobos(in: "windows").first?.id == "window-4")
         #expect(cat.gobos.allSatisfy { GoboCategory.known.contains($0.category) && $0.browseCategory == $0.category })
         let w4 = try #require(cat.gobo("window-4"))
@@ -31,11 +31,27 @@ import PMTestSupport
         #expect(cat.params(for: Layer(id: "g", kind: "generator", ref: "hue-cycle", name: "")).items.map(\.key) == ["speed", "saturation", "spread"])
     }
 
+    /// Catalog 5: metal gobo plates, with the plate's own thumbnail, where it comes from and its light field.
+    @Test func plates() throws {
+        let cat = try Catalog.decode(Data(contentsOf: Fixtures.catalogURL))
+        let plates = cat.gobos(in: "plates")
+        #expect(plates.count == 43)
+        let sun = try #require(cat.gobo("plate-sunburst"))
+        #expect(sun.name == "sunburst" && sun.source == "inspired by Amaran AS-GB-M MO05")
+        #expect(sun.metalThumb == "thumbs/plate-sunburst-metal.png" && cat.metalThumbId("plate-sunburst") == "plate-sunburst-metal")
+        #expect(cat.thumbId("plate-sunburst") == "plate-sunburst")
+        let field = try #require(sun.params["field"])
+        #expect(field.type == "enum" && field.options == ["round", "fill", "stretch", "tile"] && field.default == "round")
+        #expect(cat.newAttachment(sun).params["field"] == "round")
+        #expect(plates.filter { $0.source != nil }.count == 20)
+    }
+
     @Test func olderCatalogStillDecodes() throws {
         let v3 = #"{"version":3,"gobos":[{"id":"window","name":"window","category":"shadows"},{"id":"blinds","name":"blinds"},{"id":"palm","name":"palm"}]}"#
         let cat = try Catalog.decode(Data(v3.utf8))
         #expect(cat.gobos.map(\.browseCategory) == ["windows", "blinds", "nature"])
-        #expect(cat.goboCategories.count == 5 && cat.sceneKinds.count == 5 && cat.motionPresets.isEmpty)
+        #expect(cat.goboCategories.count == 6 && cat.sceneKinds.count == 5 && cat.motionPresets.isEmpty)
+        #expect(cat.metalThumbId("window") == nil)
         #expect(cat.newAttachment(cat.gobos[0]).params.isEmpty)
     }
 

@@ -21,7 +21,11 @@ export const SHAPE = {
   leaves: 10, palm: 11, branch: 12, ivy: 13, bamboo: 14,
   dots: 15, lattice: 16, moroccan: 17, honeycomb: 18, stripes: 19, grid: 20, stars: 21, water: 22,
   spot: 23, framing: 24, iris: 25,
+  plate: 26,
 } as const
+
+/** (plates) plate units per gobo unit at scale 1: a plate's round field of radius 0.84 is 0.9 of the frame height. */
+export const PLATE_SCALE = 0.54
 
 const KELVIN_GLSL = `
 // blackbody colour (Tanner Helland's fit), brightest channel 1
@@ -102,6 +106,7 @@ void main() {
 
 export const SHAPES_GLSL = `
 const float PI = 3.14159265;
+uniform sampler2D u_plate;    // (plates) the bound plate's mask: openings white, plate space -1..1 across the square
 float sdBox(vec2 p, vec2 b) { vec2 d = abs(p) - b; return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0); }
 float sdSeg(vec2 p, vec2 a, vec2 b) { vec2 pa = p - a, ba = b - a; float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0); return length(pa - ba * h); }
 // 1 inside (d < 0), anti-aliased over a pixel
@@ -661,6 +666,18 @@ float shapeIris(vec2 q) {
   return (1.0 - smoothstep(rr - w, rr + w * 0.25, r)) * (0.94 + 0.06 * (1.0 - r / max(R, 1e-3)));
 }
 
+// 26 metal plate: its rasterized mask. gp0 = (field: 0 round, 1 fill frame, 2 stretch, 3 tile; field radius; frame aspect)
+float shapePlate(vec2 q) {
+  int mode = int(u_gp0.x + 0.5);
+  float aspect = max(u_gp0.z, 0.01);
+  vec2 u = q / ${PLATE_SCALE.toFixed(4)};
+  if (mode == 1) u = q / (0.5 * max(aspect, 1.0));
+  else if (mode == 2) u = vec2(q.x / (0.5 * aspect), q.y / 0.5);
+  float pass = texture(u_plate, u * 0.5 + 0.5).r;
+  if (mode == 0) pass *= inside(length(u) - u_gp0.y);
+  return pass;
+}
+
 float goboShape(int s, vec2 q) {
   if (s == 0) return shapeSash(q);
   if (s == 1) return shapeArch(q);
@@ -687,6 +704,7 @@ float goboShape(int s, vec2 q) {
   if (s == 22) return shapeWater(q);
   if (s == 23) return shapeSpot(q);
   if (s == 24) return shapeFraming(q);
+  if (s == 26) return shapePlate(q);
   return shapeIris(q);
 }
 `

@@ -19,6 +19,17 @@ version section, and the release workflow uses that section as the GitHub releas
   colour fringe, vignette and dust and haze. Research notes with sources: `docs/research/gobos.md`.
 - **Real thumbnails** rendered by the engine at build time and served at `/catalog/thumbs/<id>.png`, in a browser
   by category on the web and the phone.
+- **Metal gobo plates.** A new `plates` category of 43 round laser-cut plates, drawn as vectors and rasterized once
+  into a 2048 px mask so focus, rotation, scale and throw work as on every attachment. 20 follow a common M-size set
+  (sunburst, louvre, rain lines, fan rays, skewed window, 6-pane grid window, arched window, crossed lines, scattered
+  sticks, pixel cloud, water ripples, snowflakes, lightning, starfield, flames, firework burst, bare branches, fern
+  leaves, foliage breakup, rings) and 23 are new backdrops (curved venetian, bamboo stalks, palm silhouette,
+  monstera, jungle breakup, stained-glass grid, Moroccan arch lattice, honeycomb, concentric circles, spiral,
+  cityscape skyline, starburst fine and bold, Art Deco fan, diagonal blinds, porthole grid, god rays, wave lines,
+  abstract triangles, dappled light fine and bold, mesh fence, window with curtains), each with the tie bridges a
+  real steel plate needs. A plate projects a round light field; its **light field** control fills the frame,
+  stretches to it or tiles across it instead. Plate tiles show the metal plate itself, or the light it projects.
+  Catalog version 5; `docs/guides/static-light.md` says how to add a plate.
 - **Animated colour.** The light can carry a gradient gel or an animated colour (hue cycle, colour flow, colour
   pulse, aurora, daylight cycle); the color tab offers them too. New generators are one GLSL function each
   (`docs/effects.md`).

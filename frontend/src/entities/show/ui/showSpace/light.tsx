@@ -7,7 +7,7 @@ import { Cap, EmptyState, FillSlider, Icon, Pill, Segmented, Switch, Tile } from
 import { cx } from '../../../../shared/lib/cx'
 import { newId } from '../../../../shared/lib/ids'
 import { useRaf } from '../../../../shared/lib/useRaf'
-import { thumbUrl, type GoboItem } from '../../../catalog'
+import { metalThumbUrl, thumbUrl, type GoboItem } from '../../../catalog'
 import { defaultStackLight, newAttachment, presetMotion, stackLightOf } from '../../../catalog/layers'
 import { ParamControls, resolveParams } from '../../../effect'
 import type { ParamSchema } from '../../../effect/types'
@@ -31,6 +31,7 @@ const CATS = [
   { id: 'nature', name: 'nature' },
   { id: 'patterns', name: 'patterns' },
   { id: 'spots', name: 'spots' },
+  { id: 'plates', name: 'plates' },
 ]
 
 /** A human duration: 45 s, 10 min, 1 h 30. */
@@ -65,9 +66,13 @@ function useStack(mode: LightStack) {
 export function AttachmentBrowser({ mode, selected, onSelect }: { mode: LightStack; selected: string | null; onSelect: (id: string) => void }) {
   const sh = useShow()
   const [cat, setCat] = useState('all')
+  // (plates) a plate tile shows the metal plate itself, or the light it projects
+  const [plateView, setPlateView] = useState<'metal' | 'light'>('metal')
   const { atts } = useStack(mode)
   const gobos = sh.catalog?.gobos ?? []
   const shown = cat === 'all' ? gobos : gobos.filter((g) => g.category === cat)
+  const hasPlates = shown.some((g) => g.metalThumb)
+  const tileUrl = (g: GoboItem) => (plateView === 'metal' && g.metalThumb ? metalThumbUrl(g) : thumbUrl(g.id))
   const on = new Set(atts.map((a) => a.gobo))
 
   const pick = (g: GoboItem) => {
@@ -99,10 +104,25 @@ export function AttachmentBrowser({ mode, selected, onSelect }: { mode: LightSta
           </Pill>
         ))}
       </div>
+      {hasPlates && (
+        <div className={s.plateView}>
+          <span className={s.dim}>plates show</span>
+          <Segmented
+            ariaLabel="plate tiles show"
+            size="sm"
+            value={plateView}
+            onChange={setPlateView}
+            options={[
+              { value: 'metal', label: 'the plate', title: 'show each plate as the metal disc with its cut-outs' },
+              { value: 'light', label: 'its light', title: 'show the light each plate projects' },
+            ]}
+          />
+        </div>
+      )}
       <div className={s.attGrid} data-testid="attachment-grid">
         {shown.map((g) => (
           <div key={g.id} className={s.attTile}>
-            <Tile label={g.name} aspect={16 / 9} on={on.has(g.id)} background={`center / cover no-repeat url("${thumbUrl(g.id)}"), var(--bg)`} onClick={() => pick(g)} testId={`gobo-${g.id}`} title={`${g.name}: ${g.description ?? ''}. Put it in front of the light (replaces the others).`} />
+            <Tile label={g.name} aspect={16 / 9} on={on.has(g.id)} background={`center / cover no-repeat url("${tileUrl(g)}"), var(--bg)`} onClick={() => pick(g)} testId={`gobo-${g.id}`} title={`${g.name}: ${g.description ?? ''}${g.source ? ` (${g.source})` : ''}. Put it in front of the light (replaces the others).`} />
             <button type="button" className={s.attAdd} onClick={() => stack(g)} aria-label={`add ${g.name} on top`} title={`add ${g.name} on top of what is there: masks multiply`} data-testid={`gobo-add-${g.id}`}>
               <Icon name="plus" size={12} />
             </button>

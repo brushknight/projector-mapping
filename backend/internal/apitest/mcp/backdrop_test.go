@@ -96,6 +96,11 @@ func TestBackdropToolsDraft(t *testing.T) {
 	if id == "" {
 		t.Fatalf("no attachment id in %s", text)
 	}
+	// (catalog 5) a metal plate is an attachment like any other; its light field is an enum param
+	plate := attID.FindString(ok("attachment_add", map[string]any{"gobo": "plate-snowflakes", "params": map[string]any{"field": "tile"}}, "in your draft"))
+	ok("attachment_remove", map[string]any{"id": plate}, plate)
+	bad("attachment_add", map[string]any{"gobo": "plate-snowflakes", "params": map[string]any{"field": "square"}}, "field")
+	ok("catalog_get", map[string]any{"section": "gobos"}, "plate-sunburst", "inspired by Amaran AS-GB-M MO05", "\"plates\"")
 	bad("attachment_add", map[string]any{"gobo": "lasers"}, "catalog_get gobos")
 	bad("attachment_add", map[string]any{"gobo": "blinds", "scale": 50}, "scale")
 	bad("attachment_add", map[string]any{"gobo": "blinds", "motion": "spin"}, "sun-lr")

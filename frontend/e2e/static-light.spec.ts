@@ -30,6 +30,27 @@ test('attachments: browse by category, pick one, add one on top', async ({ page,
   await expect(page.getByTestId('on-air-label')).toContainText('venetian blinds + leaves')
 })
 
+test('plates: the metal plate or its light, pick one, fill the frame', async ({ page, request }) => {
+  await page.goto('/editor/show')
+  await page.getByTestId('mode-tab-static').click()
+  await page.getByTestId('att-cat-plates').click()
+  await expect(page.getByTestId('gobo-window-4')).toHaveCount(0)
+  const sun = page.getByTestId('gobo-plate-sunburst')
+  await expect(sun).toBeVisible()
+  const bg = () => sun.locator('span').first().evaluate((el) => (el as HTMLElement).style.background)
+  // tiles show the plate itself until you ask for its light
+  expect(await bg()).toContain('plate-sunburst-metal.png')
+  expect(await page.evaluate(async () => (await fetch('/catalog/assets/thumbs/plate-sunburst-metal.png')).ok)).toBe(true)
+  await page.getByRole('group', { name: 'plate tiles show' }).getByRole('button', { name: 'its light' }).click()
+  await expect.poll(bg).toContain('thumbs/plate-sunburst.png')
+  await sun.click()
+  await expect.poll(async () => (await stat(request)).attachments.map((a) => a.gobo)).toEqual(['plate-sunburst'])
+  // the round field by default; fill frame covers 16:9
+  const card = page.getByTestId('attachment-card')
+  await card.getByRole('button', { name: 'fill frame' }).click()
+  await expect.poll(async () => (await stat(request)).attachments[0].params.field as unknown).toBe('fill')
+})
+
 test('framing shutters: drag a blade into the beam', async ({ page, request }) => {
   await page.goto('/editor/show')
   await page.getByTestId('mode-tab-static').click()

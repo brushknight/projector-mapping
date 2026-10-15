@@ -493,6 +493,12 @@
   flex-wrap: wrap;
   gap: 6px;
 }
+.plateView {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--fs-sm);
+}
 .addTile {
   position: relative;
   aspect-ratio: 16 / 10;
