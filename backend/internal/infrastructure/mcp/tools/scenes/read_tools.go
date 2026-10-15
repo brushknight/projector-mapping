@@ -82,17 +82,32 @@ func sceneGet(ctx context.Context, e *tools.Env, _ noIn) (*mcp.CallToolResult, e
 	}
 	layers := map[string]any{}
 	for _, m := range scene.BackdropModes {
+		st := sc.Backdrop.Stack(m)
 		list := []map[string]any{}
-		for _, l := range sc.Backdrop.Stack(m).Layers {
-			list = append(list, map[string]any{"id": l.ID, "kind": l.Kind, "ref": l.Ref, "name": l.Name, "visible": l.Visible, "opacity": l.Opacity, "blend": l.Blend})
+		for _, l := range st.Layers {
+			ll := map[string]any{"id": l.ID, "kind": l.Kind, "ref": l.Ref, "name": l.Name, "visible": l.Visible, "opacity": l.Opacity, "blend": l.Blend}
+			if l.Motion != nil {
+				ll["motion"] = l.Motion
+			}
+			list = append(list, ll)
 		}
-		layers[m] = list
+		if m != scene.ModeStatic && m != scene.ModeLive {
+			layers[m] = list
+			continue
+		}
+		// static and live: one light through attachments (gobos), protocol §15
+		atts := []map[string]any{}
+		for _, a := range st.Attachments {
+			atts = append(atts, map[string]any{"id": a.ID, "gobo": a.Gobo, "name": a.Name, "visible": a.Visible, "opacity": a.Opacity,
+				"rotation": a.Rotation, "offsetX": a.OffsetX, "offsetY": a.OffsetY, "scale": a.Scale, "params": a.Params, "motion": a.Motion})
+		}
+		layers[m] = map[string]any{"layers": list, "light": st.Light, "attachments": atts}
 	}
 	out := map[string]any{
 		"id": sc.ID, "name": sc.Name, "version": sc.Version, "draftId": nilIfEmpty(draft),
 		"output":    map[string]any{"sceneWidth": w, "sceneHeight": h, "orientation": set.Output.Orientation, "physicalWidth": set.Output.Width, "physicalHeight": set.Output.Height, "flipH": set.Output.FlipH, "flipV": set.Output.FlipV},
 		"reference": set.ReferenceAsset, "calibrationId": set.CalibrationID,
-		"mode": sc.Mode, "underlay": sc.Underlay,
+		"mode": sc.Mode, "kind": sc.Kind, "underlay": sc.Underlay,
 		"objects": objs, "backdrop": layers,
 		"timeline": map[string]any{"duration": sc.Timeline.Duration, "tracks": len(sc.Timeline.Tracks), "clips": len(sc.Timeline.Clips), "cues": len(sc.Timeline.Cues)},
 	}

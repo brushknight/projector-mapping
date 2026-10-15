@@ -10,7 +10,8 @@
     "typecheck": "tsc -b",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "thumbs": "node scripts/render-thumbs.mjs"
   },
   "dependencies": {
     "@tanstack/react-router": "^1.120.0",

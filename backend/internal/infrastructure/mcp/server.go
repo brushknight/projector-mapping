@@ -17,6 +17,7 @@ import (
 	"projmap/internal/config"
 	"projmap/internal/infrastructure/http_server/middleware"
 	"projmap/internal/infrastructure/mcp/tools"
+	backdroptools "projmap/internal/infrastructure/mcp/tools/backdrop"
 	cameratools "projmap/internal/infrastructure/mcp/tools/camera"
 	catalogtools "projmap/internal/infrastructure/mcp/tools/catalog"
 	facetools "projmap/internal/infrastructure/mcp/tools/faces"
@@ -77,6 +78,10 @@ func NewServer(d *tools.Deps, p tools.Principal) *gomcp.Server {
 				"face_render to look, then proposal_submit; docs://drawing and the dress-object prompt walk through it. " +
 				"Sound effects: sound_list shows the library and the soundboard pads; clip_add {sound, offset?, volume?} puts a sound on the " +
 				"timeline (a sound track), and sound_play plays a pad or sound on the audio output. " +
+				"The backdrop (what the wall shows outside mapping): catalog_get, scene_list, scene_create, scene_activate, mode_set, " +
+				"light_set (the light: intensity, focus, kelvin, fx, slide), attachment_add / attachment_update / attachment_remove / gobo_set " +
+				"(gobos in front of the light), backdrop_set (live, color, scenery layers), motion_set (sun passes, drifts) and preset_apply. " +
+				"With the editor's \"agents edit live\" switch they change the wall at once, else they write into your draft. " +
 				"Projector, live-show and apply tools need the editor's agent toggles.",
 			InitializedHandler: func(ctx context.Context, req *gomcp.InitializedRequest) {
 				if ip := req.Session.InitializeParams(); ip != nil && ip.ClientInfo != nil {
@@ -91,6 +96,7 @@ func NewServer(d *tools.Deps, p tools.Principal) *gomcp.Server {
 	showtools.Register(s, env)
 	facetools.Register(s, env)
 	soundtools.Register(s, env)
+	backdroptools.Register(s, env)
 	registerResources(s, env)
 	registerPrompts(s)
 	return s

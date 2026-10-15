@@ -17,6 +17,7 @@ import (
 	scenessvc "projmap/internal/application/services/scenes"
 	showsvc "projmap/internal/application/services/show"
 	"projmap/internal/domain/assets"
+	"projmap/internal/domain/docpatch"
 	"projmap/internal/domain/scene"
 	"projmap/internal/domain/show"
 )
@@ -218,6 +219,13 @@ func (s *Service) Do(ctx context.Context, action string, args json.RawMessage, b
 		sc, err := s.scenes.Scene(ctx, a.SceneID)
 		if err != nil {
 			return st, err
+		}
+		// activating puts the scene's kind's mode on air (protocol §15): a replace /mode patch by the server
+		if mode := scene.KindMode(sc.Kind); sc.Kind != "" && sc.Mode != mode {
+			if _, err := s.scenes.Patch(ctx, scenessvc.PatchCmd{SceneID: sc.ID, Base: sc.Version,
+				Ops: []docpatch.Op{docpatch.Replace("/mode", mode)}, By: "server"}); err != nil {
+				return st, err
+			}
 		}
 		st.ActiveSceneID, st.ActiveSetupID = sc.ID, sc.SetupID
 		st.Transport, st.Preview = show.Stop(), nil

@@ -16,6 +16,8 @@ type summary struct {
 	Name    string `json:"name"`
 	SetupID string `json:"setupId"`
 	Version int64  `json:"version"`
+	Kind    string `json:"kind"`
+	Mode    string `json:"mode"`
 }
 
 func listSnap(t *testing.T, ws *apitest.WS) []summary {
@@ -97,8 +99,17 @@ func TestSceneCRUD(t *testing.T) {
 	if l := listSnap(t, ws); !strings.Contains(names(l), "Dance") {
 		t.Fatalf("after patch rename %v", l)
 	}
-	// a patch that leaves the name alone does not publish the list
+	// a mode change publishes the list too (summaries carry kind and mode)
 	apitest.Expect(t, h.Do("POST", "/api/v1/scenes/"+partyID+"/patch", map[string]any{"base": 2, "ops": []any{op("replace", "/mode", "live")}}), http.StatusOK)
+	found := false
+	for _, s := range listSnap(t, ws) {
+		found = found || (s.ID == partyID && s.Mode == "live" && s.Kind == "static")
+	}
+	if !found {
+		t.Fatal("the list after a mode change shows the new mode")
+	}
+	// a patch that leaves the name, kind and mode alone does not publish the list
+	apitest.Expect(t, h.Do("POST", "/api/v1/scenes/"+partyID+"/patch", map[string]any{"base": 3, "ops": []any{op("replace", "/underlay/level", 0.5)}}), http.StatusOK)
 	ws.None(apitest.Is("snapshot", "scenes"), 150*1e6, "scenes snapshot after a non-name patch")
 	apitest.ExpectErr(t, h.Do("PATCH", "/api/v1/scenes/"+dupID, map[string]any{"name": ""}), http.StatusBadRequest, "bad_request")
 	apitest.ExpectErr(t, h.Do("PATCH", "/api/v1/scenes/"+dupID, map[string]any{}), http.StatusBadRequest, "bad_request")

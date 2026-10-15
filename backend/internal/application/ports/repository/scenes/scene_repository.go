@@ -13,11 +13,13 @@ type SceneRepository interface {
 	// Get returns the scene's JSON document (version included).
 	Get(ctx context.Context, id string) ([]byte, error)
 	Create(ctx context.Context, s *scene.Scene) error
-	// Commit stores the new document and appends the history entry in one transaction.
-	Commit(ctx context.Context, id string, doc []byte, name string, e scene.HistoryEntry) error
+	// Commit stores the new document (and the list columns from meta: name, kind, mode) and appends the history
+	// entry in one transaction.
+	Commit(ctx context.Context, id string, doc []byte, meta scene.Summary, e scene.HistoryEntry) error
 	Delete(ctx context.Context, id string) error
 	// Rewrite replaces the stored document in place (same version, no history entry): format upgrades on start.
-	Rewrite(ctx context.Context, id string, doc []byte) error
+	// meta carries the kind and mode for the list.
+	Rewrite(ctx context.Context, id string, doc []byte, meta scene.Summary) error
 	History(ctx context.Context, id string, limit int) ([]scene.HistoryEntry, error)
 }
 

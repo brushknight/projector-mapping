@@ -20,6 +20,8 @@ type SceneModel struct {
 	SetupID   string
 	Name      string
 	Version   int64
+	Kind      string
+	Mode      string
 	Doc       string
 	UpdatedAt time.Time
 }
@@ -59,12 +61,12 @@ func NewSceneRepository(db *gorm.DB) *SceneRepository { return &SceneRepository{
 
 func (r *SceneRepository) List(ctx context.Context) ([]scene.Summary, error) {
 	var rows []SceneModel
-	if err := r.db.WithContext(ctx).Select("id", "setup_id", "name", "version").Order("rowid").Find(&rows).Error; err != nil {
+	if err := r.db.WithContext(ctx).Select("id", "setup_id", "name", "version", "kind", "mode").Order("rowid").Find(&rows).Error; err != nil {
 		return nil, err
 	}
 	out := make([]scene.Summary, 0, len(rows))
 	for _, m := range rows {
-		out = append(out, scene.Summary{ID: m.ID, Name: m.Name, SetupID: m.SetupID, Version: m.Version})
+		out = append(out, scene.Summary{ID: m.ID, Name: m.Name, SetupID: m.SetupID, Version: m.Version, Kind: m.Kind, Mode: m.Mode})
 	}
 	return out, nil
 }
@@ -78,16 +80,17 @@ func (r *SceneRepository) Get(ctx context.Context, id string) ([]byte, error) {
 }
 
 func (r *SceneRepository) Create(ctx context.Context, s *scene.Scene) error {
-	return r.db.WithContext(ctx).Create(&SceneModel{ID: s.ID, SetupID: s.SetupID, Name: s.Name, Version: s.Version,
-		Doc: string(s.Encode()), UpdatedAt: time.Now().UTC()}).Error
+	doc := s.Encode()
+	return r.db.WithContext(ctx).Create(&SceneModel{ID: s.ID, SetupID: s.SetupID, Name: s.Name, Version: s.Version, Kind: s.Kind, Mode: s.Mode,
+		Doc: string(doc), UpdatedAt: time.Now().UTC()}).Error
 }
 
-func (r *SceneRepository) Commit(ctx context.Context, id string, doc []byte, name string, e scene.HistoryEntry) error {
+func (r *SceneRepository) Commit(ctx context.Context, id string, doc []byte, meta scene.Summary, e scene.HistoryEntry) error {
 	ops, _ := json.Marshal(e.Ops)
 	inv, _ := json.Marshal(e.Inverse)
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		res := tx.Model(&SceneModel{}).Where("id = ?", id).Updates(map[string]any{"doc": string(doc), "version": e.Version,
-			"name": name, "updated_at": time.Now().UTC()})
+			"name": meta.Name, "kind": meta.Kind, "mode": meta.Mode, "updated_at": time.Now().UTC()})
 		if res.Error != nil {
 			return res.Error
 		}
@@ -98,8 +101,9 @@ func (r *SceneRepository) Commit(ctx context.Context, id string, doc []byte, nam
 	})
 }
 
-func (r *SceneRepository) Rewrite(ctx context.Context, id string, doc []byte) error {
-	return r.db.WithContext(ctx).Model(&SceneModel{}).Where("id = ?", id).Updates(map[string]any{"doc": string(doc), "updated_at": time.Now().UTC()}).Error
+func (r *SceneRepository) Rewrite(ctx context.Context, id string, doc []byte, meta scene.Summary) error {
+	return r.db.WithContext(ctx).Model(&SceneModel{}).Where("id = ?", id).Updates(map[string]any{"doc": string(doc), "kind": meta.Kind,
+		"mode": meta.Mode, "updated_at": time.Now().UTC()}).Error
 }
 
 func (r *SceneRepository) Delete(ctx context.Context, id string) error {

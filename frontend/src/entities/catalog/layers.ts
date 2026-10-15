@@ -1,6 +1,6 @@
 import type { ParamSchema } from '../effect/types'
 import { schemaDefaults } from '../effect/params'
-import type { Layer, LayerKind, Light } from '../scene/types'
+import type { Attachment, Layer, LayerKind, Light, Motion, StackLight } from '../scene/types'
 import type { Catalog } from './types'
 
 export const DEFAULT_LIGHT: Light = {
@@ -48,13 +48,67 @@ export function layerParamSchema(catalog: Catalog | null, layer: Pick<Layer, 'ki
       return { color: { type: 'color', default: '#000000', label: 'color' } }
     case 'gobo':
       return {}
+    case 'generator':
+      return catalog.colorGenerators?.find((g) => g.id === layer.ref)?.params ?? {}
   }
+}
+
+/** (§15) the light of a static or live stack with the catalog's defaults: the whole frame lit at 5600 K. */
+export function defaultStackLight(catalog: Catalog | null, over: Partial<StackLight> = {}): StackLight {
+  const d = schemaDefaults(catalog?.stackLight?.params) as Partial<StackLight>
+  return {
+    intensity: 0.85,
+    focus: 0.7,
+    fringe: 0.2,
+    vignette: 0.3,
+    haze: 0,
+    ...d,
+    color: { mode: 'cct', kelvin: catalog?.stackLight?.kelvin ?? 5600, tint: 0, hue: 212, sat: 0.7 },
+    fx: { kind: 'none', speed: 0.35 },
+    colorLayer: null,
+    slide: { x: 0, y: 0 },
+    motion: null,
+    ...over,
+  }
+}
+
+/** A stack's light, filling in what an older or partial document leaves out. */
+export function stackLightOf(light: Partial<StackLight> | null | undefined, catalog: Catalog | null = null): StackLight {
+  const base = defaultStackLight(catalog)
+  if (!light) return base
+  return { ...base, ...light, color: { ...base.color, ...(light.color ?? {}) }, fx: { ...base.fx, ...(light.fx ?? {}) }, slide: { ...base.slide, ...(light.slide ?? {}) } }
+}
+
+/** (§15) a new attachment of a catalog gobo with its defaults (scale, rotation, params). The id is an optimistic temporary. */
+export function newAttachment(catalog: Catalog | null, gobo: string, id: string): Attachment {
+  const item = catalog?.gobos.find((g) => g.id === gobo)
+  const params: Record<string, unknown> = { ...schemaDefaults(catalog?.goboParams), ...(item?.defaults ?? {}), ...schemaDefaults(item?.params) }
+  return {
+    id,
+    gobo,
+    name: item?.name ?? gobo,
+    visible: true,
+    opacity: 1,
+    rotation: item?.attachment?.rotation ?? 0,
+    offsetX: 0,
+    offsetY: 0,
+    scale: item?.attachment?.scale ?? 1,
+    params,
+    motion: null,
+  }
+}
+
+/** (§15) a catalog motion preset with `startedAt` = now (server ms); null for an unknown id. */
+export function presetMotion(catalog: Catalog | null, id: string, nowMs: number, on = true): Motion | null {
+  const p = catalog?.motionPresets?.find((m) => m.id === id)
+  if (!p) return null
+  return { ...p.motion, via: p.motion.via ? { ...p.motion.via } : null, from: { ...p.motion.from }, to: { ...p.motion.to }, preset: id, on, phase: 0, startedAt: Math.round(nowMs) }
 }
 
 /** A display name for a catalog ref. */
 export function catalogName(catalog: Catalog | null, kind: LayerKind, ref: string): string {
   if (!catalog) return ref
-  const list = kind === 'gobo' ? catalog.gobos : kind === 'procedural' ? catalog.procedural : kind === 'gradient' ? catalog.gradients : kind === 'photo' ? catalog.scenery : []
+  const list = kind === 'gobo' ? catalog.gobos : kind === 'procedural' ? catalog.procedural : kind === 'gradient' ? catalog.gradients : kind === 'photo' ? catalog.scenery : kind === 'generator' ? catalog.colorGenerators ?? [] : []
   return list.find((x) => x.id === ref)?.name ?? (ref.startsWith('asset:') ? 'my photo' : ref)
 }
 

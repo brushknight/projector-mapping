@@ -62,6 +62,8 @@ func TestFixtures(t *testing.T) {
 		"sound":         func() any { return &assets.Asset{} },
 		"video":         func() any { return &videos.Video{} },
 		"import":        func() any { return &videos.ImportJob{} },
+		"scene-summary": func() any { return &[]scene.Summary{} },
+		"settings":      func() any { return &agents.Settings{} },
 	}
 	seen := 0
 	for _, name := range catalog.Fixtures() {
@@ -249,6 +251,62 @@ func TestSceneRoundTrip(t *testing.T) {
 		if strings.Contains(enc, bad) {
 			t.Errorf("stripped scene still has %s", bad)
 		}
+	}
+}
+
+func TestCatalogV4(t *testing.T) {
+	cat, err := domcatalog.Parse(catalog.JSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cat.Version < 4 || len(cat.Gobos) < 33 || cat.StackLight.Kelvin != 5600 || cat.GoboParams["throw"].Type != "number" {
+		t.Fatalf("catalog %d: %d gobos, stackLight %+v", cat.Version, len(cat.Gobos), cat.StackLight)
+	}
+	for _, g := range cat.Gobos {
+		gb := cat.Gobo(g.ID)
+		if gb == nil || gb.Category == "" || gb.Thumb == "" || gb.Attachment.Scale <= 0 || gb.Focus <= 0 {
+			t.Errorf("gobo %s: %+v", g.ID, gb)
+		}
+		if _, ok := cat.GoboSchema(g.ID); !ok {
+			t.Errorf("gobo %s has no schema", g.ID)
+		}
+	}
+	// the merged schema: goboParams, the gobo's own params, the gobo's defaults over goboParams defaults
+	s, _ := cat.GoboSchema("window-4")
+	g := cat.Gobo("window-4")
+	if s["cols"].Type != "integer" || s["throw"].Type != "number" {
+		t.Fatalf("window-4 merged schema %+v", s)
+	}
+	for k := range cat.GoboParams {
+		want := cat.GoboParams[k].Default
+		if v, ok := g.Defaults[k]; ok {
+			want = v
+		}
+		if s[k].Default != want {
+			t.Errorf("window-4 %s default %v, want %v", k, s[k].Default, want)
+		}
+	}
+	for _, id := range []string{"hue-cycle", "color-flow", "pulse", "aurora", "kelvin-cycle"} {
+		if _, ok := cat.LayerSchema("generator", id); !ok {
+			t.Errorf("generator %s", id)
+		}
+	}
+	for _, mp := range cat.MotionPresets {
+		var m scene.Motion
+		if err := json.Unmarshal(mp.Motion, &m); err != nil || m.Duration < 1 {
+			t.Errorf("motion preset %s: %v %+v", mp.ID, err, m)
+		}
+	}
+	for _, k := range cat.SceneKinds {
+		if !scene.Kinds[k.ID] || scene.KindMode(k.ID) != k.Mode {
+			t.Errorf("scene kind %+v", k)
+		}
+		if cat.DefaultTemplate(k.ID) == nil {
+			t.Errorf("scene kind %s has no template", k.ID)
+		}
+	}
+	if len(cat.MotionEasings) != len(scene.MotionEasings) || len(cat.MotionLoops) != len(scene.MotionLoops) {
+		t.Fatalf("motion enums %v %v", cat.MotionEasings, cat.MotionLoops)
 	}
 }
 

@@ -130,17 +130,31 @@ test('pads are added, edited and deleted as patches on /sounds/pads', async ({ p
   await expect.poll(async () => (await scene(request)).sounds.pads.length).toBe(2)
 })
 
-test('the scene switcher creates, renames, duplicates, activates and deletes scenes', async ({ page, request }) => {
+test('the scene browser creates from templates, renames, duplicates, activates and deletes scenes', async ({ page, request }) => {
   await page.goto('/editor/show')
-  const list = page.getByTestId('show-space').getByTestId('scene-list')
+  const list = page.getByTestId('show-space').getByTestId('scene-browser')
+  // the seeded desk scene has objects: it is a mapping scene
+  await expect(list.getByTestId('scene-group-mapping')).toContainText('Desk')
+  // a new static scene from its template goes on the wall at once
   await list.getByTestId('scene-new').click()
+  await page.getByTestId('scene-new-static').click()
+  await expect.poll(async () => (await scenes(request)).filter((x) => x.name.startsWith('static')).length).toBe(1)
+  const created = (await scenes(request)).find((x) => x.name.startsWith('static'))!
+  await expect.poll(async () => (await show(request)).activeSceneId).toBe(created.id)
+  const sc = await scene(request, created.id)
+  expect(sc.kind).toBe('static')
+  expect(sc.backdrop.static.attachments[0].gobo).toBe('window-4')
+  expect(sc.backdrop.static.attachments[0].motion).toMatchObject({ preset: 'sun-lr', on: false })
+  await expect(list.getByTestId('scene-group-static')).toContainText(created.name)
+  await expect(page.getByTestId('mode-tab-static')).toHaveAttribute('data-on-air', 'true')
+
+  // rename it
+  await list.getByTestId(`scene-row-${created.id}`).hover()
+  await list.getByTestId(`scene-rename-${created.id}`).click()
   const input = list.getByTestId('scene-rename-input')
-  await expect(input).toBeVisible()
   await input.fill('rehearsal')
   await input.press('Enter')
   await expect.poll(async () => (await scenes(request)).map((x) => x.name)).toContain('rehearsal')
-  const created = (await scenes(request)).find((x) => x.name === 'rehearsal')!
-  await expect(list.getByTestId(`scene-row-${created.id}`)).toContainText('rehearsal')
 
   // duplicate the desk scene
   await list.getByTestId('scene-row-scn_desk').hover()
@@ -150,20 +164,19 @@ test('the scene switcher creates, renames, duplicates, activates and deletes sce
   expect((await scene(request, copy.id)).objects.length).toBe((await scene(request)).objects.length)
 
   // the scene on the wall can't be deleted
-  await expect(list.getByTestId('scene-delete-scn_desk')).toBeDisabled()
+  await expect(list.getByTestId(`scene-delete-${created.id}`)).toBeDisabled()
 
-  // put the new scene on the wall: Show follows it
-  await list.getByTestId(`scene-row-${created.id}`).hover()
-  await list.getByTestId(`scene-activate-${created.id}`).click()
-  await expect.poll(async () => (await show(request)).activeSceneId).toBe(created.id)
-  await expect(page.getByTestId('scene-picker')).toContainText('rehearsal')
-  await expect(list.getByTestId(`scene-row-${created.id}`)).toHaveAttribute('data-active', 'true')
-
-  // the top bar's switcher lists them too; picking one in Show puts it on the wall
-  await page.getByTestId('scene-picker').click()
-  const menu = page.getByRole('menu')
-  await menu.getByTestId('scene-row-scn_desk').getByRole('button').first().click()
+  // clicking a row puts it on the wall: the desk is a mapping scene, so objects go on air
+  await list.getByTestId('scene-open-scn_desk').click()
   await expect.poll(async () => (await show(request)).activeSceneId).toBe('scn_desk')
+  await expect.poll(async () => (await scene(request)).mode).toBe('objects')
+  await expect(page.getByTestId('mode-tab-objects')).toHaveAttribute('data-on-air', 'true')
+  await expect(list.getByTestId('scene-row-scn_desk')).toHaveAttribute('data-active', 'true')
+
+  // the top bar's switcher lists them too
+  await page.getByTestId('scene-picker').click()
+  await expect(page.getByRole('menu').getByTestId(`scene-row-${created.id}`)).toContainText('rehearsal')
+  await page.keyboard.press('Escape')
 
   // delete the copy (asks first)
   await list.getByTestId(`scene-row-${copy.id}`).hover()
@@ -171,9 +184,11 @@ test('the scene switcher creates, renames, duplicates, activates and deletes sce
   await list.getByTestId('scene-delete-yes').click()
   await expect.poll(async () => (await scenes(request)).map((x) => x.id)).not.toContain(copy.id)
 
-  // editing a scene that is not on the wall still works in Map
-  await page.goto(`/editor/map?scene=${created.id}`)
-  await expect(page.getByTestId('scene-picker')).toContainText('rehearsal')
+  // a new mapping scene opens in the map space, not on the wall
+  await list.getByTestId('scene-new').click()
+  await page.getByTestId('scene-new-mapping').click()
+  await expect(page).toHaveURL(/\/editor\/map\?scene=/)
+  expect((await show(request)).activeSceneId).toBe('scn_desk')
 })
 
 test('add from YouTube checks the link, falls back to an embed and puts it on air', async ({ page, request }) => {

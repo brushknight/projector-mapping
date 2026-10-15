@@ -1,4 +1,4 @@
-import { BACKDROP_MODES, DEFAULT_UNDERLAY, type BackdropMode, type Clip, type Layer, type Point, type Scene, type SceneObject, type Surface, type Track, type Underlay } from './types'
+import { BACKDROP_MODES, DEFAULT_UNDERLAY, type Attachment, type BackdropMode, type Clip, type Layer, type LayerStack, type Point, type Scene, type SceneKind, type SceneMode, type SceneObject, type Surface, type Track, type Underlay } from './types'
 
 export interface SurfaceRef {
   object: SceneObject
@@ -97,4 +97,35 @@ export function onAirPlan(scene: Scene, mode: Scene['mode'] = scene.mode): { lay
 export function orphanPoints(scene: Scene): string[] {
   const used = new Set(allSurfaces(scene).flatMap((r) => r.surface.pointIds))
   return scene.points.filter((p) => !used.has(p.id)).map((p) => p.id)
+}
+
+/** (§15) what a scene is for: its own `kind`, else inferred (objects → mapping, else its mode, objects mode → mapping). */
+export function sceneKind(scene: Pick<Scene, 'kind' | 'mode'> & { objects?: Scene['objects'] }): SceneKind {
+  if (scene.kind) return scene.kind
+  if (scene.objects?.length) return 'mapping'
+  return scene.mode === 'objects' ? 'mapping' : (scene.mode as SceneKind) ?? 'static'
+}
+
+/** (§15) the mode a kind puts on air. */
+export function kindMode(kind: SceneKind): SceneMode {
+  return kind === 'mapping' ? 'objects' : kind
+}
+
+/** (§15) the stack of a backdrop mode with its light and attachments (absent on older documents). */
+export function stackOf(scene: Scene, mode: BackdropMode): LayerStack {
+  return scene.backdrop[mode] ?? { layers: [] }
+}
+
+/** (§15) the attachments of a static or live stack. */
+export function stackAttachments(scene: Scene, mode: BackdropMode): Attachment[] {
+  return stackOf(scene, mode).attachments ?? []
+}
+
+/** Where an attachment lives: its stack and index, or null. */
+export function locateAttachment(scene: Scene, id: string): { mode: BackdropMode; i: number } | null {
+  for (const mode of ['static', 'live'] as const) {
+    const i = stackAttachments(scene, mode).findIndex((a) => a.id === id)
+    if (i >= 0) return { mode, i }
+  }
+  return null
 }

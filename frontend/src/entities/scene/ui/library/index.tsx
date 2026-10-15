@@ -17,7 +17,7 @@ import s from './styles.module.css'
 
 export type LibraryTab = 'effects' | 'media' | 'backdrops' | 'sounds'
 
-export const LAYER_ICON: Record<LayerKind, string> = { gobo: 'gobo', procedural: 'wave', gradient: 'gradient', photo: 'image', solid: 'quad', video: 'video' }
+export const LAYER_ICON: Record<LayerKind, string> = { gobo: 'gobo', procedural: 'wave', gradient: 'gradient', photo: 'image', solid: 'quad', video: 'video', generator: 'gradient' }
 
 export const gradientCss = (stops: GradientStop[], angle = 135) =>
   `linear-gradient(${angle}deg, ${[...stops].sort((a, b) => a.pos - b.pos).map((st) => `${st.color} ${Math.round(st.pos * 100)}%`).join(', ')})`

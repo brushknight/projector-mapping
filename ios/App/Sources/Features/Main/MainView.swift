@@ -1,5 +1,6 @@
 import SwiftUI
 import PMDesign
+import PMPreview
 
 /// The five tabs with the island tab bar, plus the projector settings, add layer and auto map presentations.
 struct MainView: View {
@@ -39,5 +40,9 @@ struct MainView: View {
         .sheet(isPresented: $model.showScenes) { ScenesSheet() }
         .sheet(isPresented: $model.showSounds) { SoundsSheet() }
         .sheet(isPresented: $model.showYouTube) { YouTubeSheet() }
+        // The hub is back (Wi-Fi joined, server restarted, Local Network allowed): a hero that failed loads again now.
+        .onChange(of: model.hub.status) { _, status in
+            if status == .online { PreviewHost.shared.retryNow() }
+        }
     }
 }

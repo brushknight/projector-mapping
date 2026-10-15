@@ -243,10 +243,19 @@ extension View {
 }
 
 struct DebugScroll: ViewModifier {
+    @State private var position = ScrollPosition(point: .zero)
+
     func body(content: Content) -> some View {
         let pt = UserDefaults.standard.double(forKey: "pm-scroll")
         if pt > 0 {
-            content.scrollPosition(.constant(ScrollPosition(point: CGPoint(x: 0, y: pt))))
+            content
+                .scrollPosition($position)
+                .task {
+                    // Once now (demo data is there at launch) and again after a server's data has arrived.
+                    position = ScrollPosition(point: CGPoint(x: 0, y: pt))
+                    try? await Task.sleep(for: .seconds(3))
+                    position.scrollTo(y: pt + 1)  // a different value, or the assignment is a no-op
+                }
         } else {
             content
         }

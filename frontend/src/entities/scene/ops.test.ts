@@ -39,9 +39,9 @@ describe('scene ops', () => {
   })
 
   it('moves layers and clips and recomputes on a newer doc', () => {
-    const s = run(ops.moveLayer(scene, 'lay_live_window', 1))
-    expect(s.backdrop.live.layers.map((l) => l.id)).toEqual(['lay_tree', 'lay_live_window'])
-    expect(s.backdrop.static.layers.map((l) => l.id)).toEqual(['lay_window'])
+    const s = run(ops.moveLayer(scene, 'lay_ember', 1))
+    expect(s.backdrop.color.layers.map((l) => l.id)).toEqual(['lay_hue', 'lay_ember'])
+    expect(s.backdrop.live.layers.map((l) => l.id)).toEqual(['lay_tree'])
     const c = run(ops.setClipTimes(scene, 'clp_trace', 4.5, 6.25))
     expect(c.timeline.clips.find((x) => x.id === 'clp_trace')).toMatchObject({ start: 4.5, end: 6.25 })
     // on a newer document with a clip removed in front, the same intent still finds the clip
@@ -73,13 +73,13 @@ describe('scene ops', () => {
     expect(run(ops.setMode('objects')).mode).toBe('objects')
   })
 
-  it('picks a gobo by replacing the static stack and keeps the light', () => {
-    const layer = { ...scene.backdrop.static.layers[0], id: 'lay_new', ref: 'blinds', name: 'blinds', light: null }
-    const s = run(ops.pickSingle({ ...scene, mode: 'live' }, 'static', layer, ['light']))
-    expect(s.backdrop.static.layers).toHaveLength(1)
-    expect(s.backdrop.static.layers[0]).toMatchObject({ id: 'lay_new', ref: 'blinds', light: scene.backdrop.static.layers[0].light })
-    expect(s.mode).toBe('static')
-    expect(s.backdrop.live.layers).toHaveLength(2)
+  it('picks a gradient by replacing the color stack and keeps the params asked for', () => {
+    const layer = { ...scene.backdrop.color.layers[0], id: 'lay_new', ref: 'dusk', name: 'dusk', params: {} }
+    const s = run(ops.pickSingle({ ...scene, mode: 'live' }, 'color', layer, ['params']))
+    expect(s.backdrop.color.layers).toHaveLength(1)
+    expect(s.backdrop.color.layers[0]).toMatchObject({ id: 'lay_new', ref: 'dusk', params: scene.backdrop.color.layers[0].params })
+    expect(s.mode).toBe('color')
+    expect(s.backdrop.live.layers).toHaveLength(1)
   })
 
   it('applies a preset to its own stack and switches to its mode', () => {
@@ -87,16 +87,20 @@ describe('scene ops', () => {
     const s = run(ops.applyPresetOps({ mode: 'scenery', backdrop: { layers: [layer] } }))
     expect(s.mode).toBe('scenery')
     expect(s.backdrop.scenery.layers.map((l) => l.id)).toEqual(['lay_beach'])
-    expect(s.backdrop.static.layers.map((l) => l.id)).toEqual(['lay_window'])
+    expect(s.backdrop.static.attachments?.map((a) => a.id)).toEqual(['att_window'])
+    // a static preset brings its light and attachments
+    const st = run(ops.applyPresetOps({ mode: 'static', backdrop: { layers: [], light: null, attachments: [] } }))
+    expect(st.backdrop.static.attachments).toEqual([])
   })
 
   it('plans what goes on air per mode', () => {
     expect(onAirPlan(scene, 'static')).toMatchObject({ objects: false, level: 1 })
-    expect(onAirPlan(scene, 'static').layers.map((l) => l.id)).toEqual(['lay_window'])
+    expect(onAirPlan(scene, 'static').layers).toEqual([])
+    expect(onAirPlan(scene, 'live').layers.map((l) => l.id)).toEqual(['lay_tree'])
     expect(onAirPlan(scene, 'scenery').layers.map((l) => l.id)).toEqual(['lay_waves', 'lay_flowers'])
     expect(onAirPlan(scene, 'objects')).toEqual({ layers: [], level: 0.35, objects: true })
     const under = onAirPlan({ ...scene, underlay: { on: true, from: 'color', level: 0.2 } }, 'objects')
-    expect(under.layers.map((l) => l.id)).toEqual(['lay_ember'])
+    expect(under.layers.map((l) => l.id)).toEqual(['lay_ember', 'lay_hue'])
     expect(under.level).toBe(0.2)
   })
 })
@@ -136,5 +140,39 @@ describe('sound ops (§14)', () => {
     s = applyPatch(s, ops.setCueSound(s, 'cue_1', null)!)
     expect('sound' in s.timeline.cues.find((c) => c.id === 'cue_1')!).toBe(false)
     expect(ops.setCueSound(s, 'cue_1', null)).toBeNull()
+  })
+})
+
+// ── §15 ──────────────────────────────────────────────────────────────────────
+import { addAttachment, attachmentPath, lightPath, pickAttachment, removeAttachment, setMotion, setStackLight } from './ops'
+import fixture from '../../../../contract/fixtures/scene.json'
+import type { Attachment, Scene as SceneT } from './types'
+
+describe('light and attachment ops (§15)', () => {
+  const sc = fixture as unknown as SceneT
+  const att: Attachment = { id: 'att_new', gobo: 'blinds', name: 'blinds', visible: true, opacity: 1, rotation: 0, offsetX: 0, offsetY: 0, scale: 1.4, params: {}, motion: null }
+  it('paths into the light and attachments', () => {
+    expect(lightPath('static', 'slide', 'x')).toBe('/backdrop/static/light/slide/x')
+    expect(attachmentPath(sc, 'att_live_window', 'rotation')).toBe('/backdrop/live/attachments/0/rotation')
+    expect(attachmentPath(sc, 'nope')).toBeNull()
+  })
+  it('picks one attachment and puts static on air', () => {
+    const ops = pickAttachment({ ...sc, mode: 'live' }, 'static', att)
+    expect(ops[0]).toEqual({ op: 'replace', path: '/backdrop/static/attachments', value: [att] })
+    expect(ops.at(-1)).toEqual({ op: 'replace', path: '/mode', value: 'static' })
+  })
+  it('adds on top and removes', () => {
+    expect(addAttachment(sc, 'static', att)).toEqual([{ op: 'add', path: '/backdrop/static/attachments/-', value: att }])
+    expect(removeAttachment(sc, 'att_window')).toEqual([{ op: 'remove', path: '/backdrop/static/attachments/0' }])
+  })
+  it('sets a motion on the light, an attachment or a photo layer', () => {
+    expect(setMotion(sc, { kind: 'light', mode: 'static' }, null)?.[0].path).toBe('/backdrop/static/light/motion')
+    expect(setMotion(sc, { kind: 'attachment', id: 'att_window' }, null)?.[0]).toEqual({ op: 'replace', path: '/backdrop/static/attachments/0/motion', value: null })
+    expect(setMotion(sc, { kind: 'layer', id: 'lay_flowers' }, null)?.[0].op).toBe('replace')
+    expect(setMotion(sc, { kind: 'layer', id: 'lay_ember' }, null)?.[0].op).toBe('add')
+  })
+  it('adds a light to a live stack that has none', () => {
+    const noLight = { ...sc, backdrop: { ...sc.backdrop, live: { layers: [] } } } as SceneT
+    expect(setStackLight(noLight, 'live', null)[0].op).toBe('add')
   })
 })

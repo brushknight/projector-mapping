@@ -169,6 +169,15 @@ const paths: Record<string, ReactNode> = {
       <path d="M16 10.5l5-3v9l-5-3z" />
     </>
   ),
+  fullscreen: <path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5" />,
+  fullscreenExit: <path d="M9 4v5H4M20 9h-5V4M15 20v-5h5M4 15h5v5" />,
+  viewer: (
+    <>
+      <rect x="3" y="5" width="18" height="12" rx="2" />
+      <path d="M9 21h6M12 17v4" />
+    </>
+  ),
+  motion: <path d="M3 17c4 0 5-10 9-10s5 10 9 10M17 4l4 3-4 3" />,
   close: <path d="M6 6l12 12M18 6L6 18" />,
   target: (
     <>
@@ -322,6 +331,21 @@ const paths: Record<string, ReactNode> = {
     <>
       <rect x="2.5" y="6" width="19" height="12" rx="2.5" />
       <path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10" />
+    </>
+  ),
+  pen: <path d="M4 20l1.2-4.8L15.5 4.9a2 2 0 0 1 2.8 0l.8.8a2 2 0 0 1 0 2.8L8.8 18.8zM13.5 7l3.5 3.5" />,
+  text: <path d="M5 6.5V5h14v1.5M12 5v14M9 19h6" />,
+  eraser: <path d="M8.5 19.5h11M4.6 14.6l8.8-8.8a2 2 0 0 1 2.8 0l2.5 2.5a2 2 0 0 1 0 2.8L11 18.8a2.4 2.4 0 0 1-3.4 0l-3-3a.8.8 0 0 1 0-1.2zM9 10.2l5.8 5.8" />,
+  help: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M9.6 9.4a2.5 2.5 0 0 1 4.9.6c0 1.7-2.5 2.2-2.5 3.8M12 17h.01" />
+    </>
+  ),
+  window: (
+    <>
+      <rect x="3" y="5" width="18" height="14" rx="2.5" />
+      <path d="M3 9h18M6.5 7h.01M9 7h.01" />
     </>
   ),
 }

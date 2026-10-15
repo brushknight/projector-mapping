@@ -57,7 +57,8 @@ export async function loadRenderScene(sceneId: string, draftId?: string | null):
 /** Everything a RenderInput needs besides the scene. */
 async function renderInput(scene: Scene, t: number, clock: number, mode: SceneMode | null): Promise<RenderInput> {
   const [setup, catalog, effects] = await Promise.all([setupApi.get(scene.setupId), loadCatalog(), effectApi.list().catch(() => [])])
-  return { setup, scene, catalog, effects, t: Number(t) || 0, clock, blackout: 0, mode }
+  // motion (§15) runs on the wall clock: render where it is now
+  return { setup, scene, catalog, effects, t: Number(t) || 0, clock, now: Date.now(), blackout: 0, mode }
 }
 
 /** A pixel size from an RPC argument, clamped to 16..4096. */

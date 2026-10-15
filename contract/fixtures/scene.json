@@ -4,71 +4,84 @@
  "name": "Desk",
  "version": 1,
  "mode": "static",
+ "kind": "mapping",
  "backdrop": {
   "static": {
-   "layers": [
+   "layers": [],
+   "light": {
+    "intensity": 0.8,
+    "focus": 0.38,
+    "color": {
+     "mode": "cct",
+     "kelvin": 3200,
+     "tint": 0.04,
+     "hue": 212,
+     "sat": 0.7
+    },
+    "fx": {
+     "kind": "none",
+     "speed": 0.35
+    },
+    "colorLayer": null,
+    "fringe": 0.2,
+    "vignette": 0.3,
+    "haze": 0.0,
+    "slide": {
+     "x": 0,
+     "y": 0
+    },
+    "motion": null
+   },
+   "attachments": [
     {
-     "id": "lay_window",
-     "kind": "gobo",
-     "ref": "window",
-     "name": "window 2×3",
+     "id": "att_window",
+     "gobo": "window",
+     "name": "window 6-pane",
      "visible": true,
      "opacity": 1.0,
-     "blend": "normal",
-     "light": {
-      "intensity": 0.8,
-      "softness": 0.62,
-      "angle": -22,
-      "scale": 1.4,
-      "offsetX": 0,
-      "offsetY": 0,
-      "color": {
-       "mode": "cct",
-       "kelvin": 3200,
-       "tint": 0.04,
-       "hue": 212,
-       "sat": 0.7
-      },
-      "fx": {
-       "kind": "none",
-       "speed": 0.35
-      }
+     "rotation": 0,
+     "offsetX": 0,
+     "offsetY": 0,
+     "scale": 1.1,
+     "params": {
+      "cols": 2,
+      "rows": 3,
+      "mullion": 0.35,
+      "throw": 0.3,
+      "skew": 0.3,
+      "depth": 0.35
      },
-     "params": {}
+     "motion": {
+      "on": false,
+      "preset": "sun-lr",
+      "from": {
+       "x": -0.6,
+       "y": 0.08
+      },
+      "via": {
+       "x": 0,
+       "y": -0.04
+      },
+      "to": {
+       "x": 0.6,
+       "y": 0.08
+      },
+      "duration": 600,
+      "easing": "inOut",
+      "loop": "loop",
+      "rotate": 8,
+      "scaleFrom": 1,
+      "scaleTo": 1,
+      "kelvinFrom": 0,
+      "kelvinTo": 0,
+      "phase": 0.5,
+      "startedAt": 1791700000123
+     }
     }
    ]
   },
   "live": {
    "layers": [
-    {
-     "id": "lay_live_window",
-     "kind": "gobo",
-     "ref": "window",
-     "name": "window 2×3",
-     "visible": true,
-     "opacity": 1.0,
-     "blend": "normal",
-     "light": {
-      "intensity": 0.8,
-      "softness": 0.55,
-      "angle": -22,
-      "scale": 1.4,
-      "offsetX": 0,
-      "offsetY": 0,
-      "color": {
-       "mode": "cct",
-       "kelvin": 3200,
-       "tint": 0.04,
-       "hue": 212,
-       "sat": 0.7
-      },
-      "fx": {
-       "kind": "none",
-       "speed": 0.35
-      }
-     },
-     "params": {}
-    },
     {
      "id": "lay_tree",
      "kind": "procedural",
@@ -103,6 +116,52 @@
       "seed": 7
      }
     }
+   ],
+   "light": {
+    "intensity": 0.8,
+    "focus": 0.45,
+    "color": {
+     "mode": "cct",
+     "kelvin": 3200,
+     "tint": 0.04,
+     "hue": 212,
+     "sat": 0.7
+    },
+    "fx": {
+     "kind": "none",
+     "speed": 0.35
+    },
+    "colorLayer": null,
+    "fringe": 0.2,
+    "vignette": 0.3,
+    "haze": 0.0,
+    "slide": {
+     "x": 0,
+     "y": 0
+    },
+    "motion": null
+   },
+   "attachments": [
+    {
+     "id": "att_live_window",
+     "gobo": "window",
+     "name": "window 6-pane",
+     "visible": true,
+     "opacity": 1.0,
+     "rotation": 0,
+     "offsetX": 0,
+     "offsetY": 0,
+     "scale": 1.1,
+     "params": {
+      "cols": 2,
+      "rows": 3,
+      "mullion": 0.35,
+      "throw": 0.3,
+      "skew": 0.3,
+      "depth": 0.35
+     },
+     "motion": null
+    }
    ]
   },
   "color": {
@@ -135,6 +194,21 @@
       "drift": 0.24,
       "grain": 0.12,
       "brightness": 0.9
+     }
+    },
+    {
+     "id": "lay_hue",
+     "kind": "generator",
+     "ref": "hue-cycle",
+     "name": "hue cycle",
+     "visible": false,
+     "opacity": 1.0,
+     "blend": "normal",
+     "light": null,
+     "params": {
+      "speed": 0.2,
+      "saturation": 0.75,
+      "spread": 0.25
      }
     }
    ]
@@ -175,6 +249,29 @@
       "brightness": 0.66,
       "warmth": 0,
       "drift": 0.1
+     },
+     "motion": {
+      "on": true,
+      "preset": "drift",
+      "from": {
+       "x": -0.04,
+       "y": -0.02
+      },
+      "via": null,
+      "to": {
+       "x": 0.04,
+       "y": 0.02
+      },
+      "duration": 90,
+      "easing": "sine",
+      "loop": "pingpong",
+      "rotate": 1.5,
+      "scaleFrom": 1,
+      "scaleTo": 1,
+      "kelvinFrom": 0,
+      "kelvinTo": 0,
+      "phase": 0,
+      "startedAt": 1791700000123
      }
     }
    ]
@@ -962,6 +1059,14 @@
      "kind": "sound",
      "id": null
     }
+   },
+   {
+    "id": "trk_sun",
+    "name": "window · sun",
+    "target": {
+     "kind": "layer",
+     "id": "att_window"
+    }
    }
   ],
   "clips": [
@@ -1096,6 +1201,19 @@
      "sound": "5d1e0a",
      "offset": 0.5,
      "volume": 0.8
+    }
+   },
+   {
+    "id": "clp_sun",
+    "trackId": "trk_sun",
+    "effect": "motion",
+    "start": 0,
+    "end": 20,
+    "fadeIn": 0,
+    "fadeOut": 0,
+    "params": {
+     "from": 0.5,
+     "to": 1
     }
    }
   ],

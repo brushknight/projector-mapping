@@ -62,6 +62,7 @@ projmap mcp --url http://studio-mac.local:7400/mcp --token <token>
 | write (draft) | `surface_create`, `surface_update`, `surface_nudge`, `surface_create_from_camera`, `effect_create`, `effect_update`, `clip_add`, `cue_add`, `draft_diff` |
 | draw (draft) | `face_draw`, `face_drawing_clear`, `object_draw`, `layer_add`, `layer_update`, `layer_remove`, `asset_upload` |
 | sound | `sound_list`, `sound_play` (needs "agent may preview"); `clip_add` also puts sound clips on a sound track |
+| backdrop | `catalog_get`, `scene_list`, `scene_create`, `scene_activate`, `mode_set`, `light_set`, `attachment_add`, `attachment_update`, `attachment_remove`, `gobo_set`, `backdrop_set`, `motion_set`, `preset_apply` (live with "agents edit live", else in the draft) |
 | act | `calibration_run`, `detect_surfaces`, `alignment_error`, `projector_show`, `preview_on_projector`, `transport` |
 | hand-off | `proposal_submit`, `draft_apply` (needs "agent may apply") |
 
@@ -92,20 +93,63 @@ The agent then:
 
 Pictures work too: the agent can write an SVG or PNG, `asset_upload` it and place it on a face with `layer_add`.
 
-## Drafts, proposals and the two toggles
+## Live demo: change the wall from Claude or Codex
+
+The backdrop tools change what the wall shows outside mapping: the light, the gobos in front of it, how they move,
+the live, color and scenery layers, presets and scenes. They follow the editor's **agents edit live** switch
+(Set up, agent settings; `agentLiveEdits` in the settings API, off by default):
+
+- **Off:** they write into the agent's draft like every other write tool. The wall does not change until you apply
+  the proposal. Results end with "in your draft".
+- **On:** they change the scene on the wall at once, as a normal edit by `agent:claude` or `agent:codex`. The
+  projector, the phone and the viewer all follow on the next frame, and every change is one undo step. Results end
+  with "live on the wall". `scene_activate` works with the switch on (or with "agent may go live").
+
+Turn it on for a demo, from the editor or with
+
+```bash
+curl -X PATCH -H 'Content-Type: application/json' -d '{"agentLiveEdits": true}' http://localhost:7400/api/v1/settings
+```
+
+then talk to the agent. Prompts that work well:
+
+> make a warm sunset window that slowly slides left to right
+
+The agent picks a window gobo (`gobo_set`), warms the light (`light_set` with `kelvin` around 2700 and a soft
+`focus`) and starts the sun pass (`motion_set` with target `light` and preset `sun-lr`, a longer `duration` for a
+slower pass).
+
+> add venetian blinds over the window and soften the focus
+
+`attachment_add` with gobo `blinds` (the window stays: attachments stack, each blocks more light), then `light_set`
+with a lower `focus`.
+
+> start a new live scene with rain on glass and put it on the wall
+
+`scene_create` with kind `live`, `backdrop_set` with a `rain-glass` layer, then `scene_activate`. Activating puts
+the scene's kind on air (live mode here).
+
+More ideas: "make it a candle lit room" (`light_set` fx `candle`), "slide the whole picture a little to the right"
+(`light_set` `slideX`), "apply the storm preset" (`preset_apply`), "show the ember gradient" (`mode_set` color). The
+agent reads `catalog_get` for the ids of gobos, procedural layers, gradients, colour generators, motion presets and
+scene templates, and `scene_list` to see which scene is on the wall and whether the switch is on.
+
+## Drafts, proposals and the toggles
 
 - Everything an agent writes goes into a **draft**, a backstage copy of the scene. The wall does not change.
 - The agent finishes with `proposal_submit`. The editor's agent panel shows the proposal with **apply**, **preview**
   (the stage shows the draft) and **discard**.
 - Proposals from Claude Code or Codex sessions you started yourself (outside the editor) show in the agent panel
   too, a few seconds after their first write, as "claude over MCP" or "codex over MCP".
-- Three toggles in the agent panel, all **off** by default:
+- Four toggles in the editor, all **off** by default:
   - **agent may preview on projector**: lets the agent show patterns, outlines and its draft on the real projector
     (needed for `camera_compare`, `alignment_error` and `preview_on_projector`);
   - **agent may go live**: lets the agent use the transport (play, GO, blackout) on air;
   - **agent may apply its drafts**: lets the agent put its own draft on the live scene with `draft_apply`. The
     same switch over the API: `curl -X PATCH -H 'Content-Type: application/json' -d '{"agentMayApply": true}'
-    http://localhost:7400/api/v1/settings`.
+    http://localhost:7400/api/v1/settings`;
+  - **agents edit live** (`agentLiveEdits`): sends the backdrop tools' writes straight to the wall (see the live demo
+    above). Mapping, drawing and timeline tools still write into the draft.
 - Every agent change is one history entry, so you can undo it.
 
 ## Start an agent from the editor or the phone
@@ -133,4 +177,5 @@ the agent; the renderer compiles it.
   needs a token.
 - GLSL effects only reach their uniforms. JS effects run in a worker with no DOM and no network, and are switched
   off when they go over their frame budget.
-- Agents never change the live scene unless you apply their proposal or turn on "agent may go live".
+- Agents never change the live scene unless you apply their proposal, turn on "agent may apply" or "agent may go
+  live", or turn on "agents edit live" for the backdrop tools.

@@ -684,6 +684,17 @@ func Diff(a, b *scene.Scene) []string {
 			return l.ID, fmt.Sprintf("%s %q", l.ID, l.Name)
 		})
 	}
+	for _, m := range []string{scene.ModeStatic, scene.ModeLive} {
+		diffList(m+" attachment", a.Backdrop.Stack(m).Attachments, b.Backdrop.Stack(m).Attachments, func(v any) (string, string) {
+			at := v.(scene.Attachment)
+			return at.ID, fmt.Sprintf("%s %q", at.ID, at.Name)
+		})
+		la, _ := json.Marshal(a.Backdrop.Stack(m).Light)
+		lb, _ := json.Marshal(b.Backdrop.Stack(m).Light)
+		if string(la) != string(lb) {
+			out = append(out, "changes the "+m+" light")
+		}
+	}
 	if a.Mode != b.Mode {
 		out = append(out, fmt.Sprintf("puts %s on air (was %s)", b.Mode, a.Mode))
 	}

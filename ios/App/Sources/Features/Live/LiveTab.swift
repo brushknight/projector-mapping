@@ -15,6 +15,7 @@ enum Atmosphere {
 struct LiveTab: View {
     @Environment(AppModel.self) private var model
     @State private var selectedId: String?
+    @State private var attachmentId: String?
     @State private var dragging: String?
     @State private var dragOffset: CGFloat = 0
 
@@ -26,6 +27,7 @@ struct LiveTab: View {
         TabPage {
             TabHeader(title: "live")
             Hero { BackdropArt(focus: .live) } leading: { OnAirLabel(detail: "\(stack.count) layer\(stack.count == 1 ? "" : "s")") } trailing: { FormatLabel() }
+                .modifier(HeroSlide(mode: "live"))
             VStack(spacing: 10) {
                 CapRow("layers", "hold to reorder")
                 if !stack.isEmpty { layerList(stack, selected: selected) }
@@ -41,11 +43,31 @@ struct LiveTab: View {
                 .buttonStyle(.plain)
             }
             if let selected { paramsCard(selected) }
+            lightSection
             atmosphere
             PresetsSection(mode: "live")
         }
         .onChange(of: model.layers("live").map(\.id)) { _, ids in
             if let s = selectedId, !ids.contains(s) { selectedId = nil }
+        }
+    }
+
+    // MARK: Light and attachments (§15)
+
+    /// The live stack's light with its attachments, the same controls as the static tab. Shadow layers (tree sway,
+    /// clouds) multiply into the same mask.
+    @ViewBuilder
+    var lightSection: some View {
+        let list = model.attachments("live")
+        let selected = list.first { $0.id == attachmentId } ?? list.last
+        LightCard(mode: "live")
+        if model.light("live") != nil {
+            AttachmentBrowser(mode: "live", selected: $attachmentId)
+            AttachmentList(mode: "live", selected: $attachmentId)
+            if let selected { AttachmentControls(mode: "live", attachment: selected) }
+            LightColorCard(mode: "live")
+            SlideCard(mode: "live")
+            MotionCard(mode: "live", attachment: selected)
         }
     }
 
@@ -191,6 +213,10 @@ struct LayerThumb: View {
             SceneryImage(ref: layer.ref)
         case "solid":
             Color(css: layer.params["color"]?.string) ?? .black
+        case "procedural", "gobo":
+            CatalogThumb(layer.ref) { GoboArt(layer.ref) }
+        case "generator":
+            AngledGradient(stops: [.init(color: .red, location: 0), .init(color: .green, location: 0.5), .init(color: .blue, location: 1)], angle: 90)
         default:
             GoboArt(layer.ref)
         }

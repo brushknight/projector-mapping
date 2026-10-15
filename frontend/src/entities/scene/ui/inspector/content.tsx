@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { Cap, ColorField, FillSlider, Icon, Menu, NumField, Pill, Row, Section, Segmented, Switch, TextInput } from '../../../../shared/components'
 import { newId } from '../../../../shared/lib/ids'
 import { LAYER_CLIP_DEFAULTS } from '../../../../render/timeline'
@@ -105,6 +105,8 @@ export function ContentLayerInspector({ scene, layerId }: { scene: Scene; layerI
   const stops = l.stops ?? []
   const crop = l.crop ?? { x: 0, y: 0, w: 1, h: 1 }
   const animated = scene.timeline.tracks.some((t) => t.target.kind === 'layer' && t.target.id === l.id)
+  // blend, crop and placement numbers, the reveal angle and gradient offset/repeat are rarely needed
+  const [more, setMore] = useState(false)
   return (
     <div className={s.insp} data-testid="content-layer-inspector">
       <div className={s.ph}>
@@ -140,7 +142,6 @@ export function ContentLayerInspector({ scene, layerId }: { scene: Scene; layerI
           <span>visible</span>
           <Switch checked={l.visible} onChange={(v) => set('visible', v)} ariaLabel="visible" />
         </Row>
-        <Segmented<BlendMode> ariaLabel="blend" value={l.blend} onChange={(v) => set('blend', v)} options={(['normal', 'multiply', 'screen', 'add'] as BlendMode[]).map((b) => ({ value: b, label: b }))} />
         <FillSlider label="opacity" value={l.opacity} display={`${Math.round(l.opacity * 100)}%`} onChange={(v, ph) => set('opacity', Math.round(v * 100) / 100, ph)} />
       </Section>
       {l.kind === 'media' && (
@@ -156,13 +157,6 @@ export function ContentLayerInspector({ scene, layerId }: { scene: Scene; layerI
               { value: 'stretch', label: 'stretch', title: 'fill exactly, ignore the aspect' },
             ]}
           />
-          <Cap>crop</Cap>
-          <div className={s.two}>
-            <NumField prefix="x" ariaLabel="crop x" value={crop.x} digits={3} step={0.01} min={0} max={1} onCommit={(v) => set('crop', { ...crop, x: r3(Math.min(1 - crop.w, Math.max(0, v))) })} />
-            <NumField prefix="y" ariaLabel="crop y" value={crop.y} digits={3} step={0.01} min={0} max={1} onCommit={(v) => set('crop', { ...crop, y: r3(Math.min(1 - crop.h, Math.max(0, v))) })} />
-            <NumField prefix="w" ariaLabel="crop width" value={crop.w} digits={3} step={0.01} min={0.01} max={1} onCommit={(v) => set('crop', { ...crop, w: r3(Math.min(1 - crop.x, Math.max(0.01, v))) })} />
-            <NumField prefix="h" ariaLabel="crop height" value={crop.h} digits={3} step={0.01} min={0.01} max={1} onCommit={(v) => set('crop', { ...crop, h: r3(Math.min(1 - crop.y, Math.max(0.01, v))) })} />
-          </div>
           <span className={s.dim}>{l.src?.startsWith('asset:') ? `${l.media} · uploaded` : `${l.media} · ${l.src}`}</span>
         </Section>
       )}
@@ -180,27 +174,15 @@ export function ContentLayerInspector({ scene, layerId }: { scene: Scene; layerI
             </div>
           ))}
           <FillSlider label="angle" value={l.angle ?? 0} min={-180} max={180} step={1} display={`${Math.round(l.angle ?? 0)}°`} onChange={(v, ph) => set('angle', Math.round(v), ph)} />
-          <FillSlider label="offset" value={l.offset ?? 0} min={-1} max={1} step={0.01} display={(l.offset ?? 0).toFixed(2)} onChange={(v, ph) => set('offset', r3(v), ph)} />
-          <Row>
-            <span>repeat</span>
-            <Switch checked={!!l.repeat} onChange={(v) => set('repeat', v)} ariaLabel="repeat" />
-          </Row>
         </Section>
       )}
       <Section>
         <Cap>placement</Cap>
-        <div className={s.two}>
-          <NumField prefix="x" ariaLabel="offset x" value={l.x} digits={3} step={0.01} onCommit={(v) => set('x', r3(v))} />
-          <NumField prefix="y" ariaLabel="offset y" value={l.y} digits={3} step={0.01} onCommit={(v) => set('y', r3(v))} />
-          <NumField prefix="scale" ariaLabel="scale" value={l.scale} digits={2} step={0.05} min={0.01} max={100} onCommit={(v) => set('scale', r3(Math.max(0.01, v)))} />
-          <NumField prefix="turn" suffix="°" ariaLabel="rotation" value={l.rotation} digits={1} step={1} onCommit={(v) => set('rotation', Math.round(v * 10) / 10)} />
-        </div>
         <span className={s.dim}>drag the box in content to move it, a corner to scale, the knob to turn it.</span>
       </Section>
       <Section>
         <Cap>reveal</Cap>
         <FillSlider label="reveal" value={l.reveal} display={`${Math.round(l.reveal * 100)}%`} onChange={(v, ph) => set('reveal', r3(v), ph)} />
-        <FillSlider label="from" value={l.revealAngle} min={-180} max={180} step={1} display={`${Math.round(l.revealAngle)}°`} onChange={(v, ph) => set('revealAngle', Math.round(v), ph)} />
         <Row>
           <Pill size="sm" icon="play" onClick={() => animate(ed, scene, l, 'reveal')} title="add a clip that wipes this layer on, at the editor playhead" data-testid="animate-reveal">
             wipe on
@@ -210,6 +192,46 @@ export function ContentLayerInspector({ scene, layerId }: { scene: Scene; layerI
           </Pill>
         </Row>
         {animated && <span className={s.dim}>the timeline animates this layer; open it under the stage.</span>}
+      </Section>
+      <Section>
+        <Pill size="sm" ghost icon={more ? 'chevronDown' : 'chevronRight'} aria-expanded={more} onClick={() => setMore(!more)} title="blend, crop, exact placement and the wipe angle" data-testid="content-more-options">
+          {more ? 'hide the extra controls' : 'show more controls'}
+        </Pill>
+        {more && (
+          <div className={s.moreBox} data-testid="content-extra-controls">
+            <Cap>blend</Cap>
+            <Segmented<BlendMode> ariaLabel="blend" value={l.blend} onChange={(v) => set('blend', v)} options={(['normal', 'multiply', 'screen', 'add'] as BlendMode[]).map((b) => ({ value: b, label: b }))} />
+            {l.kind === 'media' && (
+              <>
+                <Cap>crop</Cap>
+                <div className={s.two}>
+                  <NumField prefix="x" ariaLabel="crop x" value={crop.x} digits={3} step={0.01} min={0} max={1} onCommit={(v) => set('crop', { ...crop, x: r3(Math.min(1 - crop.w, Math.max(0, v))) })} />
+                  <NumField prefix="y" ariaLabel="crop y" value={crop.y} digits={3} step={0.01} min={0} max={1} onCommit={(v) => set('crop', { ...crop, y: r3(Math.min(1 - crop.h, Math.max(0, v))) })} />
+                  <NumField prefix="w" ariaLabel="crop width" value={crop.w} digits={3} step={0.01} min={0.01} max={1} onCommit={(v) => set('crop', { ...crop, w: r3(Math.min(1 - crop.x, Math.max(0.01, v))) })} />
+                  <NumField prefix="h" ariaLabel="crop height" value={crop.h} digits={3} step={0.01} min={0.01} max={1} onCommit={(v) => set('crop', { ...crop, h: r3(Math.min(1 - crop.y, Math.max(0.01, v))) })} />
+                </div>
+              </>
+            )}
+            <Cap>exact placement</Cap>
+            <div className={s.two}>
+              <NumField prefix="x" ariaLabel="offset x" value={l.x} digits={3} step={0.01} onCommit={(v) => set('x', r3(v))} />
+              <NumField prefix="y" ariaLabel="offset y" value={l.y} digits={3} step={0.01} onCommit={(v) => set('y', r3(v))} />
+              <NumField prefix="scale" ariaLabel="scale" value={l.scale} digits={2} step={0.05} min={0.01} max={100} onCommit={(v) => set('scale', r3(Math.max(0.01, v)))} />
+              <NumField prefix="turn" suffix="°" ariaLabel="rotation" value={l.rotation} digits={1} step={1} onCommit={(v) => set('rotation', Math.round(v * 10) / 10)} />
+            </div>
+            <Cap>wipe angle</Cap>
+            <FillSlider label="from" value={l.revealAngle} min={-180} max={180} step={1} display={`${Math.round(l.revealAngle)}°`} onChange={(v, ph) => set('revealAngle', Math.round(v), ph)} />
+            {l.kind === 'gradient' && (
+              <>
+                <FillSlider label="offset" value={l.offset ?? 0} min={-1} max={1} step={0.01} display={(l.offset ?? 0).toFixed(2)} onChange={(v, ph) => set('offset', r3(v), ph)} />
+                <Row>
+                  <span>repeat</span>
+                  <Switch checked={!!l.repeat} onChange={(v) => set('repeat', v)} ariaLabel="repeat" />
+                </Row>
+              </>
+            )}
+          </div>
+        )}
       </Section>
     </div>
   )

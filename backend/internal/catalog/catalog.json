@@ -1,6 +1,6 @@
 {
- "version": 3,
- "paramSchemaNote": "each param: {type: number|integer|boolean|color|enum|string|strokes, min?, max?, step?, default, label?, unit?, options?}; strokes is an array of drawing strokes (protocol §1, effect drawing)",
+ "version": 4,
+ "paramSchemaNote": "each param: {type: number|integer|boolean|color|enum|string|strokes, min?, max?, step?, default, label?, unit?, options?}; strokes is an array of drawing strokes (protocol §1, effect drawing); an attachment's params validate against goboParams merged with its gobo's own params; a generator layer or colour layer validates against its colorGenerators params",
  "light": {
   "params": {
    "intensity": {
@@ -64,54 +64,1286 @@
    }
   ]
  },
- "gobos": [
+ "stackLight": {
+  "params": {
+   "intensity": {
+    "type": "number",
+    "min": 0,
+    "max": 1,
+    "default": 0.85,
+    "label": "intensity"
+   },
+   "focus": {
+    "type": "number",
+    "min": 0,
+    "max": 1,
+    "default": 0.7,
+    "label": "focus"
+   },
+   "fringe": {
+    "type": "number",
+    "min": 0,
+    "max": 1,
+    "default": 0.2,
+    "label": "colour fringe"
+   },
+   "vignette": {
+    "type": "number",
+    "min": 0,
+    "max": 1,
+    "default": 0.3,
+    "label": "lens vignette"
+   },
+   "haze": {
+    "type": "number",
+    "min": 0,
+    "max": 1,
+    "default": 0,
+    "label": "dust and haze"
+   }
+  },
+  "kelvin": 5600,
+  "attachmentParams": {
+   "opacity": {
+    "type": "number",
+    "min": 0,
+    "max": 1,
+    "default": 1,
+    "label": "blocks"
+   },
+   "rotation": {
+    "type": "number",
+    "min": -180,
+    "max": 180,
+    "default": 0,
+    "label": "rotation",
+    "unit": "°"
+   },
+   "scale": {
+    "type": "number",
+    "min": 0.25,
+    "max": 4,
+    "default": 1,
+    "label": "scale",
+    "unit": "×"
+   },
+   "offsetX": {
+    "type": "number",
+    "min": -2,
+    "max": 2,
+    "default": 0,
+    "label": "left / right"
+   },
+   "offsetY": {
+    "type": "number",
+    "min": -2,
+    "max": 2,
+    "default": 0,
+    "label": "up / down"
+   }
+  }
+ },
+ "goboParams": {
+  "throw": {
+   "type": "number",
+   "min": 0,
+   "max": 1,
+   "default": 0,
+   "label": "throw"
+  },
+  "skew": {
+   "type": "number",
+   "min": -1,
+   "max": 1,
+   "default": 0,
+   "label": "keystone"
+  },
+  "depth": {
+   "type": "number",
+   "min": 0,
+   "max": 1,
+   "default": 0.3,
+   "label": "frame depth"
+  }
+ },
+ "goboCategories": [
   {
-   "id": "window",
-   "name": "window",
-   "description": "2×3 window panes",
-   "category": "shadows"
+   "id": "windows",
+   "name": "windows"
   },
   {
    "id": "blinds",
-   "name": "blinds",
-   "description": "venetian blinds",
-   "category": "shadows"
+   "name": "blinds"
+  },
+  {
+   "id": "nature",
+   "name": "nature"
+  },
+  {
+   "id": "patterns",
+   "name": "patterns"
+  },
+  {
+   "id": "spots",
+   "name": "spots"
+  }
+ ],
+ "gobos": [
+  {
+   "id": "window-4",
+   "name": "window 4-pane",
+   "description": "a sash window with four panes, like a double hung window gobo",
+   "category": "windows",
+   "thumb": "thumbs/window-4.png",
+   "params": {
+    "cols": {
+     "type": "integer",
+     "min": 1,
+     "max": 8,
+     "default": 2,
+     "label": "columns"
+    },
+    "rows": {
+     "type": "integer",
+     "min": 1,
+     "max": 8,
+     "default": 2,
+     "label": "rows"
+    },
+    "mullion": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.35,
+     "label": "mullions"
+    }
+   },
+   "attachment": {
+    "scale": 1.25,
+    "rotation": 0
+   },
+   "focus": 0.68,
+   "defaults": {
+    "throw": 0.25,
+    "depth": 0.35,
+    "skew": 0.3
+   }
+  },
+  {
+   "id": "window",
+   "name": "window 6-pane",
+   "description": "a 2×3 window, the classic slanted sun patch",
+   "category": "windows",
+   "thumb": "thumbs/window.png",
+   "params": {
+    "cols": {
+     "type": "integer",
+     "min": 1,
+     "max": 8,
+     "default": 2,
+     "label": "columns"
+    },
+    "rows": {
+     "type": "integer",
+     "min": 1,
+     "max": 8,
+     "default": 3,
+     "label": "rows"
+    },
+    "mullion": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.35,
+     "label": "mullions"
+    }
+   },
+   "attachment": {
+    "scale": 1.1,
+    "rotation": 0
+   },
+   "focus": 0.66,
+   "defaults": {
+    "throw": 0.3,
+    "depth": 0.35,
+    "skew": 0.3
+   }
+  },
+  {
+   "id": "arch",
+   "name": "arched window",
+   "description": "a tall window with a round top and a cross of mullions",
+   "category": "windows",
+   "thumb": "thumbs/arch.png",
+   "params": {
+    "cols": {
+     "type": "integer",
+     "min": 1,
+     "max": 8,
+     "default": 2,
+     "label": "columns"
+    },
+    "rows": {
+     "type": "integer",
+     "min": 1,
+     "max": 8,
+     "default": 3,
+     "label": "rows"
+    },
+    "mullion": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.3,
+     "label": "mullions"
+    }
+   },
+   "attachment": {
+    "scale": 1.2,
+    "rotation": 0
+   },
+   "focus": 0.7,
+   "defaults": {
+    "throw": 0.15,
+    "depth": 0.3,
+    "skew": 0.2
+   }
+  },
+  {
+   "id": "gothic",
+   "name": "church window",
+   "description": "a pointed gothic window with tracery, like an architectural gobo",
+   "category": "windows",
+   "thumb": "thumbs/gothic.png",
+   "params": {
+    "mullion": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.3,
+     "label": "mullions"
+    }
+   },
+   "attachment": {
+    "scale": 1.25,
+    "rotation": 0
+   },
+   "focus": 0.72,
+   "defaults": {
+    "throw": 0.1,
+    "depth": 0.25
+   }
+  },
+  {
+   "id": "porthole",
+   "name": "porthole",
+   "description": "a round ship window with a thick rim",
+   "category": "windows",
+   "thumb": "thumbs/porthole.png",
+   "params": {
+    "mullion": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.0,
+     "label": "mullions"
+    },
+    "bars": {
+     "type": "integer",
+     "min": 0,
+     "max": 8,
+     "default": 0,
+     "label": "bars"
+    }
+   },
+   "attachment": {
+    "scale": 1.0,
+    "rotation": 0
+   },
+   "focus": 0.7,
+   "defaults": {
+    "throw": 0,
+    "depth": 0.45
+   }
+  },
+  {
+   "id": "french-doors",
+   "name": "french doors",
+   "description": "two tall glazed doors, five panes each, floor to ceiling",
+   "category": "windows",
+   "thumb": "thumbs/french-doors.png",
+   "params": {
+    "cols": {
+     "type": "integer",
+     "min": 1,
+     "max": 8,
+     "default": 4,
+     "label": "columns"
+    },
+    "rows": {
+     "type": "integer",
+     "min": 1,
+     "max": 8,
+     "default": 5,
+     "label": "rows"
+    },
+    "mullion": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.3,
+     "label": "mullions"
+    }
+   },
+   "attachment": {
+    "scale": 1.0,
+    "rotation": 0
+   },
+   "focus": 0.67,
+   "defaults": {
+    "throw": 0.35,
+    "depth": 0.3,
+    "skew": 0.3
+   }
+  },
+  {
+   "id": "skylight",
+   "name": "skylight",
+   "description": "a roof window seen from below: a soft square of 3×3 panes",
+   "category": "windows",
+   "thumb": "thumbs/skylight.png",
+   "params": {
+    "cols": {
+     "type": "integer",
+     "min": 1,
+     "max": 8,
+     "default": 3,
+     "label": "columns"
+    },
+    "rows": {
+     "type": "integer",
+     "min": 1,
+     "max": 8,
+     "default": 3,
+     "label": "rows"
+    },
+    "mullion": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.25,
+     "label": "mullions"
+    }
+   },
+   "attachment": {
+    "scale": 1.1,
+    "rotation": 6
+   },
+   "focus": 0.55,
+   "defaults": {
+    "throw": 0.05,
+    "depth": 0.5
+   }
+  },
+  {
+   "id": "barn",
+   "name": "barn window",
+   "description": "a square window with a cross brace in rough wood",
+   "category": "windows",
+   "thumb": "thumbs/barn.png",
+   "params": {
+    "mullion": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.45,
+     "label": "mullions"
+    }
+   },
+   "attachment": {
+    "scale": 1.1,
+    "rotation": 0
+   },
+   "focus": 0.64,
+   "defaults": {
+    "throw": 0.2,
+    "depth": 0.4,
+    "skew": 0.3
+   }
+  },
+  {
+   "id": "blinds-fine",
+   "name": "venetian blinds, fine",
+   "description": "thin aluminium slats, many narrow lines",
+   "category": "blinds",
+   "thumb": "thumbs/blinds-fine.png",
+   "params": {
+    "slats": {
+     "type": "integer",
+     "min": 4,
+     "max": 60,
+     "default": 36,
+     "label": "slats"
+    },
+    "tilt": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.55,
+     "label": "opening"
+    }
+   },
+   "attachment": {
+    "scale": 1.4,
+    "rotation": 0
+   },
+   "focus": 0.75,
+   "defaults": {
+    "throw": 0.2,
+    "depth": 0.2,
+    "skew": 0.25
+   }
+  },
+  {
+   "id": "blinds",
+   "name": "venetian blinds",
+   "description": "standard 25 mm slats, the film noir look",
+   "category": "blinds",
+   "thumb": "thumbs/blinds.png",
+   "params": {
+    "slats": {
+     "type": "integer",
+     "min": 4,
+     "max": 60,
+     "default": 22,
+     "label": "slats"
+    },
+    "tilt": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.55,
+     "label": "opening"
+    }
+   },
+   "attachment": {
+    "scale": 1.4,
+    "rotation": 0
+   },
+   "focus": 0.7,
+   "defaults": {
+    "throw": 0.25,
+    "depth": 0.25,
+    "skew": 0.25
+   }
+  },
+  {
+   "id": "blinds-wide",
+   "name": "venetian blinds, wide",
+   "description": "wide wooden slats, few bold bars",
+   "category": "blinds",
+   "thumb": "thumbs/blinds-wide.png",
+   "params": {
+    "slats": {
+     "type": "integer",
+     "min": 4,
+     "max": 60,
+     "default": 12,
+     "label": "slats"
+    },
+    "tilt": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.5,
+     "label": "opening"
+    }
+   },
+   "attachment": {
+    "scale": 1.4,
+    "rotation": 0
+   },
+   "focus": 0.68,
+   "defaults": {
+    "throw": 0.25,
+    "depth": 0.3,
+    "skew": 0.25
+   }
+  },
+  {
+   "id": "vertical-blinds",
+   "name": "vertical blinds",
+   "description": "tall office louvres, half open",
+   "category": "blinds",
+   "thumb": "thumbs/vertical-blinds.png",
+   "params": {
+    "slats": {
+     "type": "integer",
+     "min": 4,
+     "max": 60,
+     "default": 14,
+     "label": "slats"
+    },
+    "tilt": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.5,
+     "label": "opening"
+    }
+   },
+   "attachment": {
+    "scale": 1.4,
+    "rotation": 0
+   },
+   "focus": 0.7,
+   "defaults": {
+    "throw": 0.1,
+    "depth": 0.25
+   }
+  },
+  {
+   "id": "shutters",
+   "name": "plantation shutters",
+   "description": "louvred shutter panels with a centre rail",
+   "category": "blinds",
+   "thumb": "thumbs/shutters.png",
+   "params": {
+    "slats": {
+     "type": "integer",
+     "min": 6,
+     "max": 30,
+     "default": 16,
+     "label": "slats"
+    },
+    "panels": {
+     "type": "integer",
+     "min": 2,
+     "max": 4,
+     "default": 2,
+     "label": "panels"
+    },
+    "tilt": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.6,
+     "label": "opening"
+    }
+   },
+   "attachment": {
+    "scale": 1.3,
+    "rotation": 0
+   },
+   "focus": 0.7,
+   "defaults": {
+    "throw": 0.2,
+    "depth": 0.35,
+    "skew": 0.25
+   }
+  },
+  {
+   "id": "leaves-light",
+   "name": "leaves, light",
+   "description": "a sparse leaf breakup: sun through a thin canopy",
+   "category": "nature",
+   "thumb": "thumbs/leaves-light.png",
+   "params": {
+    "density": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.35,
+     "label": "density"
+    },
+    "size": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.5,
+     "label": "leaf size"
+    },
+    "seed": {
+     "type": "integer",
+     "min": 0,
+     "max": 999,
+     "default": 3,
+     "label": "seed"
+    }
+   },
+   "attachment": {
+    "scale": 1.6,
+    "rotation": 0
+   },
+   "focus": 0.55,
+   "defaults": {
+    "throw": 0.1,
+    "depth": 0
+   }
   },
   {
    "id": "tree",
-   "name": "tree",
-   "description": "tree branches and leaves",
-   "category": "shadows"
+   "name": "leaves",
+   "description": "a medium leaf breakup with branches",
+   "category": "nature",
+   "thumb": "thumbs/tree.png",
+   "params": {
+    "density": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.55,
+     "label": "density"
+    },
+    "size": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.5,
+     "label": "leaf size"
+    },
+    "seed": {
+     "type": "integer",
+     "min": 0,
+     "max": 999,
+     "default": 7,
+     "label": "seed"
+    }
+   },
+   "attachment": {
+    "scale": 1.5,
+    "rotation": 0
+   },
+   "focus": 0.6,
+   "defaults": {
+    "throw": 0.1,
+    "depth": 0
+   }
+  },
+  {
+   "id": "leaves-dense",
+   "name": "leaves, dense",
+   "description": "a dense canopy with small gaps of sun",
+   "category": "nature",
+   "thumb": "thumbs/leaves-dense.png",
+   "params": {
+    "density": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.8,
+     "label": "density"
+    },
+    "size": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.45,
+     "label": "leaf size"
+    },
+    "seed": {
+     "type": "integer",
+     "min": 0,
+     "max": 999,
+     "default": 11,
+     "label": "seed"
+    }
+   },
+   "attachment": {
+    "scale": 1.5,
+    "rotation": 0
+   },
+   "focus": 0.58,
+   "defaults": {
+    "throw": 0.1,
+    "depth": 0
+   }
   },
   {
    "id": "palm",
    "name": "palm",
-   "description": "palm fronds",
-   "category": "shadows"
+   "description": "palm fronds over the window",
+   "category": "nature",
+   "thumb": "thumbs/palm.png",
+   "params": {
+    "fronds": {
+     "type": "integer",
+     "min": 4,
+     "max": 14,
+     "default": 9,
+     "label": "fronds"
+    },
+    "seed": {
+     "type": "integer",
+     "min": 0,
+     "max": 999,
+     "default": 5,
+     "label": "seed"
+    }
+   },
+   "attachment": {
+    "scale": 1.4,
+    "rotation": 0
+   },
+   "focus": 0.6,
+   "defaults": {
+    "throw": 0.1,
+    "depth": 0
+   }
   },
   {
-   "id": "arch",
-   "name": "arch",
-   "description": "arched window with mullions",
-   "category": "shadows"
+   "id": "branch",
+   "name": "branch",
+   "description": "one bare branch with twigs",
+   "category": "nature",
+   "thumb": "thumbs/branch.png",
+   "params": {
+    "density": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.4,
+     "label": "density"
+    },
+    "seed": {
+     "type": "integer",
+     "min": 0,
+     "max": 999,
+     "default": 9,
+     "label": "seed"
+    }
+   },
+   "attachment": {
+    "scale": 1.4,
+    "rotation": -10
+   },
+   "focus": 0.65,
+   "defaults": {
+    "throw": 0.1,
+    "depth": 0
+   }
   },
   {
-   "id": "lattice",
-   "name": "lattice",
-   "description": "diamond lattice",
-   "category": "shadows"
+   "id": "ivy",
+   "name": "ivy",
+   "description": "ivy hanging over the top of the frame",
+   "category": "nature",
+   "thumb": "thumbs/ivy.png",
+   "params": {
+    "density": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.6,
+     "label": "density"
+    },
+    "seed": {
+     "type": "integer",
+     "min": 0,
+     "max": 999,
+     "default": 4,
+     "label": "seed"
+    }
+   },
+   "attachment": {
+    "scale": 1.4,
+    "rotation": 0
+   },
+   "focus": 0.62,
+   "defaults": {
+    "throw": 0.05,
+    "depth": 0
+   }
+  },
+  {
+   "id": "bamboo",
+   "name": "bamboo",
+   "description": "bamboo stalks and slim leaves",
+   "category": "nature",
+   "thumb": "thumbs/bamboo.png",
+   "params": {
+    "density": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.5,
+     "label": "density"
+    },
+    "seed": {
+     "type": "integer",
+     "min": 0,
+     "max": 999,
+     "default": 6,
+     "label": "seed"
+    }
+   },
+   "attachment": {
+    "scale": 1.4,
+    "rotation": 0
+   },
+   "focus": 0.64,
+   "defaults": {
+    "throw": 0.05,
+    "depth": 0
+   }
   },
   {
    "id": "dots",
    "name": "dots",
-   "description": "dappled dots",
-   "category": "shadows"
+   "description": "dappled dots of light",
+   "category": "patterns",
+   "thumb": "thumbs/dots.png",
+   "params": {
+    "density": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.55,
+     "label": "density"
+    },
+    "size": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.5,
+     "label": "dot size"
+    },
+    "seed": {
+     "type": "integer",
+     "min": 0,
+     "max": 999,
+     "default": 2,
+     "label": "seed"
+    }
+   },
+   "attachment": {
+    "scale": 1.4,
+    "rotation": 0
+   },
+   "focus": 0.65,
+   "defaults": {
+    "depth": 0
+   }
+  },
+  {
+   "id": "lattice",
+   "name": "lattice",
+   "description": "a diamond garden trellis",
+   "category": "patterns",
+   "thumb": "thumbs/lattice.png",
+   "params": {
+    "cells": {
+     "type": "integer",
+     "min": 3,
+     "max": 20,
+     "default": 7,
+     "label": "cells"
+    },
+    "mullion": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.3,
+     "label": "mullions"
+    }
+   },
+   "attachment": {
+    "scale": 1.4,
+    "rotation": 0
+   },
+   "focus": 0.7,
+   "defaults": {
+    "throw": 0.1,
+    "depth": 0.15
+   }
+  },
+  {
+   "id": "moroccan",
+   "name": "moroccan",
+   "description": "a pierced moroccan lantern screen",
+   "category": "patterns",
+   "thumb": "thumbs/moroccan.png",
+   "params": {
+    "cells": {
+     "type": "integer",
+     "min": 3,
+     "max": 16,
+     "default": 6,
+     "label": "cells"
+    },
+    "mullion": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.35,
+     "label": "mullions"
+    }
+   },
+   "attachment": {
+    "scale": 1.4,
+    "rotation": 0
+   },
+   "focus": 0.7,
+   "defaults": {
+    "depth": 0.15
+   }
+  },
+  {
+   "id": "honeycomb",
+   "name": "honeycomb",
+   "description": "hexagonal cells",
+   "category": "patterns",
+   "thumb": "thumbs/honeycomb.png",
+   "params": {
+    "cells": {
+     "type": "integer",
+     "min": 3,
+     "max": 20,
+     "default": 8,
+     "label": "cells"
+    },
+    "mullion": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.25,
+     "label": "mullions"
+    }
+   },
+   "attachment": {
+    "scale": 1.4,
+    "rotation": 0
+   },
+   "focus": 0.7,
+   "defaults": {
+    "depth": 0.15
+   }
+  },
+  {
+   "id": "stripes",
+   "name": "stripes",
+   "description": "parallel bars of light",
+   "category": "patterns",
+   "thumb": "thumbs/stripes.png",
+   "params": {
+    "count": {
+     "type": "integer",
+     "min": 2,
+     "max": 40,
+     "default": 9,
+     "label": "bars"
+    },
+    "width": {
+     "type": "number",
+     "min": 0.05,
+     "max": 0.95,
+     "default": 0.45,
+     "label": "bar width"
+    }
+   },
+   "attachment": {
+    "scale": 1.4,
+    "rotation": -20
+   },
+   "focus": 0.7,
+   "defaults": {
+    "depth": 0
+   }
+  },
+  {
+   "id": "grid",
+   "name": "grid",
+   "description": "a square grid, like a warehouse window",
+   "category": "patterns",
+   "thumb": "thumbs/grid.png",
+   "params": {
+    "cells": {
+     "type": "integer",
+     "min": 2,
+     "max": 24,
+     "default": 8,
+     "label": "cells"
+    },
+    "mullion": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.25,
+     "label": "mullions"
+    }
+   },
+   "attachment": {
+    "scale": 1.4,
+    "rotation": 0
+   },
+   "focus": 0.7,
+   "defaults": {
+    "throw": 0.15
+   }
+  },
+  {
+   "id": "stars",
+   "name": "star field",
+   "description": "a night sky of tiny points",
+   "category": "patterns",
+   "thumb": "thumbs/stars.png",
+   "params": {
+    "density": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.5,
+     "label": "density"
+    },
+    "size": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.35,
+     "label": "star size"
+    },
+    "seed": {
+     "type": "integer",
+     "min": 0,
+     "max": 999,
+     "default": 8,
+     "label": "seed"
+    }
+   },
+   "attachment": {
+    "scale": 1.6,
+    "rotation": 0
+   },
+   "focus": 0.85,
+   "defaults": {
+    "depth": 0
+   }
+  },
+  {
+   "id": "water",
+   "name": "water ripple",
+   "description": "light bouncing off a pool, frozen",
+   "category": "patterns",
+   "thumb": "thumbs/water.png",
+   "params": {
+    "scale": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.5,
+     "label": "ripple size"
+    },
+    "sharpness": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.5,
+     "label": "sharpness"
+    },
+    "seed": {
+     "type": "integer",
+     "min": 0,
+     "max": 999,
+     "default": 1,
+     "label": "seed"
+    }
+   },
+   "attachment": {
+    "scale": 1.5,
+    "rotation": 0
+   },
+   "focus": 0.7,
+   "defaults": {
+    "throw": 0.15,
+    "depth": 0
+   }
   },
   {
    "id": "spot",
-   "name": "spot",
-   "description": "round spotlight",
-   "category": "shadows"
+   "name": "round spot, hard",
+   "description": "a focused round beam",
+   "category": "spots",
+   "thumb": "thumbs/spot.png",
+   "params": {
+    "edge": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.04,
+     "label": "edge"
+    }
+   },
+   "attachment": {
+    "scale": 1.0,
+    "rotation": 0
+   },
+   "focus": 0.95,
+   "defaults": {
+    "depth": 0
+   }
+  },
+  {
+   "id": "spot-soft",
+   "name": "round spot, soft",
+   "description": "a defocused round beam with a wide falloff",
+   "category": "spots",
+   "thumb": "thumbs/spot-soft.png",
+   "params": {
+    "edge": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.6,
+     "label": "edge"
+    }
+   },
+   "attachment": {
+    "scale": 1.1,
+    "rotation": 0
+   },
+   "focus": 0.65,
+   "defaults": {
+    "depth": 0
+   }
+  },
+  {
+   "id": "oval",
+   "name": "oval spot",
+   "description": "an elliptical beam, like a spot hitting the wall at an angle",
+   "category": "spots",
+   "thumb": "thumbs/oval.png",
+   "params": {
+    "edge": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.12,
+     "label": "edge"
+    },
+    "aspect": {
+     "type": "number",
+     "min": 0.2,
+     "max": 1,
+     "default": 0.55,
+     "label": "roundness"
+    }
+   },
+   "attachment": {
+    "scale": 1.1,
+    "rotation": 0
+   },
+   "focus": 0.9,
+   "defaults": {
+    "depth": 0
+   }
+  },
+  {
+   "id": "shutter",
+   "name": "framing shutters",
+   "description": "a beam cut by four shutter blades, like an ellipsoidal spot",
+   "category": "spots",
+   "thumb": "thumbs/shutter.png",
+   "params": {
+    "top": {
+     "type": "number",
+     "min": 0,
+     "max": 0.95,
+     "default": 0.16,
+     "label": "top blade"
+    },
+    "bottom": {
+     "type": "number",
+     "min": 0,
+     "max": 0.95,
+     "default": 0.2,
+     "label": "bottom blade"
+    },
+    "left": {
+     "type": "number",
+     "min": 0,
+     "max": 0.95,
+     "default": 0.22,
+     "label": "left blade"
+    },
+    "right": {
+     "type": "number",
+     "min": 0,
+     "max": 0.95,
+     "default": 0.18,
+     "label": "right blade"
+    },
+    "topAngle": {
+     "type": "number",
+     "min": -45,
+     "max": 45,
+     "default": 4,
+     "label": "top angle",
+     "unit": "°"
+    },
+    "bottomAngle": {
+     "type": "number",
+     "min": -45,
+     "max": 45,
+     "default": -3,
+     "label": "bottom angle",
+     "unit": "°"
+    },
+    "leftAngle": {
+     "type": "number",
+     "min": -45,
+     "max": 45,
+     "default": -6,
+     "label": "left angle",
+     "unit": "°"
+    },
+    "rightAngle": {
+     "type": "number",
+     "min": -45,
+     "max": 45,
+     "default": 5,
+     "label": "right angle",
+     "unit": "°"
+    }
+   },
+   "attachment": {
+    "scale": 1.25,
+    "rotation": 0
+   },
+   "focus": 0.94,
+   "defaults": {
+    "depth": 0
+   }
+  },
+  {
+   "id": "iris",
+   "name": "iris",
+   "description": "a round beam closed down by an iris",
+   "category": "spots",
+   "thumb": "thumbs/iris.png",
+   "params": {
+    "iris": {
+     "type": "number",
+     "min": 0.05,
+     "max": 1,
+     "default": 0.5,
+     "label": "iris"
+    },
+    "edge": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.05,
+     "label": "edge"
+    }
+   },
+   "attachment": {
+    "scale": 1.25,
+    "rotation": 0
+   },
+   "focus": 0.95,
+   "defaults": {
+    "depth": 0
+   }
   }
  ],
  "procedural": [
@@ -149,7 +1381,8 @@
      "default": 7,
      "label": "seed"
     }
-   }
+   },
+   "thumb": "thumbs/tree-sway.png"
   },
   {
    "id": "palm-sway",
@@ -185,7 +1418,8 @@
      "default": 3,
      "label": "seed"
     }
-   }
+   },
+   "thumb": "thumbs/palm-sway.png"
   },
   {
    "id": "clouds",
@@ -214,7 +1448,8 @@
      "default": 0.8,
      "label": "softness"
     }
-   }
+   },
+   "thumb": "thumbs/clouds.png"
   },
   {
    "id": "rain-glass",
@@ -243,7 +1478,8 @@
      "default": 0.6,
      "label": "drop size"
     }
-   }
+   },
+   "thumb": "thumbs/rain-glass.png"
   },
   {
    "id": "lightning",
@@ -265,7 +1501,8 @@
      "default": 0.9,
      "label": "brightness"
     }
-   }
+   },
+   "thumb": "thumbs/lightning.png"
   },
   {
    "id": "day-cycle",
@@ -297,7 +1534,8 @@
      "label": "duration",
      "unit": "min"
     }
-   }
+   },
+   "thumb": "thumbs/day-cycle.png"
   },
   {
    "id": "sun-drift",
@@ -319,7 +1557,8 @@
      "default": 0.3,
      "label": "travel"
     }
-   }
+   },
+   "thumb": "thumbs/sun-drift.png"
   },
   {
    "id": "candle-flicker",
@@ -341,7 +1580,8 @@
      "default": 0.5,
      "label": "speed"
     }
-   }
+   },
+   "thumb": "thumbs/candle-flicker.png"
   },
   {
    "id": "caustics",
@@ -370,7 +1610,8 @@
      "default": 0.5,
      "label": "sharpness"
     }
-   }
+   },
+   "thumb": "thumbs/caustics.png"
   },
   {
    "id": "dapple",
@@ -392,7 +1633,8 @@
      "default": 0.5,
      "label": "density"
     }
-   }
+   },
+   "thumb": "thumbs/dapple.png"
   },
   {
    "id": "film-grain",
@@ -414,7 +1656,8 @@
      "default": 0.3,
      "label": "size"
     }
-   }
+   },
+   "thumb": "thumbs/film-grain.png"
   },
   {
    "id": "haze",
@@ -436,7 +1679,8 @@
      "default": 0.1,
      "label": "drift"
     }
-   }
+   },
+   "thumb": "thumbs/haze.png"
   }
  ],
  "gradients": [
@@ -786,6 +2030,422 @@
    "label": "volume"
   }
  },
+ "colorGenerators": [
+  {
+   "id": "hue-cycle",
+   "name": "hue cycle",
+   "description": "the colour walks around the wheel",
+   "animated": true,
+   "params": {
+    "speed": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.2,
+     "label": "speed"
+    },
+    "saturation": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.75,
+     "label": "saturation"
+    },
+    "spread": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.25,
+     "label": "spread"
+    }
+   }
+  },
+  {
+   "id": "color-flow",
+   "name": "colour flow",
+   "description": "three colours flowing slowly into each other",
+   "animated": true,
+   "params": {
+    "colorA": {
+     "type": "color",
+     "default": "#ff4d00",
+     "label": "colour 1"
+    },
+    "colorB": {
+     "type": "color",
+     "default": "#ff2e63",
+     "label": "colour 2"
+    },
+    "colorC": {
+     "type": "color",
+     "default": "#6a00f4",
+     "label": "colour 3"
+    },
+    "speed": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.25,
+     "label": "speed"
+    },
+    "scale": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.5,
+     "label": "scale"
+    }
+   }
+  },
+  {
+   "id": "pulse",
+   "name": "colour pulse",
+   "description": "breathes between two colours",
+   "animated": true,
+   "params": {
+    "colorA": {
+     "type": "color",
+     "default": "#ff3b30",
+     "label": "colour 1"
+    },
+    "colorB": {
+     "type": "color",
+     "default": "#2f6bff",
+     "label": "colour 2"
+    },
+    "speed": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.3,
+     "label": "speed"
+    },
+    "depth": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.8,
+     "label": "depth"
+    }
+   }
+  },
+  {
+   "id": "aurora",
+   "name": "aurora",
+   "description": "green and violet curtains drifting",
+   "animated": true,
+   "params": {
+    "colorA": {
+     "type": "color",
+     "default": "#29ffa0",
+     "label": "colour 1"
+    },
+    "colorB": {
+     "type": "color",
+     "default": "#7a3cff",
+     "label": "colour 2"
+    },
+    "speed": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.25,
+     "label": "speed"
+    },
+    "scale": {
+     "type": "number",
+     "min": 0,
+     "max": 1,
+     "default": 0.5,
+     "label": "scale"
+    }
+   }
+  },
+  {
+   "id": "kelvin-cycle",
+   "name": "daylight cycle",
+   "description": "white light from warm to cool and back",
+   "animated": true,
+   "params": {
+    "fromKelvin": {
+     "type": "number",
+     "min": 1800,
+     "max": 10000,
+     "default": 2700,
+     "label": "from",
+     "unit": "K"
+    },
+    "toKelvin": {
+     "type": "number",
+     "min": 1800,
+     "max": 10000,
+     "default": 6500,
+     "label": "to",
+     "unit": "K"
+    },
+    "minutes": {
+     "type": "number",
+     "min": 0.1,
+     "max": 120,
+     "default": 2,
+     "label": "cycle",
+     "unit": "min"
+    }
+   }
+  }
+ ],
+ "motionPresets": [
+  {
+   "id": "sun-lr",
+   "name": "sun passes left to right",
+   "description": "window light slides across the wall as the sun moves",
+   "motion": {
+    "on": true,
+    "preset": "sun-lr",
+    "from": {
+     "x": -0.6,
+     "y": 0.08
+    },
+    "via": {
+     "x": 0,
+     "y": -0.04
+    },
+    "to": {
+     "x": 0.6,
+     "y": 0.08
+    },
+    "duration": 600,
+    "easing": "inOut",
+    "loop": "loop",
+    "rotate": 8,
+    "scaleFrom": 1,
+    "scaleTo": 1,
+    "kelvinFrom": 0,
+    "kelvinTo": 0,
+    "phase": 0,
+    "startedAt": 0
+   }
+  },
+  {
+   "id": "sun-rl",
+   "name": "sun passes right to left",
+   "description": "the same pass the other way",
+   "motion": {
+    "on": true,
+    "preset": "sun-rl",
+    "from": {
+     "x": 0.6,
+     "y": 0.08
+    },
+    "via": {
+     "x": 0,
+     "y": -0.04
+    },
+    "to": {
+     "x": -0.6,
+     "y": 0.08
+    },
+    "duration": 600,
+    "easing": "inOut",
+    "loop": "loop",
+    "rotate": -8,
+    "scaleFrom": 1,
+    "scaleTo": 1,
+    "kelvinFrom": 0,
+    "kelvinTo": 0,
+    "phase": 0,
+    "startedAt": 0
+   }
+  },
+  {
+   "id": "drift",
+   "name": "slow drift",
+   "description": "a barely visible drift, like clouds moving the sun",
+   "motion": {
+    "on": true,
+    "preset": "drift",
+    "from": {
+     "x": -0.04,
+     "y": -0.02
+    },
+    "via": null,
+    "to": {
+     "x": 0.04,
+     "y": 0.02
+    },
+    "duration": 90,
+    "easing": "sine",
+    "loop": "pingpong",
+    "rotate": 1.5,
+    "scaleFrom": 1,
+    "scaleTo": 1,
+    "kelvinFrom": 0,
+    "kelvinTo": 0,
+    "phase": 0,
+    "startedAt": 0
+   }
+  },
+  {
+   "id": "sway",
+   "name": "sway",
+   "description": "a gentle back and forth, like a lamp on a chain",
+   "motion": {
+    "on": true,
+    "preset": "sway",
+    "from": {
+     "x": -0.02,
+     "y": 0
+    },
+    "via": null,
+    "to": {
+     "x": 0.02,
+     "y": 0
+    },
+    "duration": 5,
+    "easing": "sine",
+    "loop": "pingpong",
+    "rotate": 2.5,
+    "scaleFrom": 1,
+    "scaleTo": 1,
+    "kelvinFrom": 0,
+    "kelvinTo": 0,
+    "phase": 0,
+    "startedAt": 0
+   }
+  },
+  {
+   "id": "rise",
+   "name": "rise",
+   "description": "the sun comes up: the patch climbs, shortens and cools",
+   "motion": {
+    "on": true,
+    "preset": "rise",
+    "from": {
+     "x": 0,
+     "y": 0.32
+    },
+    "via": null,
+    "to": {
+     "x": 0,
+     "y": -0.04
+    },
+    "duration": 900,
+    "easing": "out",
+    "loop": "once",
+    "rotate": 0,
+    "scaleFrom": 1.45,
+    "scaleTo": 1.0,
+    "kelvinFrom": 2300,
+    "kelvinTo": 4300,
+    "phase": 0,
+    "startedAt": 0
+   }
+  },
+  {
+   "id": "set",
+   "name": "set",
+   "description": "the sun goes down: the patch sinks, stretches and warms",
+   "motion": {
+    "on": true,
+    "preset": "set",
+    "from": {
+     "x": 0,
+     "y": -0.04
+    },
+    "via": null,
+    "to": {
+     "x": 0,
+     "y": 0.32
+    },
+    "duration": 900,
+    "easing": "in",
+    "loop": "once",
+    "rotate": 0,
+    "scaleFrom": 1.0,
+    "scaleTo": 1.45,
+    "kelvinFrom": 4300,
+    "kelvinTo": 2300,
+    "phase": 0,
+    "startedAt": 0
+   }
+  }
+ ],
+ "motionEasings": [
+  "linear",
+  "in",
+  "out",
+  "inOut",
+  "sine"
+ ],
+ "motionLoops": [
+  "once",
+  "loop",
+  "pingpong"
+ ],
+ "sceneKinds": [
+  {
+   "id": "static",
+   "name": "static",
+   "mode": "static",
+   "description": "one light through an attachment: a window, blinds, leaves"
+  },
+  {
+   "id": "live",
+   "name": "live",
+   "mode": "live",
+   "description": "animated backdrops: swaying trees, clouds, rain"
+  },
+  {
+   "id": "color",
+   "name": "color",
+   "mode": "color",
+   "description": "a slow gradient"
+  },
+  {
+   "id": "scenery",
+   "name": "scenery",
+   "mode": "scenery",
+   "description": "a blurred photo or a video loop"
+  },
+  {
+   "id": "mapping",
+   "name": "mapping",
+   "mode": "objects",
+   "description": "mapped objects and a timeline"
+  }
+ ],
+ "sceneTemplates": [
+  {
+   "id": "static-window",
+   "kind": "static",
+   "name": "window light",
+   "description": "a 4-pane window at golden 3200 K, the sun pass ready but off"
+  },
+  {
+   "id": "live-window-tree",
+   "kind": "live",
+   "name": "window and tree",
+   "description": "a window with a tree swaying in front of it"
+  },
+  {
+   "id": "color-ember",
+   "kind": "color",
+   "name": "ember",
+   "description": "a warm slow gradient"
+  },
+  {
+   "id": "scenery-flowers",
+   "kind": "scenery",
+   "name": "flowers",
+   "description": "a blurred photo of flowers"
+  },
+  {
+   "id": "mapping-empty",
+   "kind": "mapping",
+   "name": "mapping",
+   "description": "no objects yet: take a reference photo, then outline the faces"
+  }
+ ],
  "effects": [
   {
    "id": "grid-build",

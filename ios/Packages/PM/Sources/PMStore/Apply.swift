@@ -66,9 +66,10 @@ extension AppDatabase {
             let ids = list.map(\.id)
             for (n, s) in list.enumerated() {
                 try db.execute(sql: """
-                    INSERT INTO scene (id, setupId, name, version, sort) VALUES (?, ?, ?, ?, ?)
-                    ON CONFLICT(id) DO UPDATE SET setupId = excluded.setupId, name = excluded.name, sort = excluded.sort
-                    """, arguments: [s.id, s.setupId, s.name, s.version, n])
+                    INSERT INTO scene (id, setupId, name, version, sort, kind, mode) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET setupId = excluded.setupId, name = excluded.name, sort = excluded.sort,
+                        kind = excluded.kind, mode = excluded.mode
+                    """, arguments: [s.id, s.setupId, s.name, s.version, n, s.kind, s.mode])
             }
             if !ids.isEmpty {
                 let marks = ids.map { _ in "?" }.joined(separator: ",")
@@ -141,6 +142,12 @@ extension AppDatabase {
                 """, arguments: [id, doc["setupId"]?.string ?? "", doc["name"]?.string ?? "", version, confirmed.jsonText, confirmed.jsonText])
             try Self.rebuild(db, sceneId: id)
         }
+    }
+
+    /// Keeps the list's kind and mode in step with a scene document (snapshots and patches change them).
+    static func syncKind(_ db: Database, sceneId: String, doc: JSONValue) throws {
+        guard let scene = try? doc.decode(Scene.self) else { return }
+        try db.execute(sql: "UPDATE scene SET kind = ?, mode = ? WHERE id = ?", arguments: [scene.kind, scene.mode, sceneId])
     }
 
     /// A committed patch (`patched`). Returns false when this copy is behind and needs a new snapshot.
@@ -217,5 +224,6 @@ extension AppDatabase {
             doc = next
         }
         try db.execute(sql: "UPDATE scene SET doc = ? WHERE id = ?", arguments: [doc.jsonText, sceneId])
+        try syncKind(db, sceneId: sceneId, doc: doc)
     }
 }

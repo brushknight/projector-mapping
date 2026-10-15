@@ -2,6 +2,7 @@ import { createRootRoute, createRoute, createRouter, Outlet, redirect } from '@t
 import { lazy, Suspense } from 'react'
 import { OutPage } from './routes/out'
 import { PreviewPage } from './routes/preview'
+import { ViewPage } from './routes/view'
 
 // The editor and the style guide are big; /out and /preview load only the engine and the hub client.
 const EditorPage = lazy(() => import('./routes/editor').then((m) => ({ default: m.EditorPage })))
@@ -25,14 +26,23 @@ const outRoute = createRoute({
   validateSearch: (s: Record<string, unknown>): OutSearch => ({ ...(str(s.headless) ? { headless: str(s.headless) } : {}), ...(str(s.token) ? { token: str(s.token) } : {}) }),
 })
 
-export type PreviewSearch = { token?: string; w?: string; mode?: string; layer?: string }
+export type ViewSearch = { token?: string }
+// (§15) the viewer: what the projector shows, read only, in its own window
+const viewRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/view',
+  component: ViewPage,
+  validateSearch: (s: Record<string, unknown>): ViewSearch => (str(s.token) ? { token: str(s.token) } : {}),
+})
+
+export type PreviewSearch = { token?: string; w?: string; mode?: string; layer?: string; scene?: string }
 const previewRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/preview',
   component: PreviewPage,
   validateSearch: (s: Record<string, unknown>): PreviewSearch => {
     const out: PreviewSearch = {}
-    for (const k of ['token', 'w', 'mode', 'layer'] as const) {
+    for (const k of ['token', 'w', 'mode', 'layer', 'scene'] as const) {
       const v = str(s[k])
       if (v) out[k] = v
     }
@@ -70,7 +80,7 @@ const indexRoute = createRoute({
   },
 })
 
-const routeTree = rootRoute.addChildren([indexRoute, outRoute, previewRoute, editorRoute, editorSpaceRoute, componentsRoute])
+const routeTree = rootRoute.addChildren([indexRoute, outRoute, viewRoute, previewRoute, editorRoute, editorSpaceRoute, componentsRoute])
 
 export const router = createRouter({ routeTree, defaultPreload: false })
 

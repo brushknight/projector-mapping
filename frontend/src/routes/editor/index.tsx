@@ -7,7 +7,7 @@ import { useCamera } from '../../entities/camera'
 import { useCatalog } from '../../entities/catalog'
 import { effectApi, type EffectDef } from '../../entities/effect'
 import { handleRenderRpcs } from '../../entities/output'
-import { sceneApi, useSceneEditing, type EditMode, type SceneMode } from '../../entities/scene'
+import { sceneApi, useSceneEditing, type EditMode, type SceneKind, type SceneMode } from '../../entities/scene'
 import { EditorContext, EMPTY_SELECTION, type EditorState, type Selection, type SoloFill, type Space, type StageView, type Tool, type Workspace } from '../../entities/scene/editor/context'
 import { usePreviewClock } from '../../entities/scene/editor/preview'
 import { addContentLayer, deleteObject, deleteSurface, locateSurface, mediaLayer, removeClip, removeContentLayer, removeLayer, setAtlas, setMode as setModeOps } from '../../entities/scene/ops'
@@ -133,6 +133,24 @@ function EditorApp({ workspace, timeline }: { workspace: Workspace; timeline?: b
       else void hub.cmd('show.seek', { t }).then(() => hub.cmd(p.playing ? 'show.play' : 'show.pause')).catch(() => {})
     },
     [hub, mode, editing.draft],
+  )
+
+  // (§15) a scene made from a template: a backdrop scene goes on the wall at once, a mapping scene opens in the map
+  // space (not on the wall) with the reference photo step
+  const onSceneCreated = useCallback(
+    (id: string, kind: SceneKind) => {
+      if (kind === 'mapping') {
+        nav({ to: '/editor/$space', params: { space: 'map' }, search: { scene: id } })
+        setSetupOpen(true)
+        toast('A new mapping scene. Take a reference photo from the lens position, then outline the faces.')
+        return
+      }
+      void hub.cmd('show.activate', { sceneId: id }).then(
+        () => toast('The new scene is on the wall.'),
+        (e) => toast(e instanceof Error ? e.message : String(e), { bad: true }),
+      )
+    },
+    [hub, nav, toast],
   )
 
   const reloadEffects = useCallback(() => {
@@ -458,7 +476,7 @@ function EditorApp({ workspace, timeline }: { workspace: Workspace; timeline?: b
       <main className={s.ed} style={{ gridTemplateRows: rows }} data-testid="editor" data-space={workspace}>
         <EditorBar />
         {workspace === 'show' ? (
-          <ShowSpace hub={hub} show={show} catalog={catalog} effects={effects} scenes={scenes} reloadScenes={reloadScenes} toast={toast} command={command} onFromPhoto={() => setFromPhoto(true)} />
+          <ShowSpace hub={hub} show={show} catalog={catalog} effects={effects} scenes={scenes} reloadScenes={reloadScenes} toast={toast} command={command} onFromPhoto={() => setFromPhoto(true)} onSceneCreated={onSceneCreated} />
         ) : workspace === 'automap' ? (
           <>
             <Panel as="aside" aria-label="auto map steps">

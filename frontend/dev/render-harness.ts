@@ -8,6 +8,7 @@ import catalog from '../../contract/catalog.json'
 import sceneFx from '../../contract/fixtures/scene.json'
 import setupFx from '../../contract/fixtures/setup.json'
 import { Renderer } from '../src/render'
+import { newAttachment, newLayer, stackLightOf } from '../src/entities/catalog/layers'
 import type { Catalog } from '../src/entities/catalog/types'
 import type { Scene } from '../src/entities/scene/types'
 import type { Setup } from '../src/entities/setup/types'
@@ -25,7 +26,26 @@ setup.output.flipV = q.get('flipV') === '1'
 const scene: Scene = JSON.parse(JSON.stringify(sceneFx))
 if (q.get('layers')) scene.backdrop.live.layers = JSON.parse(q.get('layers')!)
 scene.mode = (q.get('mode') as Scene['mode']) ?? (q.get('layers') ? 'live' : 'objects')
+// (§15) gobo=<id>[,<id>…] puts those attachments (catalog defaults, params=<json> merged into the first) on the static
+// light; light=<json> overrides the light; atts=<json Attachment[]> replaces the attachments
+if (q.get('gobo') || q.get('atts') || q.get('light')) {
+  const cat = catalog as unknown as Catalog
+  const atts = q.get('atts') ? JSON.parse(q.get('atts')!) : (q.get('gobo') ?? '').split(',').filter(Boolean).map((g, i) => newAttachment(cat, g, `att_${i}`))
+  if (atts[0] && q.get('params')) atts[0].params = { ...atts[0].params, ...JSON.parse(q.get('params')!) }
+  if (atts[0] && q.get('att')) Object.assign(atts[0], JSON.parse(q.get('att')!))
+  const item = cat.gobos.find((g) => g.id === atts[0]?.gobo)
+  scene.backdrop.static = { layers: [], attachments: atts, light: stackLightOf({ focus: item?.focus ?? 0.7, color: { mode: 'cct', kelvin: 3200, tint: 0, hue: 212, sat: 0.7 }, ...(q.get('light') ? JSON.parse(q.get('light')!) : {}) }, cat) }
+  scene.mode = (q.get('mode') as Scene['mode']) ?? 'static'
+}
 if (q.get('underlay')) scene.underlay = { on: true, from: 'live', level: Number(q.get('underlay')) }
+// (§15) proc=<id>: one procedural layer; a shadow (multiply) blocks a warm light, the others draw over black
+if (q.get('proc')) {
+  const cat = catalog as unknown as Catalog
+  const layer = newLayer(cat, 'procedural', q.get('proc')!, 'lay_p')
+  const shadow = layer.blend === 'multiply'
+  scene.backdrop.live = { layers: [layer], attachments: [], light: shadow ? stackLightOf({ focus: 0.75, color: { mode: 'cct', kelvin: 3200, tint: 0, hue: 212, sat: 0.7 } }, cat) : null }
+  scene.mode = 'live'
+}
 const effects: EffectDef[] = []
 if (q.get('glsl')) {
   effects.push({ id: 'eff_user', name: 'user', kind: 'glsl', origin: 'user', params: { speed: { type: 'number', min: 0, max: 1, default: 0.5 } }, source: q.get('glsl') })
@@ -64,6 +84,7 @@ const input: RenderInput = {
   effects,
   t: num('t', 5),
   clock: num('clock', 12),
+  now: num('now', 0),
   blackout: num('blackout', 0),
   pattern: pattern === 'gray' ? { kind: 'gray', axis: (q.get('axis') as 'x' | 'y') ?? 'x', bit: num('bit', 0), inverse: q.get('inverse') === '1' } : pattern ? ({ kind: pattern } as RenderInput['pattern']) : null,
   testPattern: (q.get('test') as Setup['testPattern']) ?? null,

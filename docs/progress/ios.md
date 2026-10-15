@@ -1,6 +1,6 @@
 # iPhone app progress
 
-Status as of 2026-10-14. Native SwiftUI, iOS 26, iPhone only, dark, Swift 6 language mode, bundle
+Status as of 2026-10-15. Native SwiftUI, iOS 26, iPhone only, dark, Swift 6 language mode, bundle
 `com.brushknight.projmap`, team 3J46XQAXC4. Only dependency: GRDB 7.
 
 ## Build, test, run
@@ -8,7 +8,7 @@ Status as of 2026-10-14. Native SwiftUI, iOS 26, iPhone only, dark, Swift 6 lang
 ```bash
 cd ios
 xcodegen generate
-PATH=/usr/bin:$PATH swift test --package-path Packages/PM          # 60 tests (contract, store, hub)
+PATH=/usr/bin:$PATH swift test --package-path Packages/PM          # 99 tests (contract, light model, motion, drag intent, store, hub)
 SIM=$(xcrun simctl list devices | grep projmap-dev | grep -oE '[0-9A-F-]{36}')   # own simulator, iPhone 17 Pro
 scripts/build.sh $SIM                                              # xcodebuild + install
 xcrun simctl launch $SIM com.brushknight.projmap -pm-demo -pm-screen live   # offline demo on a board's screen
@@ -24,7 +24,7 @@ xcrun simctl launch $SIM com.brushknight.projmap -pm-reset -pm-connect "projmap:
 ```
 
 Launch arguments: `-pm-demo` (offline, fixtures + board data in memory), `-pm-screen <static|staticfx|live|addlayer|
-color|scenery|objects|setup|automap1…4|connect|scenes|sounds|youtube|videos>` (the last four have no board: use
+color|scenery|objects|setup|automap1…4|connect|scenes|sounds|youtube|videos|motion|scenepreview>` (the last four have no board: use
 `scripts/shot.sh`), `-pm-scroll <pt>`, `-pm-reset` (forget server and cache),
 `-pm-connect <projmap://connect?server=…&code=…|token=…>`. The URL scheme `projmap://connect` works too.
 
@@ -160,6 +160,97 @@ Left out: adding or editing pads on the phone (the intents exist; the web is the
 (the URL scheme covers handing links over), sound upload from the phone, OGG Vorbis/Opus files (AVAudioPlayer cannot
 decode them, so they stay silent on the phone), the video's own sound on the phone (§14: only `/out` plays it).
 
+## Light, attachments, motion, scene kinds (2026-10-15, protocol §15)
+
+- **PMKit.** `Light.swift`: `StackLight` (intensity, focus, colour, fx, `colorLayer`, fringe, vignette, haze, `slide`,
+  `motion`; 5600 K default), `Attachment` (gobo, opacity "blocks", rotation, offsets, scale, params, motion),
+  `ColorLayer`, `FramePoint`, `Motion` with the §15 evaluation (`rawProgress`, `applyLoop`, `ease`, `position` through
+  `via`, `sample` with rotate / scale / kelvin) and the transport rules (`paused`, `played`, `withDuration` keep the
+  place, `start` from a preset), `MotionSpeed` (log 5 s … 2 h), `SceneKind` (inference, kind → mode),
+  `ServerSettings` (`agentLiveEdits`), `SceneTemplates` (the offline twin of the server's templates), `ClientID`.
+  `Backdrop` gains `light` and `attachments`; a v3 stack is upgraded on read exactly as the server's upgrade (gobo
+  layers → attachments, the first gobo's light → the stack light, focus = 1 − softness). `Layer.motion`, layer kind
+  `generator` (params from `colorGenerators`). `Scene.kind` (inferred when absent), `SceneSummary.kind/mode`. Catalog
+  v4: `stackLight`, `goboParams`, gobo `thumb/params/attachment/focus/defaults/category`, `goboCategories`,
+  `colorGenerators`, `motionPresets`, `motionEasings`, `motionLoops`, `sceneKinds`, `sceneTemplates`, procedural
+  `thumb`; key order kept for every param list; `newAttachment(item)` builds the catalog defaults (item params, then
+  `goboParams` overridden by the item's `defaults`). A v3 catalog still decodes (categories guessed from ids).
+  Intents: `replaceAttachments`, `addAttachment`, `setAttachmentField` (by id, either light stack), `removeAttachment`,
+  `setLight` (creates the default light when a live stack has none). `ScenePath.stackLight/attachments/attachment`.
+  REST: `createScene(kind:template:)`, `catalogThumbURL`, `previewURL(scene:)`. `DragIntent` (D2, below).
+- **PMStore / PMLive.** Migration `002_scene_kind` (kind and mode on the scene list, kept in step with each
+  document). The outbox replays the new intents by id after stale rejections and other people's patches. Demo:
+  `createScene(kind:)` from templates, `show.activate` puts the kind's mode on air.
+- **Static tab (rebuilt).** Hero (drag sideways to slide the light), the categorized attachment browser (windows,
+  blinds, nature, patterns, spots; 16:10 tiles with the server's `/catalog/thumbs/<id>.png`, cached in memory and in
+  Caches/thumbs, native art offline/demo or on 404). A tap replaces the list with one attachment from the catalog
+  defaults (`att_<8 base36>`); "add on top" (pill, or hold a tile) adds another. What is in front of the light (list
+  when more than one: select, hide, take off), the selected attachment's blocks / rotation / scale / position and its
+  shape params (folded under "shape"). Light card (intensity, focus ring), colour card (white: CCT, tint, presets;
+  color: HSI; layer: own colour, colour generators with their params, gradients; effects: fx tiles + speed), frame
+  slide card (long axis, reset), motion card (whole light or the selected attachment; preset chips write the catalog
+  motion with `startedAt` = server now; speed slider log 5 s … 2 h written on release keeping the place; play /
+  pause; off; progress on the server clock), lens card (fringe, vignette, haze), presets (save the whole stack).
+- **Live tab.** The live stack's light and attachments with the same cards; "light it" when the stack has none.
+  Gobos from the add layer sheet become live attachments. Procedural layers stay as before; thumbnails from the server.
+- **Scene picker.** Grouped by kind with filter chips (counts), 16:10 thumbnails (first attachment's render for static
+  / live, the gradient for color, the photo or video still for scenery, an objects glyph for mapping; documents of
+  scenes the phone does not follow are fetched once for the thumbnails), on-air card ringed with the red dot. Tap =
+  `show.activate` and open the kind's tab (and `replace /mode` if an older server leaves the mode). Hold = preview
+  sheet: a second web view on `/preview?scene=<id>` (its own `PreviewHost`, stopped on close), "put it on the wall".
+  New static / live / mapping scene (`POST /scenes { name, kind }`), rename, duplicate, delete in each card's menu.
+- **Tests.** 99 package tests: every fixture including `scene-summary.json` and `settings.json`, the catalog v4,
+  v3 documents, presets and catalogs, stack defaults, scene kinds, templates, Motion (progress, loops, easings, the
+  `via` curve, scale and kelvin drift, pause / play / speed keeping the place, the log speed slider, encoding),
+  DragIntent, attachment and light intents, store replay of the new intents, the list's kind and mode, hub patches
+  and slide params, demo activation by kind. `LiveServerTests` (serialized now) also checks one attachment, the slide
+  param commit, a motion preset and a scene made from a kind against a real server.
+
+### D1: the hero preview did not work on a real phone (root cause and fix)
+
+Root cause: `PreviewHost` gave up after one failed load. On a failed navigation it set `state = .failed` and
+`url = nil` "so the next hero retries", but nothing retried: the hero's `updateUIView` only runs when SwiftUI
+re-renders the representable, and its inputs (the same URL and host) had not changed, so the page was never requested
+again for the life of the app. On a phone the first load fails routinely (the Local Network permission prompt is
+still up on the first launch, Wi-Fi is not joined yet after wake, the Mac sleeps, the server restarts), while the
+simulator has no Local Network prompt and talks to the Mac directly, so it always worked there. A second problem hid
+failures: 4 s after `didFinish` the host marked any page as loaded, so a page that never drew (plain page, no data)
+showed black instead of the stand-in. Token auth, ATS (`NSAllowsLocalNetworking` covers the LAN IP for the web
+view), the "ready" handshake, WebGL2 (the renderer uses RGBA8 targets only) and `previewURL` were checked and are
+fine: from the simulator through the Mac's LAN IP (non-loopback, so the token path is exercised) the page renders
+the WebGL test grid.
+
+Fix (`PMPreview/PreviewWebView.swift`): failed loads retry with backoff (1, 2, 4, 8, 15 s) and keep their URL;
+`retryNow()` on `willEnterForeground` and when the hub comes online; the URL is also handed over from a `.task`, not
+only from `updateUIView`; cancelled navigations are not failures; without "ready" the host checks for a drawn canvas
+after 6 s and otherwise retries instead of showing black; the container sizes the re-parented web view on every
+layout; a non-persistent data store and `reloadIgnoringLocalAndRemoteCacheData` (no stale page); `isInspectable` in
+Debug (Safari › Develop › the phone). `previewURL` leaves an empty token out. Verified: app launched with the server
+down, server started 12 s later, the hero loaded by itself and drew the test pattern (before the fix it stayed on the
+stand-in with no WebKit connection to the server).
+
+### D2: scrolling changed sliders (root cause and fix)
+
+Root cause: `FillSlider` and `StripSlider` used `.gesture(DragGesture(minimumDistance: 0))`, which claims the touch
+on touch-down, before the ScrollView's pan can decide; any swipe that began on a slider adjusted it (and a strip
+jumped to the finger at once). Fix: `PMDesign/HorizontalPan.swift`, a `UIGestureRecognizerRepresentable` pan whose
+`gestureRecognizerShouldBegin` asks the pure `DragIntent.shouldBegin` (horizontal once |dx| > 8 pt and
+|dx| > 1.5 × |dy|, else the velocity's direction while shorter); the page's scroll pan is made to wait for it to fail,
+so vertical swipes scroll and sideways ones adjust. Strips jump to a tap with a separate tap gesture. Every
+horizontal control uses it: fill sliders, colour / CCT / tint / hue / saturation strips, the frame slide strip and the
+hero slide drag. Unit tests cover the decision; the gesture itself was not driven in the simulator (no headless touch
+injection).
+
+### Left out (§15)
+
+- Colour params of generators (`colorA`…) have no picker yet (numeric params only); attachment motions have no custom
+  path editor (presets, speed, play / pause, off).
+- The live tab's "atmosphere" toggles still add procedural layers; generator layers in the color tab are not offered
+  yet (the color tab still picks gradients).
+- The hero and the long-press preview show whatever the embedded web build renders; until the web build with §15 and
+  `/preview?scene=` is embedded, the hero shows the old renderer's view of the stack (black for attachments) and the
+  long-press preview shows the active scene.
+
 ## Stubbed or left out
 
 - Hero previews use `/preview`; without the built frontend the backend serves a plain page, and offline/demo the
@@ -169,7 +260,7 @@ decode them, so they stay silent on the phone), the video's own sound on the pho
 - Dictation is the keyboard's; the mic button focuses the prompt.
 - "draw" in auto map and "fix on laptop" only point to the editor.
 - Calibration end-to-end with a real projector + phone is untested (only the demo and the protocol shapes).
-- Not tested on a device yet (simulator only).
+- Not tested on a device yet (simulator only; D1 reproduced and verified in the simulator through the Mac's LAN IP).
 
 ## For backend and frontend
 

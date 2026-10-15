@@ -173,11 +173,15 @@ public struct Layer: Codable, Sendable, Hashable, Identifiable {
     public var blend: String
     public var light: Light?
     public var params: JSONObject
+    /// Moves a `photo` / `video` layer inside the frame (protocol §15); nil = none.
+    public var motion: Motion?
+
+    enum CodingKeys: String, CodingKey { case id, kind, ref, name, visible, opacity, blend, light, params, motion }
 
     public init(id: String, kind: String, ref: String, name: String, visible: Bool = true, opacity: Double = 1,
-                blend: String = "normal", light: Light? = nil, params: JSONObject = [:]) {
+                blend: String = "normal", light: Light? = nil, params: JSONObject = [:], motion: Motion? = nil) {
         self.id = id; self.kind = kind; self.ref = ref; self.name = name; self.visible = visible; self.opacity = opacity
-        self.blend = blend; self.light = light; self.params = params
+        self.blend = blend; self.light = light; self.params = params; self.motion = motion
     }
 
     public init(from decoder: Decoder) throws {
@@ -191,18 +195,79 @@ public struct Layer: Codable, Sendable, Hashable, Identifiable {
         blend = c.v(.blend, "normal")
         light = c.opt(.light)
         params = c.v(.params, [:])
+        motion = c.opt(.motion)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(kind, forKey: .kind)
+        try c.encode(ref, forKey: .ref)
+        try c.encode(name, forKey: .name)
+        try c.encode(visible, forKey: .visible)
+        try c.encode(opacity, forKey: .opacity)
+        try c.encode(blend, forKey: .blend)
+        try c.encode(light, forKey: .light)
+        try c.encode(params, forKey: .params)
+        try c.encodeIfPresent(motion, forKey: .motion)
     }
 
     public func param(_ key: String) -> Double? { params[key]?.double }
 }
 
-/// One layer stack, bottom to top (a preset's backdrop, or one mode's stack of a scene).
+/// One layer stack, bottom to top (a preset's backdrop, or one mode's stack of a scene). The `static` and `live`
+/// stacks also carry a light and its attachments (protocol §15).
 public struct Backdrop: Codable, Sendable, Hashable {
     public var layers: [Layer]
-    public init(layers: [Layer] = []) { self.layers = layers }
+    /// The stack light; nil in `live` means no light (layers over black). `static` always has one after decoding.
+    public var light: StackLight?
+    public var attachments: [Attachment]
+    /// True when the document carried a `light` or `attachments` key (a §15 stack, never upgraded again).
+    var hasLightModel = false
+
+    enum CodingKeys: String, CodingKey { case layers, light, attachments }
+
+    public init(layers: [Layer] = [], light: StackLight? = nil, attachments: [Attachment] = []) {
+        self.layers = layers; self.light = light; self.attachments = attachments
+        hasLightModel = light != nil || !attachments.isEmpty
+    }
+
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         layers = c.v(.layers, [])
+        light = c.opt(.light)
+        attachments = c.v(.attachments, [])
+        hasLightModel = c.contains(.light) || c.contains(.attachments)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(layers, forKey: .layers)
+        if hasLightModel || light != nil || !attachments.isEmpty {
+            try c.encode(light, forKey: .light)
+            try c.encode(attachments, forKey: .attachments)
+        }
+    }
+
+    public static func == (a: Backdrop, b: Backdrop) -> Bool { a.layers == b.layers && a.light == b.light && a.attachments == b.attachments }
+    public func hash(into h: inout Hasher) { h.combine(layers); h.combine(light); h.combine(attachments) }
+
+    /// The light stack as §15 has it, upgrading a v3 stack on read (the server upgrades stored scenes; this keeps an
+    /// older document readable): gobo layers become attachments and the first one's light becomes the stack light.
+    /// `static` keeps no layers and always has a light; `live` keeps its other layers and has no light without gobos.
+    public func upgradedLight(stack: String) -> Backdrop {
+        var b = self
+        if !hasLightModel {
+            let gobos = layers.filter { $0.kind == "gobo" }
+            if !gobos.isEmpty {
+                b.attachments = gobos.map(Attachment.init(upgrading:))
+                b.light = gobos[0].light.map(StackLight.init(upgrading:)) ?? StackLight()
+                b.layers = stack == "static" ? [] : layers.filter { $0.kind != "gobo" }
+            }
+        }
+        if stack == "static", b.light == nil { b.light = StackLight() }
+        b.hasLightModel = b.hasLightModel || b.light != nil || !b.attachments.isEmpty
+        return b
     }
 }
 
@@ -243,6 +308,8 @@ public struct SceneBackdrop: Codable, Sendable, Hashable {
                 live.layers = still.layers.map { var l = $0; l.id += "_live"; return l } + procedural
             }
         }
+        still = still.upgradedLight(stack: "static")
+        live = live.upgradedLight(stack: "live")
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -251,6 +318,15 @@ public struct SceneBackdrop: Codable, Sendable, Hashable {
         try c.encode(live, forKey: .live)
         try c.encode(color, forKey: .color)
         try c.encode(scenery, forKey: .scenery)
+    }
+
+    /// The light stack of `static` or `live` (nil for the others).
+    public func lightStack(_ mode: String) -> Backdrop? {
+        switch mode {
+        case "static": still
+        case "live": live
+        default: nil
+        }
     }
 
     /// The layers of a backdrop mode (empty for `objects` or an unknown mode).
@@ -471,6 +547,8 @@ public struct Scene: Codable, Sendable, Hashable, Identifiable {
     public var version: Int
     /// `static` | `live` | `color` | `scenery` | `objects`
     public var mode: String
+    /// `static` | `live` | `color` | `scenery` | `mapping` (protocol §15; inferred when absent).
+    public var kind: String
     public var backdrop: SceneBackdrop
     public var underlay: Underlay
     public var points: [ScenePoint]
@@ -492,12 +570,16 @@ public struct Scene: Codable, Sendable, Hashable, Identifiable {
             mode = m
         } else if !stacks.live.layers.isEmpty {
             mode = "live"
+        } else if !stacks.still.attachments.isEmpty {
+            mode = "static"
         } else {
             mode = SceneMode.backdrops.first { !stacks[$0].isEmpty } ?? "static"
         }
         underlay = c.v(.underlay, Underlay())
         points = c.v(.points, [])
         objects = c.v(.objects, [])
+        let k: String? = c.opt(.kind)
+        kind = SceneKind.infer(kind: k, hasObjects: !objects.isEmpty, mode: SceneMode.all.contains(m) ? m : mode)
         timeline = c.v(.timeline, Timeline())
         sounds = c.v(.sounds, SceneSounds())
     }
@@ -513,6 +595,12 @@ public struct Scene: Codable, Sendable, Hashable, Identifiable {
     /// The layers of a backdrop mode.
     public func layers(_ mode: String) -> [Layer] { backdrop[mode] }
 
+    /// The light of `static` or `live` (nil in `live` without a light).
+    public func light(_ mode: String) -> StackLight? { backdrop.lightStack(mode)?.light }
+
+    /// The attachments of `static` or `live`, bottom to top.
+    public func attachments(_ mode: String) -> [Attachment] { backdrop.lightStack(mode)?.attachments ?? [] }
+
     /// What the wall shows now: the on-air stack, or the underlay in `objects` mode when it is on.
     public var onAirLayers: [Layer] {
         if SceneMode.isBackdrop(mode) { return backdrop[mode] }
@@ -520,15 +608,18 @@ public struct Scene: Codable, Sendable, Hashable, Identifiable {
     }
 }
 
-/// A row of `GET /scenes`.
+/// A row of `GET /scenes` and the `scenes` channel (`kind` and `mode` since protocol §15).
 public struct SceneSummary: Codable, Sendable, Hashable, Identifiable {
     public var id: String
     public var name: String
     public var setupId: String
     public var version: Int
+    public var kind: String
+    public var mode: String
 
-    public init(id: String, name: String, setupId: String, version: Int) {
-        self.id = id; self.name = name; self.setupId = setupId; self.version = version
+    public init(id: String, name: String, setupId: String, version: Int, kind: String = "static", mode: String? = nil) {
+        self.id = id; self.name = name; self.setupId = setupId; self.version = version; self.kind = kind
+        self.mode = mode ?? SceneKind.mode(kind)
     }
 
     public init(from decoder: Decoder) throws {
@@ -537,6 +628,10 @@ public struct SceneSummary: Codable, Sendable, Hashable, Identifiable {
         name = c.v(.name, "")
         setupId = c.v(.setupId, "")
         version = c.v(.version, 0)
+        let m: String? = c.opt(.mode)
+        let k: String? = c.opt(.kind)
+        kind = SceneKind.infer(kind: k, hasObjects: false, mode: m)
+        mode = m.flatMap { SceneMode.all.contains($0) ? $0 : nil } ?? SceneKind.mode(kind)
     }
 }
 
@@ -661,7 +756,8 @@ public struct Preset: Codable, Sendable, Hashable, Identifiable {
         id = c.v(.id, "")
         name = c.v(.name, "")
         mode = c.v(.mode, "static")
-        backdrop = c.v(.backdrop, Backdrop())
+        let b = c.v(.backdrop, Backdrop())
+        backdrop = mode == "static" || mode == "live" ? b.upgradedLight(stack: mode) : b
         thumbAsset = c.opt(.thumbAsset)
         createdAt = c.opt(.createdAt)
     }

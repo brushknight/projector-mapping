@@ -328,3 +328,85 @@ hooks: `POST /__mock/send {role?, cap?, t, d}` and caps in `/__mock/state`.
 - The editor is desktop only (min width 1100 px). The phone app is native and not part of this folder.
 - The ambient clock wraps hourly (one jump per hour in backdrop motion) to keep shader floats precise.
 - Bezier warp uses Catmull-Rom through the mesh points rather than separate bezier handles.
+
+## Light model, viewer, scene kinds, live previews (2026-10-15)
+
+Protocol §15. Verified against the mock (unit + e2e) and against the Go server built from this tree on a side port.
+
+**Renderer** (`src/render`)
+- Static and live stacks draw with the light model (`shaders/light.ts`, `docs/effects.md` "The light model"): colour
+  target (CCT softened towards white, HSI, gradient gel or colour generator) × a mask target that every attachment
+  and every live shadow layer (multiply) multiplies into, blurred once by the focus ring, then lateral colour fringe,
+  cos⁴ vignette, dust and haze with scattered light, and the frame slide. Older static stacks without `attachments`
+  still draw their layers.
+- 33 attachment shapes as SDFs (`SHAPES_GLSL`); `render/attachments.ts` maps catalog gobos and params onto shapes and
+  uniform slots (`attachments.test.ts` checks it against the catalog). Throw, keystone (vertical shear) and frame
+  depth (three extra samples along the light, a soft second edge) are per attachment.
+- Tree sway and palm sway bend the real leaf breakup and palm shapes about the trunk and crown (visible sway at any
+  size); their own blur is cut to a third under the focus ring.
+- Colour generators (`render/generators.ts`): one GLSL function each plus slots; `generator` backdrop layers and a
+  light's colour layer use them.
+- Motion (`render/motion.ts`, tested): progress on the server clock (`RenderInput.now`, Unix ms), easing, loop modes,
+  the quadratic path through `via`, rotation, scale and CCT drifts, pause/play/retime that keep the place, the log
+  speed scale. Timeline `motion` clips on a layer track (attachment, backdrop layer or `light:static|live`) override
+  the clock. Photo and video layers move inside the frame (and can leave it).
+- `npm run thumbs` renders every gobo and procedural thumbnail headless (SwiftShader) into
+  `backend/internal/catalog/assets/thumbs/` (384×216 PNG, served at `/catalog/thumbs/<id>.png`).
+
+**Live previews (item 2).** Traced in the real editor: the Show preview and the stage render every frame with
+`u_clock` advancing at 30 fps, so the loops were never paused. What looked still: tree and palm sway moved about 1 %
+of the frame height (3 to 9 px in a 450 px preview, under a 10 to 20 px blur), the Show tiles were drawn once at a fixed
+clock, and the phone showed its native stand-in (which sways ±1.7°) because its web preview never retried a failed
+load (iOS D1). Fixed: shapes sway visibly from the trunk, scene thumbnails animate (`sceneSwitcher/liveThumbs.ts`: one
+WebGL renderer feeds every visible thumbnail at 8 fps, IntersectionObserver skips hidden ones), every preview passes
+`now`. `e2e/live-preview.spec.ts` compares frames 500 ms apart in the Show preview, the viewer and a scene thumbnail.
+
+**Viewer** (`routes/view`): `/view?token=`, role remote, no caps, `LivePreview` letterboxed at 60 fps, hover bar
+(scene, mode, sound toggle, fullscreen, close), `useLocalWallAudio` plays the timeline's sound clips and video sound
+locally while the toggle is on. `entities/output/viewer.ts` `openViewer({ portrait })` opens a 16:9 or 9:16 popup;
+buttons in the top bar, the Show preview header and Set up. `/preview` takes `scene=<id>` (quick and long-press
+previews).
+
+**Show space**
+- Static panel (`showSpace/light.tsx`): the attachment browser (category chips, server thumbnails, pick or **+** add
+  on top, the list of what is in front of the light), the light card (intensity, focus, white / colour / gradient /
+  animated, fx, lens, frame slide with reset), the selected attachment (rotation, scale, position, blocks, shape
+  params, on the wall: throw, keystone, frame depth), draggable framing shutter blades (`ShutterBlades`), the motion
+  card (what moves, preset chips, `PathEditor` with from / via / to handles and the live position, play / pause,
+  speed, easing, repeat, turn, size and CCT drifts). Live panel: the live light and attachments under the layer stack;
+  the add menu offers animated colour. Colour panel: generator tiles. Scenery: picture motion.
+- Drag the hero sideways (up and down in portrait) to slide the light (a direction lock keeps vertical scrolls).
+- Scene browser (`sceneSwitcher/browser.tsx`): groups by kind, filter chips, live thumbnails, hover or click for an
+  animated quick preview with **put on the wall**, **new scene** from templates per kind (a mapping scene opens the map
+  space with Set up for the reference photo; other kinds go on the wall).
+- Set up: **open viewer** and the **agents edit live** switch (`agentLiveEdits`); the agent panel has it too.
+
+**Mock server**: kinds and summaries, templates, activation puts the kind's mode on air, whole-stack presets,
+`agentLiveEdits`, `/catalog/thumbs/<id>.png`.
+
+**Tests**: unit `render/motion.test.ts`, `render/attachments.test.ts`, the §15 ops in `scene/ops.test.ts` and
+`scene/show.test.ts`, the contract test (catalog v4, `scene-summary.json`, `settings.json`); e2e
+`live-preview.spec.ts`, `static-light.spec.ts`, `content-newcomer.spec.ts`.
+
+## Content space simplification (2026-10-15)
+
+- Show is the home: the top bar starts with a primary **show** pill, then **map | content** under a "mapping" caption,
+  and an **open viewer** button. Face actions read **add content**.
+- Content head (`contentView/head.tsx`): breadcrumbs `object › face` (details show their face) that climb back up, a
+  big title ("zimacube · right face"), a hint line, "switch object", "?" to replay the tour. Pure helpers in
+  `contentView/model.ts` (`contentCrumbs`, `contentTitle`, `faceHasContent`, `objectHasContent`, `miniMap`).
+- "Where you are" mini map (`miniMap.tsx`): the object's faces outlined as on the stage, current face bright, faces
+  with content filled, click opens a face. A 250 px column on the right keeps the mini map and the stage picture off
+  the face.
+- Empty face or object: three big actions (add picture, draw, add effect; on an object the effect goes on every face).
+  Faces open on a single click in the unfold.
+- Labelled tool buttons with tooltips; rarely used controls live under **more** (face size, face stepping, clear
+  strokes; arrange, re-layout, templates) and under **show more controls** in the content layer inspector (blend,
+  crop, exact placement, wipe angle, gradient offset and repeat).
+- One-time 4-step tour (`contentView/tour.tsx`, key `projmap.tour.content.v1` in localStorage wrapped in try/catch,
+  non-blocking scrim, Esc skips, "?" replays).
+- Shared components with demos: `Tooltip` (+ pure `tipPosition`), `Breadcrumbs`, `BigAction` / `BigActions`, `Tour`
+  (+ `tourCardPosition`, `tour/memory.ts`); icons pen, text, eraser, help, window, viewer, fullscreen, motion.
+- Tests: unit `contentView/model.test.ts`; e2e `content-newcomer.spec.ts` (Show → content → tour → mini map → right
+  face → empty state add picture → the picture shows on the stage picture inside that face; tour dismissal and
+  replay; draw and more menus; open viewer popup).

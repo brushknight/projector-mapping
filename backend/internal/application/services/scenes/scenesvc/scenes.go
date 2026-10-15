@@ -15,6 +15,7 @@ import (
 	scenerepo "projmap/internal/application/ports/repository/scenes"
 	"projmap/internal/application/services"
 	scenessvc "projmap/internal/application/services/scenes"
+	"projmap/internal/domain/catalog"
 	"projmap/internal/domain/docpatch"
 	"projmap/internal/domain/scene"
 )
@@ -37,7 +38,7 @@ func CleanName(name string) (string, error) {
 	return name, nil
 }
 
-// publishList sends the scene list on the scenes channel.
+// publishList sends the scene list on the scenes channel (summaries with kind and mode, protocol §15).
 func (s *Service) publishList(ctx context.Context) {
 	l, err := s.repo.List(ctx)
 	if err != nil {
@@ -54,6 +55,7 @@ func (s *Service) publishList(ctx context.Context) {
 type Service struct {
 	repo  scenerepo.SceneRepository
 	refs  scene.Refs
+	cat   *catalog.Catalog
 	pub   realtime.Publisher
 	log   *slog.Logger
 	now   func() time.Time
@@ -70,6 +72,9 @@ func New(repo scenerepo.SceneRepository, refs scene.Refs, pub realtime.Publisher
 	return &Service{repo: repo, refs: refs, pub: pub, log: log, now: time.Now, delay: services.ParamDelay, actors: map[string]*actor{}}
 }
 
+// UseCatalog gives the service the catalog that scene templates are built from.
+func (s *Service) UseCatalog(c *catalog.Catalog) { s.cat = c }
+
 // SetParamDelay changes the param commit delay (tests).
 func (s *Service) SetParamDelay(d time.Duration) { s.delay = d }
 
@@ -85,10 +90,12 @@ type actor struct {
 	doc     []byte
 	version int64
 	name    string
-	undo    []entry
-	redo    []entry
-	params  *services.Coalescer
-	closed  bool
+	// kind and mode as last listed: a change republishes the scene list
+	kind, mode string
+	undo       []entry
+	redo       []entry
+	params     *services.Coalescer
+	closed     bool
 }
 
 // actorFor loads (once) the scene's actor.
@@ -106,7 +113,7 @@ func (s *Service) actorFor(ctx context.Context, id string) (*actor, error) {
 	if err != nil {
 		return nil, err
 	}
-	a := &actor{svc: s, id: id, inbox: make(chan func(), 64), doc: sc.Encode(), version: sc.Version, name: sc.Name}
+	a := &actor{svc: s, id: id, inbox: make(chan func(), 64), doc: sc.Encode(), version: sc.Version, name: sc.Name, kind: sc.Kind, mode: sc.Mode}
 	a.params = services.NewCoalescer(s.delay, func(path string, v json.RawMessage, by string) {
 		a.inbox <- func() { a.commitParam(path, v, by) }
 	})
@@ -142,8 +149,9 @@ func (s *Service) List(ctx context.Context) ([]scene.Summary, error) {
 	return s.repo.List(ctx)
 }
 
-// UpgradeStored rewrites every stored scene that still has the pre-mode backdrop (protocol §1 "Upgrade of older
-// documents") and reports how many it changed. It runs once on start, before any scene is opened.
+// UpgradeStored rewrites every stored scene that is not in the current format (protocol §1 "Upgrade of older
+// documents", protocol §15 "Upgrade": gobo layers become attachments, scenes get a kind) and fills the list's kind
+// and mode columns; it reports how many it changed. It runs once on start, before any scene is opened.
 func (s *Service) UpgradeStored(ctx context.Context) (int, error) {
 	list, err := s.repo.List(ctx)
 	if err != nil {
@@ -160,7 +168,7 @@ func (s *Service) UpgradeStored(ctx context.Context) (int, error) {
 			s.log.Warn("scene upgrade failed", "scene", sum.ID, "err", err)
 			continue
 		}
-		if !changed {
+		if !changed && sum.Kind != "" && sum.Mode != "" {
 			continue
 		}
 		sc, err := scene.Decode(next)
@@ -168,10 +176,12 @@ func (s *Service) UpgradeStored(ctx context.Context) (int, error) {
 			s.log.Warn("scene upgrade failed", "scene", sum.ID, "err", err)
 			continue
 		}
-		if err := s.repo.Rewrite(ctx, sum.ID, sc.Encode()); err != nil {
+		if err := s.repo.Rewrite(ctx, sum.ID, sc.Encode(), sc.Summary()); err != nil {
 			return n, err
 		}
-		s.log.Info("upgraded scene to per-mode backdrops", "scene", sum.ID, "mode", sc.Mode)
+		if changed {
+			s.log.Info("upgraded scene to the light model", "scene", sum.ID, "kind", sc.Kind, "mode", sc.Mode)
+		}
 		n++
 	}
 	return n, nil
@@ -203,15 +213,39 @@ func (s *Service) Validate(sc *scene.Scene) error {
 	return nil
 }
 
-func (s *Service) Create(ctx context.Context, name, setupID string) (*scene.Scene, error) {
-	name, err := CleanName(name)
+func (s *Service) Create(ctx context.Context, in scenessvc.CreateIn) (*scene.Scene, error) {
+	name, err := CleanName(in.Name)
 	if err != nil {
 		return nil, err
 	}
-	if setupID == "" {
+	if in.SetupID == "" {
 		return nil, app_errors.BadRequest("A scene needs a setupId.")
 	}
-	sc := scene.New(services.NewID("scn"), setupID, name)
+	id := services.NewID("scn")
+	sc := scene.New(id, in.SetupID, name)
+	sc.Normalize()
+	if in.Kind != "" && !scene.Kinds[in.Kind] {
+		return nil, app_errors.BadRequest("kind %q is not one of static, live, color, scenery, mapping.", in.Kind)
+	}
+	tpl := in.Template
+	if tpl == "" && in.Kind != "" && s.cat != nil {
+		if t := s.cat.DefaultTemplate(in.Kind); t != nil {
+			tpl = t.ID
+		} else {
+			sc.Kind, sc.Mode = in.Kind, scene.KindMode(in.Kind)
+		}
+	}
+	if tpl != "" {
+		if s.cat == nil || s.cat.SceneTemplate(tpl) == nil {
+			return nil, app_errors.BadRequest("template %q is not a sceneTemplates id of the catalog.", tpl)
+		}
+		if sc, err = scene.FromTemplate(s.cat, tpl, id, in.SetupID, name); err != nil {
+			return nil, app_errors.Invalid("%s", err.Error())
+		}
+		if err := s.Validate(&sc); err != nil {
+			return nil, err
+		}
+	}
 	if err := s.repo.Create(ctx, &sc); err != nil {
 		return nil, err
 	}
@@ -250,7 +284,9 @@ func (s *Service) Rename(ctx context.Context, id, name, by string) (scene.Summar
 	if err != nil {
 		return scene.Summary{}, err
 	}
-	return scene.Summary{ID: sc.ID, Name: sc.Name, SetupID: sc.SetupID, Version: v}, nil
+	sum := sc.Summary()
+	sum.Version = v
+	return sum, nil
 }
 
 func (s *Service) Import(ctx context.Context, sc *scene.Scene) error {
@@ -327,11 +363,11 @@ func (a *actor) commit(ctx context.Context, ops []docpatch.Op, by, re string) (e
 	}
 	doc := sc.Encode()
 	he := scene.HistoryEntry{Version: sc.Version, Author: by, TS: a.svc.now().UTC(), Ops: ops, Inverse: inverse}
-	if err := a.svc.repo.Commit(ctx, a.id, doc, sc.Name, he); err != nil {
+	if err := a.svc.repo.Commit(ctx, a.id, doc, sc.Summary(), he); err != nil {
 		return entry{}, err
 	}
-	renamed := a.name != sc.Name
-	a.doc, a.version, a.name = doc, sc.Version, sc.Name
+	renamed := a.name != sc.Name || a.kind != sc.Kind || a.mode != sc.Mode
+	a.doc, a.version, a.name, a.kind, a.mode = doc, sc.Version, sc.Name, sc.Kind, sc.Mode
 	a.svc.pub.Publish(Channel(a.id), realtime.Message{T: "patched", Ch: Channel(a.id), V: realtime.Ver(a.version), Re: re,
 		D: realtime.Data(map[string]any{"ops": ops, "by": by})})
 	if renamed {

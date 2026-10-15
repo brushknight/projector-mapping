@@ -30,13 +30,23 @@ type ParamCmd struct {
 	Conn string
 }
 
+// CreateIn is POST /scenes without duplicate (protocol §15).
+type CreateIn struct {
+	Name    string `json:"name"`
+	SetupID string `json:"setupId"`
+	// Kind picks its default template; Template a sceneTemplates id (its kind wins over Kind).
+	Kind     string `json:"kind"`
+	Template string `json:"template"`
+}
+
 // SceneService owns scene documents: one goroutine per open scene serializes every write.
 type SceneService interface {
 	List(ctx context.Context) ([]scene.Summary, error)
 	// Get returns the document (version included).
 	Get(ctx context.Context, id string) ([]byte, int64, error)
 	Scene(ctx context.Context, id string) (*scene.Scene, error)
-	Create(ctx context.Context, name, setupID string) (*scene.Scene, error)
+	// Create makes a scene: from a template (or a kind's default template), else the empty static scene.
+	Create(ctx context.Context, in CreateIn) (*scene.Scene, error)
 	// Duplicate deep-copies a scene's current document under a new id, version 1 and the given name.
 	Duplicate(ctx context.Context, srcID, name string) (*scene.Scene, error)
 	// Rename is a replace /name patch; it returns the summary.

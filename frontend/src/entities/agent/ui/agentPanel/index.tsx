@@ -241,6 +241,12 @@ export function AgentPanel({ hub, sceneId, onError, onNotice, previewDraftId, on
                 <Switch checked={!!settings.agentMayApply} onChange={(v) => setPerm({ agentMayApply: v })} ariaLabel="allow applying drafts" />
               </Row>
             )}
+            {settings.agentLiveEdits !== undefined && (
+              <Row>
+                <span>agents edit live (light and scenes)</span>
+                <Switch checked={!!settings.agentLiveEdits} onChange={(v) => setPerm({ agentLiveEdits: v })} ariaLabel="agents edit live" />
+              </Row>
+            )}
           </>
         )}
         <AskBox placeholder={`ask ${agent}…`} onSend={start} disabled={!sceneId} />

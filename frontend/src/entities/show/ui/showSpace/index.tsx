@@ -8,7 +8,7 @@ import type { EffectDef } from '../../../effect/types'
 import { useSceneEditing } from '../../../scene/editing'
 import { stackLayers } from '../../../scene/lib'
 import { padForKey, setMode, sortedCues } from '../../../scene/ops'
-import type { SceneMode, SceneSummary } from '../../../scene/types'
+import type { SceneKind, SceneMode, SceneSummary } from '../../../scene/types'
 import { activeTestPattern, testPatternSecondsLeft, type Setup } from '../../../setup'
 import type { SoundPlayAck } from '../../../sound/types'
 import { SoundLibrary } from '../../../sound/ui/soundLibrary'
@@ -17,11 +17,12 @@ import { useSounds } from '../../../sound/ui/useSounds'
 import { formatTime } from '../../../scene/ui/timeline/time'
 import { playheadNow, soloSecondsLeft } from '../../live'
 import { showAudio, type Show } from '../../types'
-import { SceneList } from '../sceneSwitcher'
+import { SceneBrowser } from '../sceneSwitcher/browser'
 import { WallPanel } from '../wallPanel'
 import { ShowContext, useShow, type ShowState } from './context'
 import { ColorPanel, LivePanel, ObjectsPanel, PresetChips, SceneryPanel, StaticPanel } from './modes'
 import { LivePreview } from './preview'
+import { openViewer } from '../../../output/viewer'
 import s from './styles.module.css'
 
 export const NO_AUDIO = 'Nothing plays sound right now. Open /out on the projector computer and click it once.'
@@ -50,6 +51,7 @@ export function ShowSpace({
   toast,
   command,
   onFromPhoto,
+  onSceneCreated,
 }: {
   hub: Hub
   show: Show | null
@@ -60,6 +62,8 @@ export function ShowSpace({
   toast: (msg: string, opts?: { bad?: boolean }) => void
   command: (name: string, args?: Record<string, unknown>) => Promise<unknown>
   onFromPhoto?: () => void
+  /** (§15) a scene made from a template: the editor puts it on the wall, or opens a mapping scene in the map space */
+  onSceneCreated?: (id: string, kind: SceneKind) => void
 }) {
   const bad = useCallback((m: string) => toast(m, { bad: true }), [toast])
   const activeId = show?.activeSceneId ?? null
@@ -160,7 +164,7 @@ export function ShowSpace({
               <Cap>scenes</Cap>
               <span className={s.dim}>{scenes.length}</span>
             </div>
-            <SceneList hub={hub} show={show} scenes={scenes} reload={reloadScenes} toast={toast} current={activeId} onOpen={(id) => id !== activeId && void command('show.activate', { sceneId: id })} openLabel="put on the wall:" onFromPhoto={onFromPhoto} />
+            <SceneBrowser hub={hub} show={show} catalog={catalog} setup={setup} scenes={scenes} reload={reloadScenes} toast={toast} onFromPhoto={onFromPhoto} onCreated={onSceneCreated} />
           </div>
           <div className={s.sec}>
             <div className={s.secHead}>
@@ -241,8 +245,63 @@ function useDetail(): string {
     return cues.length ? `cue ${Math.min(cues.length, (sh.show?.transport.cue ?? 0) + 1)} / ${cues.length}` : 'objects'
   }
   const layers = stackLayers(sc, sc.mode).filter((l) => l.visible)
-  if (sc.mode === 'live') return `${layers.length} layer${layers.length === 1 ? '' : 's'}`
+  // (§15) static and live: what is in front of the light
+  const atts = sc.mode === 'static' || sc.mode === 'live' ? (sc.backdrop[sc.mode].attachments ?? []).filter((a) => a.visible) : []
+  if (sc.mode === 'live') return `${layers.length} layer${layers.length === 1 ? '' : 's'}${atts.length ? ` · ${atts.map((a) => a.name).join(' + ')}` : ''}`
+  if (sc.mode === 'static') return atts.length ? atts.map((a) => a.name).join(' + ') : 'open light'
   return layers[0]?.name ?? 'nothing picked'
+}
+
+/**
+ * (§15) Drag the hero sideways (up and down in portrait) to slide the whole light inside the frame. Only a clearly
+ * horizontal drag counts, so a vertical swipe keeps scrolling the page. Double click puts it back in the middle.
+ */
+function SlideDrag() {
+  const sh = useShow()
+  const sc = sh.scene
+  const mode = sc?.mode === 'static' || sc?.mode === 'live' ? sc.mode : null
+  const light = mode ? sc?.backdrop[mode]?.light : null
+  const portrait = !!sh.setup && sh.setup.output.orientation !== 'landscape'
+  const axis = portrait ? 'y' : 'x'
+  const drag = useRef<{ x: number; y: number; v: number; on: boolean; w: number; h: number } | null>(null)
+  if (!mode || !light) return null
+  const path = `/backdrop/${mode}/light/slide/${axis}`
+  const clamp = (v: number) => Math.max(-1, Math.min(1, Math.round(v * 1000) / 1000))
+  return (
+    <div
+      className={s.slideDrag}
+      title="drag sideways to slide the light across the frame, double click to centre it"
+      data-testid="hero-slide"
+      onPointerDown={(e) => {
+        const r = e.currentTarget.getBoundingClientRect()
+        drag.current = { x: e.clientX, y: e.clientY, v: light.slide?.[axis] ?? 0, on: false, w: r.width, h: r.height }
+      }}
+      onPointerMove={(e) => {
+        const d = drag.current
+        if (!d) return
+        const dx = e.clientX - d.x, dy = e.clientY - d.y
+        const along = portrait ? dy : dx, across = portrait ? dx : dy
+        if (!d.on) {
+          if (Math.abs(along) < 6) return
+          if (Math.abs(along) < 1.5 * Math.abs(across)) {
+            drag.current = null
+            return
+          }
+          d.on = true
+          e.currentTarget.setPointerCapture(e.pointerId)
+        }
+        sh.editing.setValue(path, clamp(d.v + along / (portrait ? d.h : d.w)), 'live')
+      }}
+      onPointerUp={(e) => {
+        const d = drag.current
+        drag.current = null
+        if (!d?.on) return
+        const along = portrait ? e.clientY - d.y : e.clientX - d.x
+        sh.editing.setValue(path, clamp(d.v + along / (portrait ? d.h : d.w)), 'final')
+      }}
+      onDoubleClick={() => sh.editing.setValue(`/backdrop/${mode}/light/slide`, { x: 0, y: 0 }, 'final')}
+    />
+  )
 }
 
 function ratio(w: number, h: number) {
@@ -280,8 +339,13 @@ function Hero() {
             {pattern !== 'off' && <Glass>test pattern · {pattern}{patternLeft !== null ? ` · ${patternLeft} s` : ''}</Glass>}
             {soloLeft !== null && <Glass>solo · {soloLeft} s</Glass>}
             {o && <Glass>{`${ratio(o.width, o.height)} · ${Math.min(o.width, o.height)}p`}</Glass>}
+            <button type="button" className={s.heroBtn} onClick={() => { if (!openViewer({ portrait: !!o && o.orientation !== 'landscape' })) sh.toast('The browser blocked the viewer window. Allow pop-ups for this page.', { bad: true }) }} title="open a window that shows exactly what the projector shows" data-testid="show-open-viewer">
+              <Icon name="viewer" size={14} />
+              open viewer
+            </button>
           </span>
         </div>
+        <SlideDrag />
         {sh.scene?.mode === 'objects' && (
           <div className={s.heroBottom}>
             <Glass>

@@ -102,6 +102,7 @@ export function Stage() {
       // the editor's own playhead: previewing never touches the wall
       t: ed.preview.t(),
       clock: ambientClock(ed.hub),
+      now: ed.hub.serverNow(),
       blackout: 0,
       testPattern: ed.testGrid ? 'grid' : 'off',
       mutedTracks: ed.mutedTracks,
@@ -411,8 +412,8 @@ function WallChip() {
       )}
       <UnderlayMenu />
       {editable && (
-        <Pill size="sm" on icon="edit" onClick={() => ed.editFace(editable.id)} title="edit what this face shows, flat at its real proportions (F, or double-click it)" data-testid="stage-edit-face">
-          edit face
+        <Pill size="sm" on icon="edit" onClick={() => ed.editFace(editable.id)} title="open this face in content to put pictures, drawings and effects on it (F, or double-click it)" data-testid="stage-edit-face">
+          add content
         </Pill>
       )}
     </div>

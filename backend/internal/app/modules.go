@@ -83,6 +83,7 @@ type ScenesModule struct {
 
 func NewScenesModule(db *gorm.DB, refs *catalogsvc.Service, pub realtime.Publisher, log *slog.Logger) *ScenesModule {
 	s := scenesvc.New(scenesql.NewSceneRepository(db), refs, pub, log)
+	s.UseCatalog(refs.Catalog())
 	return &ScenesModule{Service: s, Drafts: scenesvc.NewDrafts(scenesql.NewDraftRepository(db), s, pub),
 		Presets: scenesvc.NewPresets(scenesql.NewPresetRepository(db), s, pub)}
 }

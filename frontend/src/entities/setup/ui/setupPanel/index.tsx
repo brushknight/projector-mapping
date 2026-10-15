@@ -1,4 +1,6 @@
-import { useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { openViewer } from '../../../output/viewer'
+import { settingsApi, type AgentSettings } from '../../../settings'
 import { useServerSecond } from '../../../../shared/lib/useHub'
 import { Cap, FillSlider, Field, NumField, Pill, Row, Segmented, Switch } from '../../../../shared/components'
 import type { Hub } from '../../../../shared/lib/ws'
@@ -28,12 +30,22 @@ export function SetupPanel({ hub, setup, onError }: { hub: Hub; setup: Setup; on
   // a pattern lasts 60 s (protocol §1 testPatternUntil); sending it again renews it
   const setPattern = (p: TestPattern) =>
     hub.cmd('setup.testPattern', { setupId: setup.id, pattern: p, seconds: 60 }).catch(() => update({ testPattern: p }))
+  // (§15) agents edit live: the backdrop MCP tools write straight to the wall instead of a draft
+  const [agents, setAgents] = useState<AgentSettings | null>(null)
+  useEffect(() => {
+    settingsApi.get().then(setAgents, () => setAgents(null))
+  }, [])
+  const setLive = (v: boolean) =>
+    settingsApi.update({ agentLiveEdits: v }).then(setAgents, (e) => onError(e instanceof Error ? e.message : String(e)))
   return (
     <div className={s.panel}>
       <Row>
         <Cap>projector</Cap>
         <span className={s.name}>{setup.name}</span>
       </Row>
+      <Pill icon="viewer" onClick={() => { if (!openViewer({ portrait: o.orientation !== 'landscape' })) onError('The browser blocked the viewer window. Allow pop-ups for this page.') }} title="open a window that shows exactly what the projector shows" data-testid="setup-open-viewer">
+        open viewer
+      </Pill>
       <Field label="orientation">
         <Segmented<Orientation>
           ariaLabel="orientation"
@@ -93,6 +105,15 @@ export function SetupPanel({ hub, setup, onError }: { hub: Hub; setup: Setup; on
           </Row>
         )}
       </Field>
+      {agents && (
+        <Field label="agents">
+          <Row>
+            <span>agents edit live</span>
+            <Switch checked={!!agents.agentLiveEdits} onChange={setLive} ariaLabel="agents edit live" />
+          </Row>
+          <span className={s.none}>{agents.agentLiveEdits ? 'Claude and Codex change the light on the wall, the phone and the viewer at once.' : 'Claude and Codex propose light changes in a draft you apply.'}</span>
+        </Field>
+      )}
       <Field label="reference photo (never projected)">
         <div className={s.ref}>
           {setup.referenceAsset ? <img src={assetUrl(setup.referenceAsset)} alt="reference" className={s.thumb} /> : <span className={s.none}>none yet</span>}

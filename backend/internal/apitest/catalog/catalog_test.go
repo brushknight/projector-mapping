@@ -1,16 +1,18 @@
 package catalog
 
 import (
+	"io/fs"
 	"net/http"
 	"testing"
 
 	"projmap/internal/apitest"
+	builtin "projmap/internal/catalog"
 )
 
 func TestCatalog(t *testing.T) {
 	h := apitest.New(t)
 	m := h.Do("GET", "/api/v1/catalog", nil).Map(t)
-	if m["version"] != float64(3) || len(m["gobos"].([]any)) != 8 || len(m["effects"].([]any)) != 11 {
+	if m["version"] != float64(4) || len(m["gobos"].([]any)) != 33 || len(m["effects"].([]any)) != 11 {
 		t.Fatalf("catalog %v", m["version"])
 	}
 	r := h.Do("GET", "/catalog/assets/scenery/flowers.jpg", nil)
@@ -19,6 +21,15 @@ func TestCatalog(t *testing.T) {
 		t.Fatalf("content type %s", r.Header.Get("Content-Type"))
 	}
 	apitest.ExpectErr(t, h.Do("GET", "/catalog/assets/scenery/nope.jpg", nil), http.StatusNotFound, "not_found")
+	// thumbnails (protocol §15): built into the server by the web build; unknown ids answer 404 without auth
+	apitest.ExpectErr(t, h.Remote("GET", "/catalog/thumbs/nope.png", nil, ""), http.StatusNotFound, "not_found")
+	if _, err := fs.Stat(builtin.Assets(), "thumbs/window-4.png"); err == nil {
+		r := h.Remote("GET", "/catalog/thumbs/window-4.png", nil, "")
+		apitest.Expect(t, r, http.StatusOK)
+		if r.Header.Get("Content-Type") != "image/png" {
+			t.Fatalf("thumb content type %s", r.Header.Get("Content-Type"))
+		}
+	}
 }
 
 func TestEffects(t *testing.T) {

@@ -95,19 +95,41 @@ picks). **Esc** ends both. Use the grid to check that a face's warp sits right o
 
 ## The content space
 
-**Tab** opens the selected object unfolded like a dieline: faces edge to edge at their real proportions, details
-inside their faces, rendered live at the editor's playhead, with a picture of the warped stage in a corner.
-Double-click a face (or **F**, or **edit face**) to work on it alone; **[** and **]** step through faces and **Esc**
-goes back to the unfold.
+The editor opens on **show**, where the wall runs. **map** and **content** sit beside it in the top bar under
+"mapping": map places the faces on the real object, content puts pictures, drawings and effects on them. Reach
+content from the top bar, with **Tab** from map, or with **add content** on a selected face (inspector, stage chip,
+**F**, or a double-click on the face).
+
+What you see in content:
+
+- **Where you are.** Breadcrumbs at the top (`zimacube › right`) climb back up: click the object to see all its
+  faces. Under them a big title says what you edit ("zimacube · right face") with a line on what the view is for.
+- **The "where am I" map** (top right) outlines the object's faces as they sit on the stage. The face you edit is
+  bright, faces with content are lightly filled; click a face to open it. Under it, **the stage, live** shows your
+  content warped onto the object.
+- **All faces** (the unfold): the object laid flat like a dieline. Click a face to open it; **[** and **]** step
+  through faces and **Esc** goes back to all faces.
+- **An empty face** (or an object with nothing on it) shows three big actions in the middle: **add picture**,
+  **draw** and **add effect**. **hide these choices** puts them away.
+- **Tools** in a face are labelled buttons: move, pen, line, box, ellipse, text and erase (keys V and 1 to 6), then
+  **add picture** and **add effect**. Every control explains itself on hover.
+- **more** holds what you rarely need: in a face, the face size, previous and next face and "remove every stroke";
+  on all faces, arranging the faces, re-layout and the templates. In the inspector, **show more controls** opens blend,
+  crop, exact placement, the wipe angle and a gradient's offset and repeat.
+- **A 4-step tour** runs the first time you open content (this, where you are, add something, see it on the object).
+  It never blocks the page; the **?** button at the top right plays it again.
+- **open viewer** in the top bar opens a window with exactly what the projector shows.
+
+What you can put on faces:
 
 - **Pictures and videos**: drop or paste them on a face, or across the whole object (hold alt in the unfold, or
-  **picture across**). Each is a media layer with fit, crop, offset, scale, rotation, opacity, blend and a reveal wipe;
+  **add picture across**). Each is a media layer with fit, crop, offset, scale, rotation, opacity, blend and a reveal wipe;
   drag its box to move it, a corner to scale and the knob to turn it.
-- **Drawing**: pen, line, rect, ellipse, text and erase (keys 1 to 6) in a face's view. Strokes are saved as the
+- **Drawing**: pen, line, box, ellipse, text and erase (keys 1 to 6) in a face's view. Strokes are saved as the
   face's `drawing` effect; its **reveal** draws them on in order, and **draw on** adds a clip that animates it.
-- **Across the object**: layers on the unfold (a picture, or a **sweep** gradient) run on across shared edges, because
+- **Across the object**: layers on the unfold (a picture, or an **add sweep** gradient) run on across shared edges, because
   each face shows its own part of the unfold.
-- **Templates**: **template** saves the unfold as a PNG or SVG at its true pixel size, or each face as a PNG in a zip.
+- **Templates**: **more** on all faces saves the unfold as a PNG or SVG at its true pixel size, or each face as a PNG in a zip.
   **import artwork** puts a picture painted on the template back across the object.
 
 ## Effects on a surface

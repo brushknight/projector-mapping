@@ -18,7 +18,7 @@ type Refs interface {
 }
 
 var (
-	layerKinds   = set("gobo", "procedural", "gradient", "photo", "solid", LayerVideo)
+	layerKinds   = set("gobo", "procedural", "gradient", "photo", "solid", LayerVideo, LayerGenerator)
 	blends       = set("normal", "multiply", "screen", "add")
 	colorModes   = set("cct", "hsi")
 	fxKinds      = set("none", "candle", "fire", "lightning", "paparazzi", "tv", "breathe", "strobe", "police")
@@ -32,8 +32,11 @@ var (
 	mediaKinds   = set("image", "video")
 	fits         = set("fill", "fit", "stretch")
 	atlasTurns   = map[int]bool{0: true, 90: true, 180: true, 270: true}
-	// layerClipEffects are the effects of clips on a layer track; their params are only {from, to}.
+	// layerClipEffects are the effects of clips on a content layer track; their params are only {from, to}.
 	layerClipEffects = set("reveal", "sweep")
+	easings          = set(MotionEasings...)
+	loops            = set(MotionLoops...)
+	colorLayerKinds  = set(ColorLayerGradient, ColorLayerGenerator)
 )
 
 // MaxAtlasSize is the largest atlas width or height in atlas pixels.
@@ -87,6 +90,29 @@ func (s *Scene) Validate(refs Refs) error {
 	if !Modes[s.Mode] {
 		c.fail("mode %q is not one of static, live, color, scenery, objects", s.Mode)
 	}
+	if !Kinds[s.Kind] {
+		c.fail("kind %q is not one of static, live, color, scenery, mapping", s.Kind)
+	}
+	if len(s.Backdrop.Static.Layers) > 0 {
+		c.fail("the static stack takes no layers: put gobos in backdrop.static.attachments")
+	}
+	// backdrop ids: layers and attachments share one namespace (motion tracks target either)
+	backdropIDs := map[string]bool{}
+	for _, m := range []string{ModeStatic, ModeLive} {
+		st := s.Backdrop.Stack(m)
+		if m == ModeStatic && st.Light == nil {
+			c.fail("the static stack needs a light")
+		}
+		if st.Light != nil {
+			c.stackLight("backdrop."+m+".light", st.Light, refs)
+		}
+		for i := range st.Attachments {
+			a := &st.Attachments[i]
+			uniq("layer", a.ID)
+			backdropIDs[a.ID] = true
+			c.attachment(fmt.Sprintf("attachment %s (%s)", a.ID, m), a, refs)
+		}
+	}
 	if !IsBackdropMode(s.Underlay.From) {
 		c.fail("underlay.from %q is not one of static, live, color, scenery", s.Underlay.From)
 	}
@@ -95,8 +121,9 @@ func (s *Scene) Validate(refs Refs) error {
 		l := ml.Layer
 		w := fmt.Sprintf("layer %s (%s)", l.ID, ml.Mode)
 		uniq("layer", l.ID)
+		backdropIDs[l.ID] = true
 		if !layerKinds[l.Kind] {
-			c.fail("%s: kind %q is not one of gobo, procedural, gradient, photo, solid, video", w, l.Kind)
+			c.fail("%s: kind %q is not one of gobo, procedural, gradient, photo, solid, video, generator", w, l.Kind)
 			continue
 		}
 		if !blends[l.Blend] {
@@ -112,6 +139,15 @@ func (s *Scene) Validate(refs Refs) error {
 		if err := catalog.CheckParams(schema, l.Params, w+" params"); err != nil {
 			c.fail("%v", err)
 		}
+		if l.Kind == "gradient" {
+			c.stops(w, l.Params)
+		}
+		if l.Motion != nil {
+			if l.Kind != "photo" && l.Kind != LayerVideo {
+				c.fail("%s: only photo and video layers have a motion", w)
+			}
+			c.motion(w+" motion", l.Motion)
+		}
 		if l.Kind == "solid" {
 			if col, ok := l.Params["color"].(string); ok && !catalog.IsColor(col) {
 				c.fail("%s: color must be #rrggbb", w)
@@ -123,17 +159,7 @@ func (s *Scene) Validate(refs Refs) error {
 			c.rng(w+" light.softness", lt.Softness, 0, 1)
 			c.rng(w+" light.angle", lt.Angle, -360, 360)
 			c.rng(w+" light.scale", lt.Scale, 0.05, 10)
-			if !colorModes[lt.Color.Mode] {
-				c.fail("%s: light.color.mode must be cct or hsi", w)
-			}
-			c.rng(w+" light.color.kelvin", lt.Color.Kelvin, 1000, 12000)
-			c.rng(w+" light.color.tint", lt.Color.Tint, -1, 1)
-			c.rng(w+" light.color.hue", lt.Color.Hue, 0, 360)
-			c.rng(w+" light.color.sat", lt.Color.Sat, 0, 1)
-			if !fxKinds[lt.FX.Kind] {
-				c.fail("%s: light.fx.kind %q is unknown", w, lt.FX.Kind)
-			}
-			c.rng(w+" light.fx.speed", lt.FX.Speed, 0, 1)
+			c.lightColor(w+" light", lt.Color, lt.FX)
 		} else if l.Kind == "gobo" || l.Kind == "procedural" {
 			c.fail("%s: a %s layer needs light", w, l.Kind)
 		}
@@ -251,6 +277,7 @@ func (s *Scene) Validate(refs Refs) error {
 	c.rng("timeline.duration", t.Duration, 0.1, 24*3600)
 	tracks := map[string]bool{}
 	layerTracks := map[string]bool{}
+	motionTracks := map[string]bool{}
 	soundTracks := map[string]bool{}
 	for _, tr := range t.Tracks {
 		uniq("track", tr.ID)
@@ -275,9 +302,18 @@ func (s *Scene) Validate(refs Refs) error {
 				c.fail("%s: a sound track's target id must be null", w)
 			}
 		case "layer":
-			layerTracks[tr.ID] = true
-			if tr.Target.ID == nil || !contentLayers[*tr.Target.ID] {
-				c.fail("%s: target content layer does not exist", w)
+			switch {
+			case tr.Target.ID == nil:
+				c.fail("%s: a layer track needs a target id", w)
+			case contentLayers[*tr.Target.ID]:
+				layerTracks[tr.ID] = true
+			case backdropIDs[*tr.Target.ID] || *tr.Target.ID == LightStatic || *tr.Target.ID == LightLive ||
+				strings.HasPrefix(*tr.Target.ID, "att_") || strings.HasPrefix(*tr.Target.ID, "lay_"):
+				// a motion track may outlive its attachment or layer (a preset or a pick replaced the stack): it
+				// then moves nothing until a target with that id comes back
+				motionTracks[tr.ID] = true
+			default:
+				c.fail("%s: target %s is not a content layer, an attachment, a backdrop layer, %s or %s", w, *tr.Target.ID, LightStatic, LightLive)
 			}
 		}
 	}
@@ -295,6 +331,10 @@ func (s *Scene) Validate(refs Refs) error {
 		}
 		if layerTracks[cl.TrackID] {
 			c.layerClip(w, cl)
+			continue
+		}
+		if motionTracks[cl.TrackID] {
+			c.motionClip(w, cl)
 			continue
 		}
 		if soundTracks[cl.TrackID] {
@@ -496,6 +536,157 @@ func (c *checker) soundClip(w string, cl Clip) {
 
 // LayerVideo is the backdrop layer kind of a video (protocol §14).
 const LayerVideo = "video"
+
+// LayerGenerator is the backdrop layer kind of a colour generator (protocol §15).
+const LayerGenerator = "generator"
+
+// Track target ids of the stack lights (protocol §15, motion clips).
+const (
+	LightStatic = "light:static"
+	LightLive   = "light:live"
+)
+
+// stackLight checks a static or live light (protocol §15).
+func (c *checker) stackLight(w string, l *StackLight, refs Refs) {
+	c.rng(w+".intensity", l.Intensity, 0, 1)
+	c.rng(w+".focus", l.Focus, 0, 1)
+	c.lightColor(w, l.Color, l.FX)
+	c.rng(w+".fringe", l.Fringe, 0, 1)
+	c.rng(w+".vignette", l.Vignette, 0, 1)
+	c.rng(w+".haze", l.Haze, 0, 1)
+	c.rng(w+".slide.x", l.Slide.X, -1, 1)
+	c.rng(w+".slide.y", l.Slide.Y, -1, 1)
+	if cl := l.ColorLayer; cl != nil {
+		cw := w + ".colorLayer"
+		if !colorLayerKinds[cl.Kind] {
+			c.fail("%s: kind %q is not one of gradient, generator", cw, cl.Kind)
+		} else if schema, ok := refs.LayerSchema(cl.Kind, cl.Ref); !ok {
+			c.fail("%s: %s %q is not in the catalog", cw, cl.Kind, cl.Ref)
+		} else if err := catalog.CheckParams(schema, cl.Params, cw+".params"); err != nil {
+			c.fail("%v", err)
+		}
+		if cl.Kind == ColorLayerGradient {
+			c.stops(cw, cl.Params)
+		}
+	}
+	if l.Motion != nil {
+		c.motion(w+".motion", l.Motion)
+	}
+}
+
+// lightColor checks a colour and an fx.
+func (c *checker) lightColor(w string, col Color, fx LightFX) {
+	if !colorModes[col.Mode] {
+		c.fail("%s: color.mode must be cct or hsi", w)
+	}
+	c.rng(w+".color.kelvin", col.Kelvin, 1000, 12000)
+	c.rng(w+".color.tint", col.Tint, -1, 1)
+	c.rng(w+".color.hue", col.Hue, 0, 360)
+	c.rng(w+".color.sat", col.Sat, 0, 1)
+	if !fxKinds[fx.Kind] {
+		c.fail("%s: fx.kind %q is unknown", w, fx.Kind)
+	}
+	c.rng(w+".fx.speed", fx.Speed, 0, 1)
+}
+
+// attachment checks one attachment: a catalog gobo, ranges, params against the gobo's merged schema, its motion.
+func (c *checker) attachment(w string, a *Attachment, refs Refs) {
+	schema, ok := refs.LayerSchema("gobo", a.Gobo)
+	if !ok {
+		c.fail("%s: gobo %q is not in the catalog", w, a.Gobo)
+	} else if err := catalog.CheckParams(schema, a.Params, w+" params"); err != nil {
+		c.fail("%v", err)
+	}
+	c.rng(w+" opacity", a.Opacity, 0, 1)
+	c.rng(w+" rotation", a.Rotation, -360, 360)
+	c.rng(w+" offsetX", a.OffsetX, -2, 2)
+	c.rng(w+" offsetY", a.OffsetY, -2, 2)
+	c.rng(w+" scale", a.Scale, 0.05, 10)
+	if a.Motion != nil {
+		c.motion(w+" motion", a.Motion)
+	}
+}
+
+// motion checks a Motion's ranges and enums.
+func (c *checker) motion(w string, m *Motion) {
+	for _, p := range []struct {
+		name string
+		pt   *Pt
+	}{{"from", &m.From}, {"via", m.Via}, {"to", &m.To}} {
+		if p.pt != nil {
+			c.rng(w+"."+p.name+".x", p.pt.X, -2, 2)
+			c.rng(w+"."+p.name+".y", p.pt.Y, -2, 2)
+		}
+	}
+	c.rng(w+".duration", m.Duration, 1, 86400)
+	if !easings[m.Easing] {
+		c.fail("%s: easing %q is not one of %s", w, m.Easing, strings.Join(MotionEasings, ", "))
+	}
+	if !loops[m.Loop] {
+		c.fail("%s: loop %q is not one of %s", w, m.Loop, strings.Join(MotionLoops, ", "))
+	}
+	c.rng(w+".rotate", m.Rotate, -360, 360)
+	c.rng(w+".scaleFrom", m.ScaleFrom, 0.1, 10)
+	c.rng(w+".scaleTo", m.ScaleTo, 0.1, 10)
+	for name, k := range map[string]float64{"kelvinFrom": m.KelvinFrom, "kelvinTo": m.KelvinTo} {
+		if k != 0 {
+			c.rng(w+"."+name+" (0 or 1000..12000)", k, 1000, 12000)
+		}
+	}
+	c.rng(w+".phase", m.Phase, 0, 2)
+	if m.StartedAt < 0 || math.IsNaN(m.StartedAt) {
+		c.fail("%s: startedAt must be server Unix ms (>= 0)", w)
+	}
+	if len(m.Preset) > 64 {
+		c.fail("%s: preset is longer than 64 characters", w)
+	}
+}
+
+// stops checks a gradient's params.stops when present: 1..8 {color: #rrggbb, pos: 0..1}.
+func (c *checker) stops(w string, params map[string]any) {
+	v, has := params["stops"]
+	if !has {
+		return
+	}
+	list, ok := v.([]any)
+	if !ok || len(list) < 1 || len(list) > 8 {
+		c.fail("%s: params.stops must be 1..8 stops", w)
+		return
+	}
+	for i, raw := range list {
+		st, ok := raw.(map[string]any)
+		if !ok {
+			c.fail("%s: stop %d must be {color, pos}", w, i)
+			continue
+		}
+		if col, _ := st["color"].(string); !catalog.IsColor(col) {
+			c.fail("%s: stop %d color must be #rrggbb", w, i)
+		}
+		if pos, ok := st["pos"].(float64); !ok || pos < 0 || pos > 1 {
+			c.fail("%s: stop %d pos must be 0..1", w, i)
+		}
+	}
+}
+
+// motionClip checks a clip on a track that targets an attachment, a backdrop layer or a light: effect motion,
+// params only numeric from and to (progress, 0..1).
+func (c *checker) motionClip(w string, cl Clip) {
+	if cl.Effect != "motion" {
+		c.fail("%s: a clip on an attachment, backdrop layer or light track needs effect motion, not %q", w, cl.Effect)
+	}
+	for k, v := range cl.Params {
+		if k != "from" && k != "to" {
+			c.fail("%s: param %q is unknown (a motion clip takes from, to)", w, k)
+			continue
+		}
+		f, ok := v.(float64)
+		if !ok {
+			c.fail("%s: param %s must be a number", w, k)
+			continue
+		}
+		c.rng(w+" "+k, f, 0, 1)
+	}
+}
 
 var (
 	youtubeIDRe = regexp.MustCompile(`^[A-Za-z0-9_-]{11}$`)

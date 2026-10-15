@@ -23,12 +23,18 @@ enum DemoData {
         if let objects = scene["objects"]?.array {
             scene = (try? scene.applying(.replace("/objects", .array(objects + [plant])))) ?? scene
         }
-        // Every tab's stack is filled; the board's tab is on air.
-        var w = window
-        if screen == .staticfx { w = (try? w.applying(.replace("/light/fx/kind", "candle"))) ?? w }
+        // Every tab's stack is filled; the board's tab is on air. Static and live are §15 light stacks.
+        var still = staticStack
+        if screen == .staticfx { still = (try? still.applying(.replace("/light/fx/kind", "candle"))) ?? still }
+        if screen == .motion {
+            let m = try? JSONValue(encoding: Motion.start(sunPass, serverNowMs: Date().timeIntervalSince1970 * 1000 - 140_000))
+            still = (try? still.applying(.replace("/light/motion", m ?? .null))) ?? still
+        }
+        var live = liveStack
+        live = (try? live.applying(.replace("/layers", [sunDrift, tree, clouds, dayCycle]))) ?? live
         let backdrop: JSONValue = [
-            "static": ["layers": [w]],
-            "live": ["layers": [sunDrift, liveWindow, tree, clouds, dayCycle]],
+            "static": still,
+            "live": live,
             "color": ["layers": [gradient]],
             "scenery": ["layers": [photo]],
         ]
@@ -45,11 +51,25 @@ enum DemoData {
                                            .replace("/sounds/pads", [])])) ?? scene
         try? db.saveSceneSnapshot(tour, version: 12)
         try? db.saveSceneSnapshot(outro, version: 4)
+        // Scenes of every kind for the picker (§15), built like the server's templates.
+        let catalog = (try? db.read(Queries.catalog)) ?? .empty
+        var extra: [SceneSummary] = []
+        for (id, name, kind, edit) in [("scn_sun", "sun through the window", "static", [PatchOp]()),
+                                        ("scn_blinds", "office blinds", "static", [.replace("/backdrop/static/attachments/0/gobo", "blinds-wide")]),
+                                        ("scn_rain", "rainy evening", "live", []),
+                                        ("scn_flowers", "flowers", "scenery", []),
+                                        ("scn_ember", "ember glow", "color", []),
+                                        ("scn_shelf", "shelf mapping", "mapping", [])] {
+            var doc = SceneTemplates.document(kind: kind, id: id, name: name, setupId: "set_desk", catalog: catalog)
+            doc = (try? doc.applying(edit)) ?? doc
+            try? db.saveSceneSnapshot(doc, version: 2)
+            extra.append(SceneSummary(id: id, name: name, setupId: "set_desk", version: 2, kind: kind))
+        }
         try? db.saveSceneList([
-            SceneSummary(id: "scn_desk", name: "zimacube reveal", setupId: "set_desk", version: 418),
-            SceneSummary(id: "scn_tour", name: "desk tour", setupId: "set_desk", version: 12),
-            SceneSummary(id: "scn_outro", name: "outro", setupId: "set_desk", version: 4),
-        ])
+            SceneSummary(id: "scn_desk", name: "zimacube reveal", setupId: "set_desk", version: 418, kind: "mapping", mode: mode),
+            SceneSummary(id: "scn_tour", name: "desk tour", setupId: "set_desk", version: 12, kind: "mapping", mode: "live"),
+            SceneSummary(id: "scn_outro", name: "outro", setupId: "set_desk", version: 4, kind: "mapping", mode: "color"),
+        ] + extra)
         // The objects board holds at cue 2 (trace), 6.4 s. The phone is the audio output so the demo pads sound.
         show.transport = Transport(state: "paused", startedAt: 0, offset: 6.4, cue: 1)
         show.audio = ShowAudio(output: "phone", volume: 0.8, muted: false, loops: ["pad_rain"])
@@ -61,12 +81,16 @@ enum DemoData {
         func p(_ id: String, _ name: String, _ mode: String, _ layers: [JSONValue]) {
             presets.append(Preset(id: id, name: name, mode: mode, backdrop: (try? JSONValue.array(layers).decode([Layer].self)).map { Backdrop(layers: $0) } ?? Backdrop()))
         }
-        p("pre_golden", "golden hour", "static", [window])
-        p("pre_office", "office am", "static", [(try? window.applying([.replace("/ref", "blinds"), .replace("/name", "blinds"), .replace("/light/color/kelvin", 5600)])) ?? window])
-        p("pre_noir", "noir blinds", "static", [(try? window.applying([.replace("/ref", "blinds"), .replace("/name", "blinds"), .replace("/light/color/kelvin", 6500), .replace("/light/softness", 0.2)])) ?? window])
-        p("pre_breezy", "breezy window", "live", [sunDrift, liveWindow, tree, clouds, dayCycle])
-        p("pre_storm", "storm", "live", [liveWindow, rain, lightning])
-        p("pre_sunset", "slow sunset", "live", [sunDrift, liveWindow])
+        func stack(_ id: String, _ name: String, _ mode: String, _ json: JSONValue) {
+            if let b = try? json.decode(Backdrop.self) { presets.append(Preset(id: id, name: name, mode: mode, backdrop: b.upgradedLight(stack: mode))) }
+        }
+        let golden = fixture("preset")?["backdrop"] ?? staticStack
+        stack("pre_golden", "golden hour", "static", golden)
+        stack("pre_office", "office am", "static", (try? staticStack.applying([.replace("/attachments/0/gobo", "blinds"), .replace("/attachments/0/name", "blinds"), .replace("/light/color/kelvin", 5600)])) ?? staticStack)
+        stack("pre_noir", "noir blinds", "static", (try? staticStack.applying([.replace("/attachments/0/gobo", "blinds-wide"), .replace("/attachments/0/name", "wide blinds"), .replace("/light/color/kelvin", 6500), .replace("/light/focus", 0.9)])) ?? staticStack)
+        stack("pre_breezy", "breezy window", "live", (try? liveStack.applying(.replace("/layers", [sunDrift, tree, clouds, dayCycle]))) ?? liveStack)
+        stack("pre_storm", "storm", "live", (try? liveStack.applying(.replace("/layers", [rain, lightning]))) ?? liveStack)
+        stack("pre_sunset", "slow sunset", "live", (try? liveStack.applying(.replace("/layers", [sunDrift]))) ?? liveStack)
         p("pre_ember", "ember", "color", [gradient])
         p("pre_vapor", "vaporwave", "color", [(try? gradient.applying(.replace("/params/stops", [["color": "#ff71ce", "pos": 0], ["color": "#01cdfe", "pos": 0.5], ["color": "#b967ff", "pos": 1]]))) ?? gradient])
         p("pre_lagoon", "lagoon", "color", [(try? gradient.applying([.replace("/ref", "lagoon"), .replace("/params/stops", [["color": "#00e0b8", "pos": 0], ["color": "#0057ff", "pos": 1]])])) ?? gradient])
@@ -86,6 +110,13 @@ enum DemoData {
         switch screen {
         case .addlayer: model.showAddLayer = true
         case .scenes: model.showScenes = true
+        case .scenepreview:
+            model.showScenes = true
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(2))
+                model.previewScene = model.scenes.first { $0.id == "scn_sun" }
+                    ?? model.scenes.first { $0.kind == "static" && $0.id != model.sceneId }
+            }
         case .sounds: model.showSounds = true
         case .youtube: model.showYouTube = true
         case .setup: model.showSetup = true
@@ -201,12 +232,19 @@ enum DemoData {
 
     // MARK: Layers
 
-    static let window: JSONValue = fixture("scene")?.value(at: "/backdrop/static/layers/0") ?? [:]
-    /// The window under the live stack's shadows (its own id: layer ids are unique across stacks).
-    static let liveWindow: JSONValue = fixture("scene")?.value(at: "/backdrop/live/layers/0") ?? window
+    /// The fixture's static stack: a light with one window attachment (§15).
+    static let staticStack: JSONValue = fixture("scene")?.value(at: "/backdrop/static") ?? ["layers": []]
+    /// The live stack's light and window (their own ids: ids are unique across stacks).
+    static let liveStack: JSONValue = fixture("scene")?.value(at: "/backdrop/live") ?? ["layers": []]
+
+    /// "sun passes left to right" (the catalog preset), for the motion screen.
+    static var sunPass: Motion {
+        Motion(on: true, preset: "sun-lr", from: FramePoint(x: -0.6, y: 0.08), via: FramePoint(x: 0, y: -0.04), to: FramePoint(x: 0.6, y: 0.08),
+               duration: 600, easing: "inOut", loop: "loop", rotate: 8)
+    }
 
     static var tree: JSONValue {
-        let t = fixture("scene")?.value(at: "/backdrop/live/layers/1") ?? [:]
+        let t = fixture("scene")?.value(at: "/backdrop/live/layers/0") ?? [:]
         return (try? t.applying(.replace("/opacity", 1))) ?? t
     }
 
@@ -215,7 +253,7 @@ enum DemoData {
          "blend": "normal", "light": light, "params": params]
     }
 
-    static let light: JSONValue = window["light"] ?? [:]
+    static let light: JSONValue = (try? JSONValue(encoding: Light())) ?? [:]
 
     static let sunDrift = procedural("lay_sun", "sun-drift", "sun drift", ["speed": 0.1, "travel": 0.3, "fromKelvin": 3200, "toKelvin": 5600, "minutes": 20])
     static let clouds = procedural("lay_clouds", "clouds", "clouds passing", ["speed": 0.2, "density": 0.5, "softness": 0.8])

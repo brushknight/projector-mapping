@@ -1,6 +1,7 @@
 package scenes
 
 import (
+	"fmt"
 	"net/http"
 	"testing"
 
@@ -126,7 +127,26 @@ func TestContentLayers(t *testing.T) {
 	bad("reveal out of range", op("add", "/timeline/clips/-", clip("clp_x", "trk_shelf_grad", "reveal", map[string]any{"to": 2})))
 
 	// removing the last layer leaves no layers key behind
-	ok("remove track", op("remove", "/timeline/clips/12", nil), op("remove", "/timeline/clips/11", nil), op("remove", "/timeline/tracks/9", nil))
+	// (find them by id: the fixture has more tracks and clips after them)
+	sc = h.Do("GET", "/api/v1/scenes/scn_desk", nil).Map(t)
+	tl := sc["timeline"].(map[string]any)
+	var clipIdx []int
+	trackIdx := -1
+	for i, c := range tl["clips"].([]any) {
+		if c.(map[string]any)["trackId"] == "trk_shelf_grad" {
+			clipIdx = append(clipIdx, i)
+		}
+	}
+	for i, tr := range tl["tracks"].([]any) {
+		if tr.(map[string]any)["id"] == "trk_shelf_grad" {
+			trackIdx = i
+		}
+	}
+	if len(clipIdx) != 2 || trackIdx < 0 {
+		t.Fatalf("shelf gradient clips %v track %d", clipIdx, trackIdx)
+	}
+	ok("remove track", op("remove", fmt.Sprintf("/timeline/clips/%d", clipIdx[1]), nil), op("remove", fmt.Sprintf("/timeline/clips/%d", clipIdx[0]), nil),
+		op("remove", fmt.Sprintf("/timeline/tracks/%d", trackIdx), nil))
 	ok("remove object layer", op("remove", "/objects/2/layers/0", nil))
 	sc = h.Do("GET", "/api/v1/scenes/scn_desk", nil).Map(t)
 	if _, has := sc["objects"].([]any)[2].(map[string]any)["layers"]; has {

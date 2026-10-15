@@ -19,13 +19,14 @@ import s from './styles.module.css'
  * (§14). It never plays sound (no cap `audio`).
  */
 export function PreviewPage() {
-  const { token, w, mode, layer } = useSearch({ from: '/preview' })
+  const { token, w, mode, layer, scene: sceneParam } = useSearch({ from: '/preview' })
   const [hub] = useState(() => {
     if (token) setAuthToken(token)
     return new Hub({ role: 'remote', name: 'preview', token: token ?? null })
   })
   useOwnHub(() => hub)
-  const { show, scene, setup } = useLiveDocs(hub)
+  // (§15) scene=<id> follows that scene (its own mode) without putting it on air: the quick and long-press previews
+  const { show, scene, setup } = useLiveDocs(hub, sceneParam ?? null)
   const catalog = useCatalog(hub.welcome?.catalogVersion)
   const [effects, setEffects] = useState<EffectDef[]>([])
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -65,12 +66,13 @@ export function PreviewPage() {
       effects,
       t: playheadNow(hub, show),
       clock: ambientClock(hub),
-      blackout: layerMode ? 0 : blackout.step(performance.now()),
+      now: hub.serverNow(),
+      blackout: layerMode || sceneParam ? 0 : blackout.step(performance.now()),
       layerOnly: layerMode ? layer ?? null : null,
       hideMapping: layerMode,
       // the hero shows exactly what /out shows, test pattern included (expired patterns draw nothing)
-      testPattern: layerMode ? 'off' : activeTestPattern(setup, hub.serverNow()),
-      solo: layerMode ? null : activeSolo(show, hub.serverNow()),
+      testPattern: layerMode || sceneParam ? 'off' : activeTestPattern(setup, hub.serverNow()),
+      solo: layerMode || sceneParam ? null : activeSolo(show, hub.serverNow()),
     })
     if (!announced.current) {
       announced.current = true

@@ -104,7 +104,7 @@ On the phone, each tab is a mode, and opening a tab puts that mode on air. One m
 
 | tab | what the wall shows |
 | --- | --- |
-| static | one gobo (window, blinds, leaves…) with intensity, softness, angle, colour and light effects |
+| static | a light with attachments in front of it (windows, blinds, leaves, spots…), one focus ring, colour, motion |
 | live | a stack of moving layers: tree sway, clouds, rain on glass, caustics, day cycle |
 | color | a gradient wash with drift and grain |
 | scenery | a blurred photo or a looping video, built in or one of yours (files or YouTube) |
@@ -114,17 +114,40 @@ Each mode keeps its own settings, so switching from live to static and back brin
 it. Presets save and recall one mode's look. The on-air pill at the top toggles blackout.
 
 The editor's **show** space has the same tabs, pickers and presets in the browser, with a big live picture of the
-wall, on air and blackout, and the soundboard. You need nothing about mapping to run a show from there.
+wall, on air and blackout, and the soundboard. You need nothing about mapping to run a show from there. Static light
+(attachments, focus, the frame slide and motion) has its own guide: [static-light.md](static-light.md).
+
+### The viewer
+
+**open viewer** (in the top bar, in the show preview and in Set up) opens a window that shows exactly what the
+projector shows: the same picture and clock, test patterns, solo, videos and live animation. It is read only and never
+the output, so you can keep it on a second screen, or on the projector computer instead of `/out` while you try
+things. Hover it for a small bar with the scene, the mode, a sound toggle, fullscreen and close.
 
 ### Scenes
 
-A scene is one complete look: its mode stacks, mapped objects, timeline and soundboard. Make as many as you like
-with the scene switcher (top bar and show space in the editor, the scene button at the top of every phone tab):
-**new scene** starts empty on the active projector, **duplicate** copies the active one, and picking a scene puts
-it on the wall. The active scene is marked on air. You can rename any scene and delete any but the active one.
+A scene is one complete look: its mode stacks, mapped objects, timeline and soundboard. Each scene has a **kind**
+that says what it is for: **static** (a light through an attachment), **live** (animated backdrops), **colour**,
+**scenery** or **mapping** (objects and a timeline). Putting a scene on the wall puts its kind on air, and the show
+space opens the matching controls (a mapping scene opens the objects tab).
+
+The show space lists the scenes grouped by kind, with filter chips and small live pictures of each one. Hover a
+picture (or click it) for a bigger animated preview that does not touch the wall, with **put on the
+wall**. **new scene** starts from a template: a static scene is a 4-pane window at golden 3200 K with the sun pass
+ready but off, a live scene is a window with a tree swaying in front of it, a mapping scene opens the map space with
+the reference photo step. **duplicate** copies a scene; you can rename any scene and delete any but the active one.
+On the phone the scene picker is grouped the same way; hold a scene to preview it.
 
 The editor also edits a scene that is not on the wall: open it from the switcher in the map or content space. To map real objects, continue with [mapping.md](mapping.md). To
 let the phone camera find the surfaces for you, see [auto-map.md](auto-map.md).
+
+### Put something on a face
+
+The editor opens on **show**, which runs the wall. To dress an object, click **content** in the top bar (or **add
+content** on a selected face). The first visit plays a 4-step tour; the **?** button plays it again. The title says
+what you edit ("zimacube · right face"), the breadcrumbs take you back to all faces, and the "where you are" map at
+the top right shows the object as it sits on the stage: click a face to open it. An empty face offers **add
+picture**, **draw** and **add effect**; the stage picture in the corner shows the result on the object, live.
 
 ## Next
 
@@ -132,5 +155,6 @@ let the phone camera find the surfaces for you, see [auto-map.md](auto-map.md).
 - [mapping.md](mapping.md): faces, corners, mesh warp, solo, the content space, templates, effects, timeline and cues
 - [sound-and-video.md](sound-and-video.md): sound effects, the soundboard, sound on the timeline, video loops and
   YouTube
-- [agents-mcp.md](agents-mcp.md): connect Claude Code or Codex
+- [static-light.md](static-light.md): the light, attachments, focus, the frame slide and motion
+- [agents-mcp.md](agents-mcp.md): connect Claude Code or Codex, and let them change the wall live
 - [troubleshooting.md](troubleshooting.md)

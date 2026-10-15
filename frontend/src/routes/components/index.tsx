@@ -1,6 +1,9 @@
 import { useState, type ReactNode } from 'react'
 import {
   AskBox,
+  BigAction,
+  BigActions,
+  Breadcrumbs,
   Cap,
   ChatMessage,
   ColorField,
@@ -38,8 +41,11 @@ import {
   TextArea,
   TextInput,
   Tools,
+  Tooltip,
+  Tour,
   TreeNode,
   useToast,
+  type TourStep,
 } from '../../shared/components'
 import { ParamControls } from '../../entities/effect'
 import type { ParamSchema } from '../../entities/effect'
@@ -68,6 +74,12 @@ const SCHEMA: ParamSchema = {
   loop: { type: 'boolean', default: true, label: 'loop' },
 }
 
+const DEMO_TOUR: TourStep[] = [
+  { target: '#Tooltip', title: 'Tooltips', text: 'Every control explains itself on hover and on keyboard focus.' },
+  { target: '#Breadcrumbs', title: 'Breadcrumbs', text: 'Where you are, as a path you can climb back up.' },
+  { title: 'No target', text: 'A step without a target shows its card in the middle of the page.' },
+]
+
 /** The living style guide: every shared component, as the editor and the output use them. */
 export function ComponentsPage() {
   const toast = useToast()
@@ -84,6 +96,8 @@ export function ComponentsPage() {
   const [vol, setVol] = useState(0.8)
   const [muted, setMuted] = useState(false)
   const [looping, setLooping] = useState(true)
+  const [crumb, setCrumb] = useState(2)
+  const [tourStep, setTourStep] = useState<number | null>(null)
 
   return (
     <main className={s.page}>
@@ -363,6 +377,45 @@ export function ComponentsPage() {
         <Demo name="ProgressBar" note="one bar, or cue segments">
           <ProgressBar value={0.42} label="upload" />
           <ProgressBar segments={6} filled={2} label="cues" />
+        </Demo>
+
+        <Demo name="Tooltip" note="hover or tab to a control; it says what happens">
+          <Row>
+            <Tooltip text="add a picture or a video to this face">
+              <Pill icon="image">add picture</Pill>
+            </Tooltip>
+            <Tooltip text="show the tour again" side="top">
+              <Pill ghost icon="help" aria-label="replay the tour" />
+            </Tooltip>
+          </Row>
+        </Demo>
+
+        <Demo name="Breadcrumbs" note="object › face; earlier crumbs go back up">
+          <Breadcrumbs
+            items={[
+              { key: 'o', label: 'zimacube', icon: 'cube', onClick: () => setCrumb(0) },
+              { key: 'f', label: 'right', onClick: () => setCrumb(1) },
+              { key: 'd', label: 'bay 1' },
+            ].slice(0, crumb + 1)}
+          />
+          <Pill size="sm" ghost onClick={() => setCrumb(2)}>
+            go to bay 1 again
+          </Pill>
+        </Demo>
+
+        <Demo name="BigAction" note="the few first actions of an empty place">
+          <BigActions title="right is empty" text="What should this face show? Pick one.">
+            <BigAction icon="image" label="add picture" note="a photo or a video" onClick={() => toast('add picture')} />
+            <BigAction icon="pen" label="draw" note="pen, shapes and text" onClick={() => toast('draw')} />
+            <BigAction icon="sparkle" label="add effect" note="grid, scan, glitch" onClick={() => toast('add effect')} />
+          </BigActions>
+        </Demo>
+
+        <Demo name="Tour" note="a one-time guided tour; it never blocks the page">
+          <Pill icon="help" onClick={() => setTourStep(0)} data-testid="demo-tour">
+            start the tour
+          </Pill>
+          {tourStep !== null && <Tour steps={DEMO_TOUR} step={tourStep} onStep={setTourStep} onClose={() => setTourStep(null)} />}
         </Demo>
 
         <Demo name="EmptyState">

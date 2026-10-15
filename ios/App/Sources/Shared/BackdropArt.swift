@@ -5,6 +5,27 @@ import PMDesign
 /// Light colour of a layer for the native previews (the board draws 3200 K as #FFD9A6, a blackbody softened with white).
 func lightColor(_ light: Light?) -> Color {
     guard let c = light?.color else { return Color(hex: 0xFFD9A6) }
+    return lightColor(c)
+}
+
+/// A stack light's colour for the native previews: its colour layer's middle colour, else its CCT / HSI colour.
+@MainActor
+func lightColor(_ light: StackLight?, catalog: Catalog) -> Color {
+    guard let light else { return Color(hex: 0xFFD9A6) }
+    if let layer = light.colorLayer {
+        if layer.kind == "gradient", let g = catalog.gradient(layer.ref), !g.stops.isEmpty {
+            return Color(css: g.stops[g.stops.count / 2].color) ?? .white
+        }
+        if layer.kind == "generator" {
+            if let c = layer.params["colorA"]?.string { return Color(css: c) ?? .white }
+            if let k = layer.params["fromKelvin"]?.double { return lightColor(LightColor(kelvin: k)) }
+            return Color(hue: 0.08, saturation: 0.7, brightness: 1)
+        }
+    }
+    return lightColor(light.color)
+}
+
+func lightColor(_ c: LightColor) -> Color {
     if c.mode == "hsi" { return Color(hue: c.hue / 360, saturation: c.sat * 0.85, brightness: 1) }
     var (r, g, b) = LightMath.kelvin(c.kelvin)
     let w = 0.45
@@ -24,14 +45,8 @@ struct BackdropArt: View {
         let layers = model.layers(stack).filter(\.visible)
         switch focus {
         case .light, .live:
-            let gobo = layers.first { $0.kind == "gobo" }
             let tree = focus == .live && layers.contains { $0.kind == "procedural" && $0.ref.hasPrefix("tree") }
-            if let gobo, let light = gobo.light {
-                LightHeroArt(gobo: gobo.ref, angle: light.angle, softness: light.softness, intensity: light.intensity,
-                             color: lightColor(light), tree: tree)
-            } else {
-                LightHeroArt(gobo: "spot", angle: 0, softness: 0.6, intensity: 0.2, color: Color(hex: 0xFFD9A6), tree: tree)
-            }
+            StackLightArt(mode: stack, tree: tree)
         case .gradient:
             if let g = layers.first(where: { $0.kind == "gradient" }) {
                 GradientHeroArt(colors: stops(g).map(\.color), drift: g.param("drift") ?? 0.24, brightness: g.param("brightness") ?? 0.9)
@@ -124,5 +139,45 @@ struct SceneryImage: View {
               let img = UIImage(contentsOfFile: url.path) else { return nil }
         cache[id] = img
         return img
+    }
+}
+
+/// The native stand-in of a light stack (§15): the first visible attachment under the stack light, slid and moved
+/// like the wall (slide plus the light's motion at the server clock).
+struct StackLightArt: View {
+    var mode: String
+    var tree: Bool
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        let light = model.light(mode)
+        let att = model.attachments(mode).first { $0.visible }
+        let moving = light?.motion?.on == true || att?.motion?.on == true
+        TimelineView(.animation(minimumInterval: 1 / 20, paused: !moving)) { _ in
+            GeometryReader { g in
+                let now = model.serverNowMs
+                let lm = light?.motion?.sample(serverNowMs: now)
+                let am = att?.motion?.sample(serverNowMs: now)
+                let dx = (light?.slide.x ?? 0) + (lm?.offset.x ?? 0) + (am?.offset.x ?? 0)
+                let dy = (light?.slide.y ?? 0) + (lm?.offset.y ?? 0) + (am?.offset.y ?? 0)
+                Group {
+                    if let light, let att {
+                        LightHeroArt(gobo: GoboFallback.art(att.gobo, category: model.catalog.gobo(att.gobo)?.browseCategory ?? ""),
+                                     angle: att.rotation + (lm?.rotate ?? 0) + (am?.rotate ?? 0), softness: 1 - light.focus,
+                                     intensity: light.intensity * att.opacity + (1 - att.opacity) * 0.3,
+                                     color: lightColor(light, catalog: model.catalog), tree: tree)
+                    } else if let light {
+                        lightColor(light, catalog: model.catalog).opacity(0.25 + 0.6 * light.intensity)
+                            .overlay { if tree { LightHeroArt(gobo: "spot", intensity: 0, tree: true) } }
+                    } else {
+                        LightHeroArt(gobo: "spot", angle: 0, softness: 0.6, intensity: 0.2, color: Color(hex: 0xFFD9A6), tree: tree)
+                    }
+                }
+                .frame(width: g.size.width, height: g.size.height)
+                .offset(x: dx * g.size.width, y: dy * g.size.height)
+                .background(Color(hex: 0x0D0B09))
+                .clipped()
+            }
+        }
     }
 }

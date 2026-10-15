@@ -3,35 +3,59 @@
  "name": "golden hour",
  "mode": "static",
  "backdrop": {
-  "layers": [
+  "layers": [],
+  "light": {
+   "intensity": 0.85,
+   "focus": 0.38,
+   "color": {
+    "mode": "cct",
+    "kelvin": 3200,
+    "tint": 0,
+    "hue": 212,
+    "sat": 0.7
+   },
+   "fx": {
+    "kind": "none",
+    "speed": 0.35
+   },
+   "colorLayer": {
+    "kind": "generator",
+    "ref": "kelvin-cycle",
+    "params": {
+     "fromKelvin": 2700,
+     "toKelvin": 4300,
+     "minutes": 20
+    }
+   },
+   "fringe": 0.2,
+   "vignette": 0.3,
+   "haze": 0.0,
+   "slide": {
+    "x": 0,
+    "y": 0
+   },
+   "motion": null
+  },
+  "attachments": [
    {
-    "id": "lay_window",
-    "kind": "gobo",
-    "ref": "window",
-    "name": "window 2×3",
+    "id": "att_window",
+    "gobo": "window-4",
+    "name": "window 4-pane",
     "visible": true,
     "opacity": 1.0,
-    "blend": "normal",
-    "light": {
-     "intensity": 0.8,
-     "softness": 0.62,
-     "angle": -22,
-     "scale": 1.4,
-     "offsetX": 0,
-     "offsetY": 0,
-     "color": {
-      "mode": "cct",
-      "kelvin": 3200,
-      "tint": 0.04,
-      "hue": 212,
-      "sat": 0.7
-     },
-     "fx": {
-      "kind": "none",
-      "speed": 0.35
-     }
+    "rotation": -12,
+    "offsetX": 0,
+    "offsetY": 0,
+    "scale": 1.25,
+    "params": {
+     "cols": 2,
+     "rows": 2,
+     "mullion": 0.35,
+     "throw": 0.25,
+     "skew": 0,
+     "depth": 0.35
     },
-    "params": {}
+    "motion": null
    }
   ]
  },

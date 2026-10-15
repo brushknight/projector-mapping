@@ -1,0 +1,53 @@
+.layer {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  pointer-events: none;
+}
+.spot {
+  position: fixed;
+  border-radius: var(--radius-tile);
+  box-shadow: 0 0 0 1.5px var(--ink), 0 0 0 9999px var(--scrim);
+  transition: left 0.2s, top 0.2s, width 0.2s, height 0.2s;
+}
+.scrim {
+  position: fixed;
+  inset: 0;
+  background: var(--scrim);
+}
+.card {
+  position: fixed;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 16px 14px;
+  border-radius: var(--radius-card);
+  background: var(--dialog);
+  box-shadow: var(--shadow-dialog), 0 0 0 1px var(--control-line);
+  pointer-events: auto;
+}
+.count {
+  font-family: var(--num);
+  font-size: var(--fs-xxs);
+  letter-spacing: var(--cap-spacing);
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.title {
+  font-size: var(--fs-wordmark);
+  color: var(--ink);
+}
+.text {
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+  line-height: 1.5;
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+.sp {
+  flex: 1;
+}

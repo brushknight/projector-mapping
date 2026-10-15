@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Cap, EmptyState, FillSlider, Icon, Menu, Pill, ProgressBar, Segmented, Switch, TextInput, Tile } from '../../../../shared/components'
 import { cx } from '../../../../shared/lib/cx'
 import { newId } from '../../../../shared/lib/ids'
@@ -19,27 +19,24 @@ import { useVideos, videoThumbUrl } from '../../../video/ui/useVideos'
 import { youtubeRef, type Video } from '../../../video/types'
 import { playheadNow } from '../../live'
 import { useShow } from './context'
+import { AttachmentBrowser, AttachmentCard, LightCard, MotionCard, PictureMotion, StaticLightPanel } from './light'
 import { useLayerThumb } from './thumbs'
 import s from './styles.module.css'
 
 const r2 = (v: number) => Math.round(v * 100) / 100
+/** swatches for the animated colour tiles (the real thing runs on the wall) */
+const GEN_SWATCH: Record<string, string> = {
+  'hue-cycle': 'conic-gradient(from 90deg, var(--pad-red), var(--pad-amber), var(--pad-green), var(--pad-teal), var(--pad-blue), var(--pad-violet), var(--pad-pink), var(--pad-red))',
+  'color-flow': 'radial-gradient(circle at 30% 30%, var(--pad-amber), transparent 60%), radial-gradient(circle at 70% 70%, var(--pad-violet), transparent 60%), var(--pad-pink)',
+  pulse: 'radial-gradient(circle, var(--pad-red), var(--pad-blue))',
+  aurora: 'linear-gradient(170deg, var(--bg) 10%, var(--pad-green) 45%, var(--pad-violet) 75%, var(--bg))',
+  'kelvin-cycle': 'linear-gradient(90deg, var(--pad-amber), var(--ink), var(--pad-blue))',
+}
 const pct = (v: number) => `${Math.round(v * 100)}%`
 const FX: LightFxKind[] = ['none', 'candle', 'fire', 'lightning', 'paparazzi', 'tv', 'breathe', 'strobe', 'police']
 
-/** A rounded card with a caption row. */
-export function Card({ cap, aside, children, className, testId }: { cap?: ReactNode; aside?: ReactNode; children: ReactNode; className?: string; testId?: string }) {
-  return (
-    <section className={cx(s.card, className)} data-testid={testId}>
-      {(cap || aside) && (
-        <div className={s.cardHead}>
-          {cap ? <Cap>{cap}</Cap> : <span />}
-          {aside}
-        </div>
-      )}
-      {children}
-    </section>
-  )
-}
+export { Card } from './card'
+import { Card } from './card'
 
 /** Writes into the scene on the wall (live). */
 function useSet() {
@@ -194,32 +191,8 @@ export function PresetChips({ mode }: { mode: BackdropMode }) {
 
 // ── static ───────────────────────────────────────────────────────────────────
 
-function GoboTile({ id, name, on, onPick }: { id: string; name: string; on: boolean; onPick: () => void }) {
-  const sh = useShow()
-  const url = useLayerThumb(sh.catalog, 'gobo', id)
-  return <Tile label={name} on={on} background={url ? `center / cover no-repeat url("${url}")` : undefined} icon="gobo" onClick={onPick} testId={`gobo-${id}`} title={`${name}: put it on the wall (keeps the light)`} />
-}
-
-export function StaticPanel() {
-  const sh = useShow()
-  const pick = usePick()
-  const layer = sh.scene ? picked(stackLayers(sh.scene, 'static')) : null
-  const gobos = sh.catalog?.gobos ?? []
-  return (
-    <div className={s.split}>
-      <Card cap="attachment" aside={<span className={s.count}>{gobos.length}</span>}>
-        <div className={s.tiles4}>
-          {gobos.map((g) => (
-            <GoboTile key={g.id} id={g.id} name={g.name} on={layer?.ref === g.id} onPick={() => pick('static', newLayer(sh.catalog, 'gobo', g.id, newId('lay')))} />
-          ))}
-        </div>
-      </Card>
-      <Card cap="light" aside={layer && <span className={s.dim}>{layer.name}</span>}>
-        {layer?.light ? <LightControls layerId={layer.id} light={layer.light} /> : <EmptyState>pick an attachment to light it.</EmptyState>}
-      </Card>
-    </div>
-  )
-}
+/** (§15) the light, its attachments and their motion */
+export const StaticPanel = StaticLightPanel
 
 // ── live ─────────────────────────────────────────────────────────────────────
 
@@ -264,14 +237,34 @@ function AddLayerMenu() {
       items={[
         { key: 'cp', caption: true, label: 'live' },
         ...(cat?.procedural.map((p) => ({ key: `p-${p.id}`, icon: 'wave', label: p.name, meta: p.category, onSelect: () => add('procedural', p.id) })) ?? []),
-        { key: 'cg', caption: true, label: 'gobos' },
-        ...(cat?.gobos.map((g) => ({ key: `g-${g.id}`, icon: 'gobo', label: g.name, meta: g.description, onSelect: () => add('gobo', g.id) })) ?? []),
+        { key: 'cg', caption: true, label: 'animated colour' },
+        ...(cat?.colorGenerators?.map((g) => ({ key: `c-${g.id}`, icon: 'gradient', label: g.name, meta: g.description, onSelect: () => add('generator', g.id) })) ?? []),
       ]}
     />
   )
 }
 
 export function LivePanel() {
+  const sh = useShow()
+  const [att, setAtt] = useState<string | null>(null)
+  const atts = sh.scene?.backdrop.live.attachments ?? []
+  const selAtt = atts.find((a) => a.id === att) ?? null
+  return (
+    <>
+      <LiveLayers />
+      <div className={s.split}>
+        <AttachmentBrowser mode="live" selected={selAtt?.id ?? null} onSelect={setAtt} />
+        <div className={s.stackCol}>
+          <LightCard mode="live" />
+          {selAtt && <AttachmentCard attachment={selAtt} />}
+          {selAtt && <MotionCard key={selAtt.id} mode="live" attachment={selAtt} />}
+        </div>
+      </div>
+    </>
+  )
+}
+
+function LiveLayers() {
   const sh = useShow()
   const set = useSet()
   const layers = sh.scene ? stackLayers(sh.scene, 'live') : []
@@ -281,7 +274,7 @@ export function LivePanel() {
   return (
     <div className={s.split}>
       <Card cap="layers · top first" aside={<AddLayerMenu />} testId="live-stack">
-        {layers.length === 0 && <EmptyState>no layers. add a gobo or a live layer.</EmptyState>}
+        {layers.length === 0 && <EmptyState>no live layers. add a swaying tree, clouds or rain.</EmptyState>}
         <div className={s.rows}>
           {[...layers].reverse().map((l, k) => {
             const i = layers.length - 1 - k
@@ -344,10 +337,20 @@ export function ColorPanel() {
             <Tile key={g.id} label={g.name} background={gradientCss(g.defaults.stops, g.defaults.angle)} on={layer?.ref === g.id} onClick={() => pick('color', newLayer(sh.catalog, 'gradient', g.id, newId('lay')))} testId={`gradient-${g.id}`} title={`${g.name}: put it on the wall`} />
           ))}
         </div>
+        <Cap>animated colour</Cap>
+        <div className={s.tiles4} data-testid="generator-tiles">
+          {sh.catalog?.colorGenerators?.map((g) => (
+            <Tile key={g.id} label={g.name} background={GEN_SWATCH[g.id] ?? 'var(--control-2)'} on={layer?.kind === 'generator' && layer.ref === g.id} onClick={() => pick('color', newLayer(sh.catalog, 'generator', g.id, newId('lay')))} testId={`generator-${g.id}`} title={`${g.name}: ${g.description}`} />
+          ))}
+        </div>
       </Card>
       <Card cap="look" aside={layer && <span className={s.dim}>{layer.name}</span>}>
         {!layer ? (
           <EmptyState>pick a gradient.</EmptyState>
+        ) : layer.kind === 'generator' ? (
+          <div className={s.controls}>
+            <ParamControls schema={layerParamSchema(sh.catalog, layer)} values={resolveParams(layerParamSchema(sh.catalog, layer), layer.params as Record<string, unknown>)} onChange={(k, v, ph) => set(lp('params', k), v, ph)} />
+          </div>
         ) : (
           <div className={s.controls}>
             {Array.isArray(layer.params.stops) && <span className={s.bigSwatch} style={{ background: gradientCss(layer.params.stops as GradientStop[], num('angle', 135)) }} />}
@@ -452,9 +455,10 @@ export function SceneryPanel() {
                   <Switch checked={layer.params.audio === true} onChange={(v) => set(lp('params', 'audio'), v)} ariaLabel="play the video's sound" />
                 </div>
                 {layer.params.audio === true && <FillSlider label="video volume" value={num('volume', 1)} display={pct(num('volume', 1))} onChange={(v, ph) => set(lp('params', 'volume'), r2(v), ph)} />}
-                {layer.ref.startsWith('youtube:') && <p className={s.note}>an embedded youtube player: blur, brightness and warmth apply as a filter, drift does not. it needs the internet.</p>}
+                {layer.ref.startsWith('youtube:') && <p className={s.note}>an embedded youtube player: blur, brightness and warmth apply as a filter, drift and motion do not. it needs the internet.</p>}
               </>
             )}
+            <PictureMotion layerId={layer.id} />
           </div>
         )}
       </Card>

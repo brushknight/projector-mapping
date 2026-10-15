@@ -6,11 +6,13 @@ import "encoding/json"
 
 // Scene is everything the wall shows.
 type Scene struct {
-	ID       string   `json:"id"`
-	SetupID  string   `json:"setupId"`
-	Name     string   `json:"name"`
-	Version  int64    `json:"version"`
-	Mode     string   `json:"mode"`
+	ID      string `json:"id"`
+	SetupID string `json:"setupId"`
+	Name    string `json:"name"`
+	Version int64  `json:"version"`
+	Mode    string `json:"mode"`
+	// Kind is what the scene is for (protocol §15): static, live, color, scenery or mapping.
+	Kind     string   `json:"kind"`
 	Backdrop Backdrop `json:"backdrop"`
 	Underlay Underlay `json:"underlay"`
 	Points   []Point  `json:"points"`
@@ -26,6 +28,14 @@ type Summary struct {
 	Name    string `json:"name"`
 	SetupID string `json:"setupId"`
 	Version int64  `json:"version"`
+	// Kind and Mode (protocol §15); the server always fills them.
+	Kind string `json:"kind,omitempty"`
+	Mode string `json:"mode,omitempty"`
+}
+
+// Summary is the scene's list entry.
+func (s *Scene) Summary() Summary {
+	return Summary{ID: s.ID, Name: s.Name, SetupID: s.SetupID, Version: s.Version, Kind: s.Kind, Mode: s.Mode}
 }
 
 // Scene modes: exactly one is on air (protocol §1 Scene.mode).
@@ -48,9 +58,56 @@ func IsBackdropMode(m string) bool {
 	return m == ModeStatic || m == ModeLive || m == ModeColor || m == ModeScenery
 }
 
-// LayerStack is one backdrop stack, bottom to top.
+// LayerStack is one backdrop stack, bottom to top. The static and live stacks also have a light and attachments
+// (protocol §15); the color and scenery stacks only have layers.
 type LayerStack struct {
 	Layers []Layer `json:"layers"`
+	// Light lights the frame; always set in static, nil in live means no light (the layers draw over black).
+	Light *StackLight `json:"light"`
+	// Attachments are the gobos in front of the light, bottom to top.
+	Attachments []Attachment `json:"attachments"`
+}
+
+// plainStack is how the color and scenery stacks are written: layers only.
+type plainStack struct {
+	Layers []Layer `json:"layers"`
+}
+
+// lightStack is a static or live stack ready to write: attachments as [] and, in static, always a light.
+func lightStack(st LayerStack, static bool) LayerStack {
+	if st.Layers == nil {
+		st.Layers = []Layer{}
+	}
+	if st.Attachments == nil {
+		st.Attachments = []Attachment{}
+	}
+	if static && st.Light == nil {
+		l := DefaultStackLight()
+		st.Light = &l
+	}
+	return st
+}
+
+// StackJSON is a stack as written for a mode: color and scenery carry only layers.
+func StackJSON(mode string, st LayerStack) any {
+	switch mode {
+	case ModeStatic, ModeLive:
+		return lightStack(st, mode == ModeStatic)
+	}
+	if st.Layers == nil {
+		st.Layers = []Layer{}
+	}
+	return plainStack{Layers: st.Layers}
+}
+
+// MarshalJSON writes static and live with light and attachments and color and scenery with layers only.
+func (b Backdrop) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		Static  any `json:"static"`
+		Live    any `json:"live"`
+		Color   any `json:"color"`
+		Scenery any `json:"scenery"`
+	}{StackJSON(ModeStatic, b.Static), StackJSON(ModeLive, b.Live), StackJSON(ModeColor, b.Color), StackJSON(ModeScenery, b.Scenery)})
 }
 
 // Backdrop holds one stack per backdrop mode.
@@ -114,6 +171,8 @@ type Layer struct {
 	Blend   string         `json:"blend"`
 	Light   *Light         `json:"light"`
 	Params  map[string]any `json:"params"`
+	// Motion moves a photo or video layer's picture inside the frame (protocol §15); nil = none.
+	Motion *Motion `json:"motion,omitempty"`
 }
 
 // Light applies to gobo and procedural layers.
@@ -261,6 +320,9 @@ func (s *Scene) Normalize() {
 	if s.Underlay.From == "" {
 		s.Underlay.From = ModeStatic
 	}
+	if s.Kind == "" {
+		s.Kind = InferKind(s)
+	}
 	for _, m := range BackdropModes {
 		st := s.Backdrop.Stack(m)
 		if st.Layers == nil {
@@ -270,6 +332,19 @@ func (s *Scene) Normalize() {
 			if st.Layers[i].Params == nil {
 				st.Layers[i].Params = map[string]any{}
 			}
+		}
+		if m == ModeStatic || m == ModeLive {
+			*st = lightStack(*st, m == ModeStatic)
+			for i := range st.Attachments {
+				if st.Attachments[i].Params == nil {
+					st.Attachments[i].Params = map[string]any{}
+				}
+			}
+			if st.Light != nil && st.Light.ColorLayer != nil && st.Light.ColorLayer.Params == nil {
+				st.Light.ColorLayer.Params = map[string]any{}
+			}
+		} else {
+			st.Light, st.Attachments = nil, nil
 		}
 	}
 	if s.Points == nil {
@@ -324,19 +399,11 @@ func (s *Scene) Normalize() {
 	}
 }
 
-// Decode parses a scene document. Documents from before modes (v1, `backdrop: { layers }`) are upgraded on the way
-// in (see Upgrade).
+// Decode parses a scene document. Documents from before modes (v1, `backdrop: { layers }`) and from before the
+// light model (gobo layers in static and live, no kind) are upgraded on the way in (see Upgrade).
 func Decode(doc []byte) (*Scene, error) {
-	doc, _, err := Upgrade(doc)
-	if err != nil {
-		return nil, err
-	}
-	var s Scene
-	if err := json.Unmarshal(doc, &s); err != nil {
-		return nil, err
-	}
-	s.Normalize()
-	return &s, nil
+	s, _, err := decode(doc)
+	return s, err
 }
 
 // Encode is the canonical JSON of a scene.

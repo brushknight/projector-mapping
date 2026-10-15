@@ -6,11 +6,15 @@
  *   outline flash ─► overlay target
  *   final pass ─► canvas: orientation + flips (physical), master, blackout, test pattern, overlay, calibration
  */
-import { layerParamSchema } from '../entities/catalog/layers'
+import { layerParamSchema, stackLightOf } from '../entities/catalog/layers'
 import { resolveParams } from '../entities/effect/params'
 import type { EffectDef, ParamSchema } from '../entities/effect/types'
 import { allLayers, onAirPlan } from '../entities/scene/lib'
-import type { ContentLayer, Layer, Point, Scene, SceneObject, Surface } from '../entities/scene/types'
+import type { Attachment, ContentLayer, Layer, LayerStack, Point, Scene, SceneObject, StackLight, Surface } from '../entities/scene/types'
+import { attachmentUniforms } from './attachments'
+import { GENERATOR_IDS, GENERATORS } from './generators'
+import { sampleMotion } from './motion'
+import { COLOR_FS, LIGHT_FS, MASK_FS } from './shaders/light'
 import { atlasAffines, resolveAtlas, type Affine } from './atlas'
 import { CONTENT_FS, MAX_STOPS } from './shaders/content'
 import { BUILTINS } from './effects/builtins'
@@ -34,6 +38,27 @@ import type { EffectError, RenderInput, RendererOptions } from './types'
 import { activeYouTube, youtubeIdOfRef, type YouTubeActive } from './youtube'
 
 const BLEND_CODE = { normal: 0, multiply: 1, screen: 2, add: 3 } as const
+
+/** (§15) a static or live stack drawn with the light model: its light and attachments. */
+interface LightPlan {
+  which: 'static' | 'live'
+  stack: LayerStack
+  light: StackLight
+}
+
+/**
+ * The light of a stack, or null when the stack predates the light model (no `attachments`: its layers draw as before)
+ * or is a live stack without a light.
+ */
+function lightPlan(scene: Scene, which: 'static' | 'live'): LightPlan | null {
+  const stack = scene.backdrop[which]
+  if (!stack) return null
+  if (which === 'static') {
+    if (!stack.attachments && !stack.light && stack.layers.length) return null
+    return { which, stack, light: stackLightOf(stack.light) }
+  }
+  return stack.light ? { which, stack, light: stackLightOf(stack.light) } : null
+}
 const TEST_CODE = { off: 0, grid: 1, white: 2, crosshair: 3, corners: 4 } as const
 const CONTENT_MAX = 1024
 const ATLAS_MAX = 2048
@@ -98,6 +123,9 @@ export class Renderer {
   private warpProg: GLProgram
   private finalProg: GLProgram
   private contentProg: GLProgram
+  private maskProg: GLProgram
+  private colorProg: GLProgram
+  private lightProg: GLProgram
   private videos: VideoCache
   private gridCanvases = new Map<string, OffscreenCanvas | HTMLCanvasElement>()
   /** object atlas targets drawn in this render call */
@@ -145,6 +173,9 @@ export class Renderer {
     this.warpProg = createProgram(gl, WARP_VS, WARP_FS)
     this.finalProg = createProgram(gl, FULLSCREEN_VS, FINAL_FS)
     this.contentProg = createProgram(gl, FULLSCREEN_VS, CONTENT_FS)
+    this.maskProg = createProgram(gl, FULLSCREEN_VS, MASK_FS)
+    this.colorProg = createProgram(gl, FULLSCREEN_VS, COLOR_FS)
+    this.lightProg = createProgram(gl, FULLSCREEN_VS, LIGHT_FS)
     this.images = new ImageCache(gl)
     this.images.onLoad = () => this.onInvalidate?.()
     this.videos = new VideoCache(gl)
@@ -197,8 +228,8 @@ export class Renderer {
     gl.clear(gl.COLOR_BUFFER_BIT | gl.STENCIL_BUFFER_BIT)
     this.videos.beginFrame()
 
-    const plan = input.scene ? (solo ? { layers: [], level: 0, objects: true } : this.plan(input, input.scene)) : null
-    if (input.scene && plan && !input.hideBackdrop) this.renderBackdrop(input, plan.layers, plan.level, scene)
+    const plan = input.scene ? (solo ? { layers: [], level: 0, objects: true, light: null } : this.plan(input, input.scene)) : null
+    if (input.scene && plan && !input.hideBackdrop) this.renderBackdrop(input, plan.layers, plan.level, scene, plan.light)
     this.objFrame.clear()
 
     const keep = new Set<string>()
@@ -372,7 +403,7 @@ export class Renderer {
     this.js.dispose()
     this.mesh.dispose()
     for (const p of this.effectProgs.values()) if ('prog' in p) gl.deleteProgram(p.prog.prog)
-    for (const p of [this.layerProg, this.downProg, this.upProg, this.blitProg, this.warpProg, this.finalProg, this.contentProg]) gl.deleteProgram(p.prog)
+    for (const p of [this.layerProg, this.downProg, this.upProg, this.blitProg, this.warpProg, this.finalProg, this.contentProg, this.maskProg, this.colorProg, this.lightProg]) gl.deleteProgram(p.prog)
     gl.deleteTexture(this.blackTex)
     gl.deleteTexture(this.opaqueBlack)
     if (loseContext) gl.getExtension('WEBGL_lose_context')?.loseContext()
@@ -460,18 +491,28 @@ export class Renderer {
    * What goes on air (protocol §1 Scene.mode): the backdrop layers to draw, their brightness, and whether the mapped
    * objects show. `layerOnly` picks one layer from any stack.
    */
-  private plan(input: RenderInput, scene: Scene): { layers: Layer[]; level: number; objects: boolean } {
-    if (input.layerOnly) return { layers: allLayers(scene).filter((l) => l.id === input.layerOnly), level: 1, objects: false }
-    return onAirPlan(scene, input.mode ?? scene.mode ?? 'static')
+  private plan(input: RenderInput, scene: Scene): { layers: Layer[]; level: number; objects: boolean; light: LightPlan | null } {
+    if (input.layerOnly) return { layers: allLayers(scene).filter((l) => l.id === input.layerOnly), level: 1, objects: false, light: null }
+    const mode = input.mode ?? scene.mode ?? 'static'
+    const base = onAirPlan(scene, mode)
+    const from = mode === 'objects' ? (scene.underlay?.on ? scene.underlay.from : null) : mode
+    return { ...base, light: from === 'static' || from === 'live' ? lightPlan(scene, from) : null }
   }
 
-  private renderBackdrop(input: RenderInput, layers: Layer[], level: number, target: Target) {
+  private renderBackdrop(input: RenderInput, layers: Layer[], level: number, target: Target, light: LightPlan | null = null) {
     const gl = this.gl
     const k = Math.min(target.width, target.height) / 1080
     let drew = false
     this.alphaAcc = this.seeThrough
+    // (§15) the light and its attachments first; live shadows (multiply) join the mask
+    const masks = light ? layers.filter((l) => l.visible && l.opacity > 0 && l.blend === 'multiply' && l.kind === 'procedural') : []
+    if (light) {
+      this.drawLightStack(input, light, masks, target, k)
+      drew = true
+    }
     for (const layer of layers) {
       if (input.layerOnly ? layer.id !== input.layerOnly : !layer.visible) continue
+      if (masks.includes(layer)) continue
       if (layer.opacity <= 0) continue
       const lt = this.pool.get('layer', target.width, target.height)
       bindTarget(gl, lt)
@@ -505,8 +546,210 @@ export class Renderer {
     this.setBlend('none')
   }
 
+  /**
+   * (§15) Draws a light stack into `target`: the colour layer, times the mask of every attachment (and the live
+   * shadows), blurred by the one focus ring, with lens fringe, vignette, dust and haze, slid inside the frame.
+   */
+  private drawLightStack(input: RenderInput, plan: LightPlan, shadows: Layer[], target: Target, k: number) {
+    const gl = this.gl
+    const scene = input.scene!
+    const light = plan.light
+    const now = input.now ?? 0
+    const anim = evaluateLayerClips(scene, input.t, input.mutedTracks)
+    const lm = sampleMotion(light.motion, now, anim.get(`light:${plan.which}`)?.motion)
+    const W = target.width, H = target.height
+    const aspect = W / H
+    const seed = hashString01(scene.id + plan.which)
+    // the mask is blurred anyway: past 1280 px it renders smaller (cheaper on big outputs), the blur scales with it
+    const ms = Math.min(1, 1280 / Math.max(W, H))
+    const MW = Math.max(1, Math.round(W * ms)), MH = Math.max(1, Math.round(H * ms))
+
+    // 1. the mask: white, times each attachment
+    const mask = this.pool.get('lmask', MW, MH)
+    bindTarget(gl, mask)
+    gl.clearColor(1, 1, 1, 1)
+    gl.clear(gl.COLOR_BUFFER_BIT)
+    let kelvin: number | null = lm.kelvin
+    const atts = (plan.stack.attachments ?? []).filter((a) => a.visible !== false && (a.opacity ?? 1) > 0)
+    for (const att of atts) {
+      const am = sampleMotion(att.motion, now, anim.get(att.id)?.motion)
+      if (kelvin === null && am.kelvin !== null) kelvin = am.kelvin
+      this.drawAttachment(input, att, mask, aspect, lm, am, seed)
+    }
+    // the live shadows (tree sway, clouds…) block light the same way
+    for (const layer of shadows) {
+      const lt = this.pool.get('lshadow', MW, MH)
+      bindTarget(gl, lt)
+      gl.clearColor(0, 0, 0, 0)
+      gl.clear(gl.COLOR_BUFFER_BIT)
+      this.setBlend('none')
+      const own = this.drawLayer(input, layer, lt, k * ms)
+      if (own === null) continue
+      // the focus ring blurs the whole mask below; a shadow keeps a little of its own softness only
+      const out = this.blur(lt, own * 0.35, 'lshadowblur')
+      bindTarget(gl, mask)
+      this.setBlend('multiply')
+      this.blit(out.tex)
+    }
+    this.setBlend('none')
+
+    // 2. one focus ring for the whole picture
+    const focus = Math.max(0, Math.min(1, light.focus ?? 0.7))
+    const radius = ((1 - focus) ** 1.5 * 60 + 0.6) * k
+    const focused = this.blur(mask, radius * ms, 'lfocus')
+    const haze = Math.max(0, Math.min(1, light.haze ?? 0))
+    const fringe = Math.max(0, Math.min(1, light.fringe ?? 0))
+    // the wide blur feeds haze's scattered light; without haze the fringe's soft term uses the focused mask
+    const scatter = haze > 0.001 ? this.blur(mask, Math.max(radius * 2.5, 70 * k) * ms, 'lscatter') : focused
+
+    // 3. the colour layer
+    const color = this.pool.get('lcolor', W, H)
+    bindTarget(gl, color)
+    this.drawColorLayer(input, light, kelvin, W, H)
+
+    // 4. compose onto the target, slid inside the frame
+    const fx = lightFx(light.fx?.kind, input.clock, light.fx?.speed ?? 0.35, Math.floor(seed * 1000))
+    const inten = Math.max(0, Math.min(1, light.intensity ?? 0.85)) * fx.gain
+    bindTarget(gl, target)
+    this.setBlend('normal')
+    const p = this.lightProg.use()
+    p.tex('u_mask', 0, focused.tex)
+    p.tex('u_scatter', 1, scatter.tex)
+    p.tex('u_color', 2, color.tex)
+    p.f2('u_res', W, H)
+    p.f2('u_slide', (light.slide?.x ?? 0) + lm.x, (light.slide?.y ?? 0) + lm.y)
+    p.f1('u_slideSoft', (radius * 0.5) / H)
+    p.f3('u_gain', inten * fx.rgb[0], inten * fx.rgb[1], inten * fx.rgb[2])
+    p.f1('u_fringe', fringe)
+    p.f1('u_vignette', Math.max(0, Math.min(1, light.vignette ?? 0)))
+    p.f1('u_haze', haze)
+    p.f1('u_clock', input.clock)
+    p.f1('u_seed', seed * 10)
+    p.f1('u_opacity', 1)
+    this.drawFullscreen()
+    gl.activeTexture(gl.TEXTURE2)
+    gl.bindTexture(gl.TEXTURE_2D, null)
+    gl.activeTexture(gl.TEXTURE1)
+    gl.bindTexture(gl.TEXTURE_2D, null)
+    gl.activeTexture(gl.TEXTURE0)
+    gl.bindTexture(gl.TEXTURE_2D, null)
+  }
+
+  /** Multiplies one attachment into the bound mask target. `lm` is the light's motion (turns and scales every attachment). */
+  private drawAttachment(input: RenderInput, att: Attachment, mask: Target, aspect: number, lm: ReturnType<typeof sampleMotion>, am: ReturnType<typeof sampleMotion>, seed: number) {
+    const u = attachmentUniforms(input.catalog, att)
+    if (!u) return
+    const gl = this.gl
+    bindTarget(gl, mask)
+    // the attachment's centre (frame fractions from the centre), moved by its motion, then turned and scaled about the frame centre by the light's
+    let cx = (att.offsetX ?? 0) + am.x
+    let cy = (att.offsetY ?? 0) + am.y
+    if (lm.rotate || lm.scale !== 1) {
+      const a = (lm.rotate * Math.PI) / 180
+      const wx = cx * aspect, wy = cy
+      const rx = (wx * Math.cos(a) - wy * Math.sin(a)) * lm.scale
+      const ry = (wx * Math.sin(a) + wy * Math.cos(a)) * lm.scale
+      cx = rx / aspect
+      cy = ry
+    }
+    const p = this.maskProg.use()
+    p.f2('u_res', mask.width, mask.height)
+    p.i1('u_shape', u.shape)
+    p.f2('u_center', cx, cy)
+    p.f1('u_rot', (((att.rotation ?? 0) + am.rotate + lm.rotate) * Math.PI) / 180)
+    p.f1('u_scale', Math.max(0.01, (att.scale ?? 1) * am.scale * lm.scale))
+    p.f1('u_throw', u.throw)
+    p.f1('u_skew', u.skew)
+    p.f1('u_depth', u.depth)
+    p.f1('u_opacity', Math.max(0, Math.min(1, att.opacity ?? 1)))
+    p.f1('u_seed', (hashString01(att.id) + seed) * 10)
+    p.f4('u_gp0', ...u.gp0)
+    p.f4('u_gp1', ...u.gp1)
+    p.f4('u_gp2', ...u.gp2)
+    this.setBlend('multiply')
+    this.drawFullscreen()
+    this.setBlend('none')
+  }
+
+  /** Draws a light's colour (its own CCT or HSI colour, a gradient or a generator) into the bound target. */
+  private drawColorLayer(input: RenderInput, light: StackLight, kelvin: number | null, W: number, H: number) {
+    const p = this.colorProg.use()
+    p.f2('u_res', W, H)
+    p.f1('u_clock', input.clock)
+    p.f1('u_opacity', 1)
+    const cl = light.colorLayer
+    const color = kelvin !== null && light.color?.mode !== 'hsi' ? { ...light.color, kelvin } : light.color
+    // the eye adapts to the light it sits in: a CCT light reads as warm white, not as orange paint
+    const raw = lightRgb(color)
+    const base = color?.mode === 'hsi' ? raw : (raw.map((c) => 0.3 + 0.7 * c) as RGB)
+    p.f3('u_solid', base[0], base[1], base[2])
+    p.i1('u_ckind', 0)
+    if (cl?.kind === 'gradient') {
+      const g = input.catalog?.gradients.find((x) => x.id === cl.ref)
+      const params = { ...(g?.defaults ?? {}), ...(cl.params ?? {}) } as Record<string, unknown>
+      this.gradientUniforms(p, params)
+      p.i1('u_ckind', 1)
+    } else if (cl?.kind === 'generator') {
+      const gi = GENERATOR_IDS.indexOf(cl.ref)
+      if (gi >= 0) {
+        const item = input.catalog?.colorGenerators?.find((x) => x.id === cl.ref)
+        const params = resolveParams(item?.params ?? {}, (cl.params ?? {}) as Record<string, unknown>)
+        this.generatorUniforms(p, gi, params)
+        p.i1('u_ckind', 2)
+      }
+    }
+    this.setBlend('none')
+    this.drawFullscreen()
+  }
+
+  private generatorUniforms(p: GLProgram, gi: number, params: Record<string, unknown>) {
+    const sl = GENERATORS[gi].slots(params)
+    p.i1('u_gen', gi)
+    p.f4('g_a', ...(sl.a ?? [0, 0, 0, 0]))
+    p.f4('g_b', ...(sl.b ?? [0, 0, 0, 0]))
+    const cs = sl.colors ?? []
+    p.f3('g_c0', ...(cs[0] ?? [1, 1, 1]))
+    p.f3('g_c1', ...(cs[1] ?? [1, 1, 1]))
+    p.f3('g_c2', ...(cs[2] ?? [1, 1, 1]))
+  }
+
+  private gradientUniforms(p: GLProgram, params: Record<string, unknown>) {
+    const num = (key: string, d: number) => {
+      const v = Number(params[key])
+      return Number.isFinite(v) ? v : d
+    }
+    const stops = (Array.isArray(params.stops) ? (params.stops as Array<{ color: string; pos: number }>) : []).slice(0, 8)
+    const sorted = [...stops].sort((a, b) => a.pos - b.pos)
+    if (!sorted.length) sorted.push({ color: '#000000', pos: 0 })
+    sorted.forEach((st, i) => {
+      this.stopColors.set(hexToRgb(st.color, [0, 0, 0]), i * 3)
+      this.stopPos[i] = Number(st.pos) || 0
+    })
+    p.v3('u_stopColor', this.stopColors)
+    p.v1('u_stopPos', this.stopPos)
+    p.i1('u_stopN', sorted.length)
+    p.f1('u_gAngle', (num('angle', 135) * Math.PI) / 180)
+    p.f1('u_gDrift', num('drift', 0.24))
+    p.f1('u_gGrain', num('grain', 0.12))
+    p.f1('u_gBright', num('brightness', 0.9))
+  }
+
   /** Draws one layer into the bound target. Returns its blur radius in px, or null to skip it. */
   private drawLayer(input: RenderInput, layer: Layer, target: Target, k: number): number | null {
+    if (layer.kind === 'generator') {
+      // (§15) an animated colour layer
+      const gi = GENERATOR_IDS.indexOf(layer.ref)
+      if (gi < 0) return null
+      const cp = this.colorProg.use()
+      cp.f2('u_res', target.width, target.height)
+      cp.f1('u_clock', input.clock)
+      cp.f1('u_opacity', Math.max(0, Math.min(1, layer.opacity)))
+      const item = input.catalog?.colorGenerators?.find((x) => x.id === layer.ref)
+      this.generatorUniforms(cp, gi, resolveParams(item?.params ?? {}, layer.params as Record<string, unknown>))
+      cp.i1('u_ckind', 2)
+      this.drawFullscreen()
+      return 0
+    }
     const p = this.layerProg.use()
     const catalog = input.catalog
     const params = resolveParams(layerParamSchema(catalog, layer), layer.params as Record<string, unknown>)
@@ -520,6 +763,8 @@ export class Renderer {
     p.f1('u_opacity', Math.max(0, Math.min(1, layer.opacity)))
     p.f2('u_res', target.width, target.height)
     p.f1('u_clock', input.clock)
+    p.f2('u_pMove', 0, 0)
+    p.f1('u_pScale', 1)
     const seed = hashString01(layer.id)
     let radius = 0
 
@@ -571,6 +816,7 @@ export class Renderer {
       p.f1('u_pBright', num('brightness', 0.66))
       p.f1('u_pWarm', num('warmth', 0))
       p.f1('u_pDrift', num('drift', 0.1))
+      this.pictureMotion(p, input, layer)
       radius = num('blur', 0) * 60 * k
     } else if (layer.kind === 'video') {
       // (§14) youtube: the page's player shows behind the canvas; asset: a looping muted video drawn like a photo
@@ -583,6 +829,7 @@ export class Renderer {
       p.f1('u_pBright', num('brightness', 0.8))
       p.f1('u_pWarm', num('warmth', 0))
       p.f1('u_pDrift', num('drift', 0))
+      this.pictureMotion(p, input, layer)
       radius = num('blur', 0.2) * 60 * k
     } else {
       const c = hexToRgb(typeof params.color === 'string' ? params.color : '#000000', [0, 0, 0])
@@ -592,14 +839,31 @@ export class Renderer {
     return radius
   }
 
+  /** (§15) a photo or video layer's motion: the picture moves (and zooms) inside the frame. */
+  private pictureMotion(p: GLProgram, input: RenderInput, layer: Layer) {
+    const anim = layer.motion && input.scene ? evaluateLayerClips(input.scene, input.t, input.mutedTracks).get(layer.id)?.motion : undefined
+    const m = sampleMotion(layer.motion, input.now ?? 0, anim)
+    // a small move (a drift, a sway) zooms in just enough to keep the frame covered; a big one lets the picture
+    // enter and leave
+    const mo = layer.motion
+    const reach = mo ? Math.max(...[mo.from, mo.to, mo.via].filter((q): q is NonNullable<typeof q> => !!q).flatMap((q) => [Math.abs(q.x), Math.abs(q.y)])) : 0
+    const cover = reach > 0 && reach < 0.25 ? 1 + 2 * reach : 1
+    p.f2('u_pMove', m.x, m.y)
+    p.f1('u_pScale', Math.max(0.05, m.scale * cover))
+  }
+
   private proceduralUniforms(p: GLProgram, ref: string, clock: number, base: RGB, num: (k: string, d?: number) => number) {
     let pa: [number, number, number, number] = [0, 0, 0, 0]
     let pgain = 1
     let pcolor: RGB = [1, 1, 1]
     switch (ref) {
       case 'tree-sway':
+        pa = [num('wind', 0.4), num('gust', 0.18), num('focus', 0.7), num('seed', 7)]
+        p.f4('u_gp0', 0.5, 0.5, num('seed', 7) * 0.137, 0)
+        break
       case 'palm-sway':
         pa = [num('wind', 0.4), num('gust', 0.18), num('focus', 0.7), num('seed', 7)]
+        p.f4('u_gp0', 9, num('seed', 7) * 0.137, 0, 0)
         break
       case 'clouds':
         pa = [num('speed', 0.2), num('density', 0.5), num('softness', 0.8), 0]

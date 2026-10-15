@@ -1,5 +1,5 @@
 /** Protocol §1 Scene, Layer, Object, Surface, Timeline. */
-export type LayerKind = 'gobo' | 'procedural' | 'gradient' | 'photo' | 'solid' | 'video'
+export type LayerKind = 'gobo' | 'procedural' | 'gradient' | 'photo' | 'solid' | 'video' | 'generator'
 export type BlendMode = 'normal' | 'multiply' | 'screen' | 'add'
 export type LightFxKind = 'none' | 'candle' | 'fire' | 'lightning' | 'paparazzi' | 'tv' | 'breathe' | 'strobe' | 'police'
 
@@ -46,6 +46,87 @@ export interface Layer {
   blend: BlendMode
   light: Light | null
   params: Params
+  /** (§15) photo and video layers: moves the picture inside the frame */
+  motion?: Motion | null
+}
+
+/** (§15) a point offset in frame fractions */
+export interface FramePt {
+  x: number
+  y: number
+}
+
+export type MotionEasing = 'linear' | 'in' | 'out' | 'inOut' | 'sine'
+export type MotionLoop = 'once' | 'loop' | 'pingpong'
+export const MOTION_EASINGS: MotionEasing[] = ['linear', 'in', 'out', 'inOut', 'sine']
+export const MOTION_LOOPS: MotionLoop[] = ['once', 'loop', 'pingpong']
+
+/** (§15) a move across the wall on the server clock; on a stack light, an attachment, or a photo/video layer */
+export interface Motion {
+  on: boolean
+  /** the preset id it came from, or "" (custom) */
+  preset: string
+  from: FramePt
+  via?: FramePt | null
+  to: FramePt
+  /** seconds */
+  duration: number
+  easing: MotionEasing
+  loop: MotionLoop
+  /** degrees over the move */
+  rotate: number
+  scaleFrom: number
+  scaleTo: number
+  /** 0, 0 = no CCT drift */
+  kelvinFrom: number
+  kelvinTo: number
+  /** progress where it starts (or holds while off) */
+  phase: number
+  /** server Unix ms */
+  startedAt: number
+}
+
+/** (§15) what colours a stack light before the masks: a gradient or an animated colour generator */
+export interface ColorLayer {
+  kind: 'gradient' | 'generator'
+  ref: string
+  params: Params
+}
+
+/** (§15) the light of the static and live stacks: lights the whole frame, attachments block it */
+export interface StackLight {
+  intensity: number
+  /** 1 = sharp, 0 = fully soft: one focus ring for every attachment */
+  focus: number
+  color: LightColor
+  fx: LightFx
+  /** null = the light's own colour */
+  colorLayer?: ColorLayer | null
+  fringe: number
+  vignette: number
+  haze: number
+  /** the frame slide: a pan of the whole composed light, frame fractions */
+  slide: FramePt
+  motion?: Motion | null
+}
+
+/** (§15) a gobo in front of the light: a mask that blocks light */
+export interface Attachment {
+  id: string
+  /** catalog gobo id */
+  gobo: string
+  name: string
+  visible: boolean
+  /** how much light it blocks: 1 metal, lower glass */
+  opacity: number
+  /** degrees */
+  rotation: number
+  offsetX: number
+  offsetY: number
+  scale: number
+  /** the gobo's shape params plus goboParams (throw, skew, depth) */
+  params: Params
+  motion?: Motion | null
 }
 
 /** What is on air: one mode at a time (protocol §1 Scene). */
@@ -54,10 +135,18 @@ export type BackdropMode = Exclude<SceneMode, 'objects'>
 export const BACKDROP_MODES: BackdropMode[] = ['static', 'live', 'color', 'scenery']
 export const SCENE_MODES: SceneMode[] = ['static', 'live', 'color', 'scenery', 'objects']
 
-/** One backdrop stack, bottom → top. */
+/** One backdrop stack, bottom → top. Static and live also carry the light and its attachments (§15). */
 export interface LayerStack {
   layers: Layer[]
+  /** static, live: the light (live: null = no light, layers over black) */
+  light?: StackLight | null
+  /** static, live: the gobos in front of the light */
+  attachments?: Attachment[]
 }
+
+/** (§15) what a scene is for; its mode is the kind itself, objects for mapping */
+export type SceneKind = 'static' | 'live' | 'color' | 'scenery' | 'mapping'
+export const SCENE_KINDS: SceneKind[] = ['static', 'live', 'color', 'scenery', 'mapping']
 
 /** One stack per backdrop mode. */
 export type Backdrop = Record<BackdropMode, LayerStack>
@@ -266,6 +355,8 @@ export interface Scene {
   name: string
   version: number
   mode: SceneMode
+  /** (§15) optional on the wire; infer with sceneKind() */
+  kind?: SceneKind
   backdrop: Backdrop
   /** optional on the wire; absent = DEFAULT_UNDERLAY */
   underlay?: Underlay
@@ -282,6 +373,9 @@ export interface SceneSummary {
   name: string
   setupId: string
   version: number
+  /** (§15) */
+  kind?: SceneKind
+  mode?: SceneMode
 }
 
 /** JSON Patch (RFC 6902) */

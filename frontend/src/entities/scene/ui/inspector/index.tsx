@@ -130,8 +130,8 @@ function SurfaceInspector({ scene, surface, objectName }: { scene: Scene; surfac
       />
       {surface.kind !== 'line' && surface.kind !== 'mask' && (
         <div className={s.flatRow}>
-          <Pill on icon="edit" onClick={() => ed.editFace(surface.id)} title="edit what this face shows: pictures, drawings and effects, flat at its real proportions (F)" data-testid="inspector-edit-face">
-            edit face
+          <Pill on icon="edit" onClick={() => ed.editFace(surface.id)} title="open this face in content to put pictures, drawings and effects on it (F)" data-testid="inspector-edit-face">
+            add content
           </Pill>
           <Pill size="sm" ghost icon="solo" onClick={() => ed.soloSelection(false)} title="show only this face on the stage (S); shift+S also on the wall">
             solo

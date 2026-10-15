@@ -382,5 +382,31 @@
    "ref": null,
    "createdAt": "2026-10-14T10:00:00Z"
   }
+ },
+ {
+  "t": "param",
+  "ch": "scene:scn_desk",
+  "d": {
+   "path": "/backdrop/static/light/slide/x",
+   "value": 0.25
+  }
+ },
+ {
+  "t": "patch",
+  "ch": "scene:scn_desk",
+  "id": "c-95",
+  "base": 418,
+  "d": [
+   {
+    "op": "replace",
+    "path": "/backdrop/static/attachments/0/motion/on",
+    "value": true
+   },
+   {
+    "op": "replace",
+    "path": "/backdrop/static/attachments/0/motion/startedAt",
+    "value": 1791700000123
+   }
+  ]
  }
 ]

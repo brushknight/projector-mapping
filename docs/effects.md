@@ -70,3 +70,53 @@ Clarifications from the web renderer (`frontend/src/render/`), additive to the c
   the surface's content target before the effects (object layers first, sampled from the object's atlas canvas
   through the face's atlas rect, then the surface's own layers), with `src/render/shaders/content.ts`. Effects
   composite on top of them in the same UV space.
+
+## The light model (frontend, protocol §15)
+
+Static and live stacks draw with the light model, not as layers: `src/render/shaders/light.ts`.
+
+1. **Colour** (`COLOR_FS`): the light's CCT or HSI colour, a gradient gel or an animated colour generator, into a
+   colour target. A CCT light is softened towards white (`0.3 + 0.7 × blackbody`): the eye adapts to the light it
+   sits in, so 3200 K reads as warm white on the wall, not as orange paint.
+2. **Mask** (`MASK_FS`): a white target, multiplied by every visible attachment (`pass × opacity + 1 − opacity`) and,
+   in live stacks, by the shadow layers (blend `multiply`: tree sway, palm sway, clouds). Each attachment maps the frame
+   position to wall space (frame height = 1), undoes `throw` (stretch away from the light and widen towards the
+   bottom, like low sun) and `skew` (a vertical shear: horizontals tilt, verticals stay upright), then the gobo's
+   rotation and scale, and evaluates its shape. `depth` samples the shape three more times along the light's direction
+   and darkens the band they disagree on by up to half: the soft second edge a deep window frame casts.
+3. **Focus**: one dual-Kawase blur of the whole mask, `(1 − focus)^1.5 × 60 + 0.6` px at 1080 p.
+4. **Compose** (`LIGHT_FS`): colour × mask, with lateral colour (red sampled a touch further out from the centre
+   than blue, `fringe`), a cos⁴ beam falloff (`vignette`), and with `haze` lens blotches, fine grain and light
+   scattered around bright areas (from a much wider blur of the mask). The frame slide shifts where the composed
+   light lands; what leaves the frame is gone.
+
+The 33 attachment shapes are signed distance functions in `SHAPES_GLSL` (windows, blinds, leaves, patterns, spots);
+`src/render/attachments.ts` maps each catalog gobo and its params onto a shape and its uniform slots. A unit test
+fails when the catalog and the renderer disagree. Thumbnails come from the same code: `npm run thumbs` renders every
+gobo and procedural layer headless into `backend/internal/catalog/assets/thumbs/`, which the server embeds and serves
+at `/catalog/thumbs/<id>.png`.
+
+## Colour generators (frontend, protocol §15)
+
+Animated colour for a light's `colorLayer` and for `generator` layers in the color and live stacks. Each generator is
+one GLSL function plus a mapping from its params to uniform slots, registered in `src/render/generators.ts`:
+
+```ts
+{
+  id: 'pulse',
+  fn: 'genPulse',
+  glsl: `
+vec3 genPulse(vec2 p, float aspect, float t) {
+  float k = 0.5 - 0.5 * cos(t * (0.4 + g_a.x * 4.0));
+  return mix(g_c0, g_c1, k);
+}`,
+  slots: (p) => ({ a: [n(p, 'speed', 0.3), 0, 0, 0], colors: [c(p, 'colorA', '#ff3b30'), c(p, 'colorB', '#2f6bff')] }),
+}
+```
+
+- `p` is the frame position 0…1 (y down), `aspect` the frame's width / height, `t` the ambient clock in seconds.
+- Read numbers from `g_a` and `g_b` (two `vec4`) and colours from `g_c0`, `g_c1`, `g_c2`. Use the shared helpers
+  `hash`, `noise`, `fbm`, `rot` and `kelvinRgb(k)`. Return RGB 0…1; the light's intensity and fx scale it after.
+- Add the same `id` with its `params` schema to `colorGenerators` in `contract/catalog.json`. The shader is built
+  from the list, so nothing else changes; `attachments.test.ts` checks the catalog and the registry agree.
+- Built in: `hue-cycle`, `color-flow`, `pulse`, `aurora`, `kelvin-cycle`.

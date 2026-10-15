@@ -21,6 +21,8 @@ export interface LivePreviewProps {
   children?: ReactNode
   className?: string
   'data-testid'?: string
+  /** (§14) volume × master for video layers' own sound; absent or 0 keeps every video muted */
+  videoVolume?: number
 }
 
 /**
@@ -34,7 +36,7 @@ export interface LivePreviewProps {
  * Test hooks: `data-testid` on the wrapper (default "live-preview"), the canvas is `[data-testid=live-preview-canvas]`,
  * the player `[data-testid=youtube-backdrop]`.
  */
-export function LivePreview({ hub, maxWidth = 1280, fps = 30, children, className, 'data-testid': testId = 'live-preview' }: LivePreviewProps) {
+export function LivePreview({ hub, maxWidth = 1280, fps = 30, children, className, 'data-testid': testId = 'live-preview', videoVolume = 0 }: LivePreviewProps) {
   const { show, scene, setup, previewing } = useWallDocs(hub)
   const catalog = useCatalog(hub.welcome?.catalogVersion)
   const [effects, setEffects] = useState<EffectDef[]>([])
@@ -72,10 +74,12 @@ export function LivePreview({ hub, maxWidth = 1280, fps = 30, children, classNam
       effects,
       t: playheadNow(hub, show),
       clock: ambientClock(hub),
+      now: hub.serverNow(),
       blackout: blackout.step(performance.now()),
       testPattern: activeTestPattern(setup, hub.serverNow()),
       mode: previewing ? 'objects' : null,
       solo: activeSolo(show, hub.serverNow()),
+      videoVolume,
     })
   }, fps)
 

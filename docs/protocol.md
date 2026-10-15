@@ -384,7 +384,8 @@ WebRTC through Pion is a later optimization. v1 sends the phone's preview as JPE
 | route | what |
 | --- | --- |
 | `/out` | the projector output: fullscreen, idle pairing screen, role `output` |
-| `/preview?token=…&w=…&mode=hero\|layer&layer=<id>` | a chrome-less render of the active scene (or one layer, from any stack) for embedding in the iPhone app's WKWebView. Same engine, lower resolution, no pairing UI, role `remote` (read only). The hero draws the scene's `mode` and the active test pattern exactly like `/out` |
+| `/view?token=…` | (§15) the viewer: what the projector shows, read only, role `remote`, no caps |
+| `/preview?token=…&w=…&mode=hero\|layer&layer=<id>&scene=<id>` | a chrome-less render of the active scene (or one layer, from any stack) for embedding in the iPhone app's WKWebView. Same engine, lower resolution, no pairing UI, role `remote` (read only). The hero draws the scene's `mode` and the active test pattern exactly like `/out` |
 | `/editor/…` | the laptop editor |
 | `/components` | the living style guide |
 | `/a/{sha}`, `/catalog/assets/…` | assets and built-in catalog files (scenery photos at `/catalog/assets/scenery/<id>.jpg`) |
@@ -953,3 +954,250 @@ timestamp, on subscribe and on every change.
   The thumb is the stored file's first frame (a trimmed download starts at `start`). Deleting a Video deletes its
   file when no other Video uses it.
 - **MCP (backend).** `sound_play` needs the editor's "agent may preview" toggle, like `preview_on_projector`.
+
+## 15. Light, attachments, motion, scene kinds, viewer and agent live edits (2026-10-15)
+
+Additive on decode: every new field is optional and decodes to the default given here, so older documents load. The
+server upgrades stored scenes on start (below). The catalog `version` is 4. Fixtures: `scene.json` (static and live
+stacks with `light` and `attachments`, a motion, `kind`), `preset.json` (a static preset), `scene-summary.json`,
+`settings.json`, `ws-messages.json` (a slide `param` and a motion `patch`), and `catalog.json` itself.
+
+### The light model
+
+A projector in static mode is a spotlight with a projection attachment. The **light** lights the whole frame
+(16:9, or 9:16 in portrait) in its colour. **Attachments** (gobos) are masks in front of it that block light, like
+metal or glass gobos in the gate: each one multiplies its occlusion on top, so more attachments block more. One
+**focus** ring softens the whole projected image, as on a real spotlight. Rotation, position and scale belong to
+each attachment.
+
+The `static` and `live` stacks gain `light` and `attachments` (the other stacks keep only `layers`):
+
+```json
+"static": {
+  "layers": [],
+  "light": {
+    "intensity": 0.85, "focus": 0.68,
+    "color": { "mode": "cct", "kelvin": 3200, "tint": 0, "hue": 212, "sat": 0.7 },
+    "fx": { "kind": "none", "speed": 0.35 },
+    "colorLayer": null,
+    "fringe": 0.2, "vignette": 0.3, "haze": 0,
+    "slide": { "x": 0, "y": 0 },
+    "motion": null
+  },
+  "attachments": [
+    { "id": "att_window", "gobo": "window-4", "name": "window 4-pane", "visible": true, "opacity": 1,
+      "rotation": -12, "offsetX": 0, "offsetY": 0, "scale": 1.25,
+      "params": { "cols": 2, "rows": 2, "mullion": 0.35, "throw": 0.25, "skew": 0, "depth": 0.35 },
+      "motion": { "on": false, "preset": "sun-lr", "...": "…" } }
+  ]
+}
+```
+
+**StackLight** (`stack.light`; absent or null in `static` decodes to the default light below; in `live` null means
+"no light": the layers draw over black as before):
+
+- `intensity` 0…1 (default 0.85), `focus` 0…1 (default 0.7; 1 is sharp, 0 is fully soft; the renderer blurs the
+  composed mask by `(1 − focus)^1.5 × 60` px at 1080 p), `color` and `fx` exactly as a layer's `light.color` and
+  `light.fx` (default CCT **5600 K**, tint 0; fx `none`). The fx curve (candle, police…) scales the colour layer.
+- `colorLayer` (null = the light's own colour): what colours the light before the masks.
+  `{ "kind": "gradient", "ref": "<gradient id>", "params": { …gradientParams… } }` or
+  `{ "kind": "generator", "ref": "<colorGenerators id>", "params": { … } }` (animated colour, below). A colour layer
+  replaces the CCT/HSI colour; `intensity` and `fx` still scale it.
+- Lens: `fringe` 0…1 (default 0.2, a chromatic edge: red spreads out and blue in at mask edges, more towards the
+  frame edges), `vignette` 0…1 (default 0.3, the beam's falloff towards the corners), `haze` 0…1 (default 0, dust
+  and haze texture in the beam).
+- `slide` `{ x, y }` in frame fractions, each −1…1 (default 0, 0): the **frame slide**, a pan of the whole composed
+  light inside the frame. `x: 0.25` moves the image a quarter of the frame width to the right; what slides out of the
+  frame is gone and the uncovered part is black. UIs offer the long axis (x in landscape, y in portrait) with reset.
+- `motion` (null = none): a Motion (below) that drives the slide (its path offsets add to `slide`), turns and scales
+  every attachment about the frame centre (`rotate`, `scaleFrom`/`scaleTo`) and drifts the CCT
+  (`kelvinFrom`/`kelvinTo`). "Sun passes left to right" on the light slides the whole picture.
+
+**Attachment** (`stack.attachments`, bottom to top; order does not matter for masks):
+
+- `id` client-made `att_<8 base36>`, unique across the scene. `gobo`: a catalog `gobos` id. `name` (display).
+  `visible` (default true). `opacity` 0…1 (default 1): how much light it blocks; 1 is metal, lower is a glass gobo.
+- `rotation` degrees −360…360, `offsetX` / `offsetY` −2…2 frame fractions (centre of the gobo; 0, 0 is the frame
+  centre), `scale` 0.05…10.
+- `params`: the gobo's own params (catalog item `params`: panes, mullion thickness, slats and opening, density,
+  shutter blades…) merged with `goboParams` (`throw` 0…1 stretches the shape away from the light like low sun,
+  `skew` −1…1 keystones it, `depth` 0…1 is the frame depth that gives the soft double edge real windows cast).
+  Missing params take the catalog defaults (the item's `defaults` override `goboParams` defaults).
+- `motion` (null = none): a Motion that moves this attachment (path offsets add to `offsetX`/`offsetY`, `rotate`
+  adds to `rotation`, scale drift multiplies `scale`; a kelvin drift on an attachment drifts the stack light).
+
+Rendering a light stack: the colour (`colorLayer` or the light colour) × `intensity` × fx; times the mask, which is
+the product over visible attachments of `1 − opacity × (1 − pass)`, and in `live` also the layers with blend
+`multiply` (tree sway, palm sway, clouds: procedural shadows block light the same way); the mask is blurred by focus;
+then fringe, vignette and haze; then the slide. The other `live` layers (normal, screen, add) draw over the result as
+before. With no attachments the whole frame is lit.
+
+Paths: `/backdrop/static/light/focus`, `/backdrop/static/light/slide/x`,
+`/backdrop/static/attachments/0/params/slats`, `/backdrop/live/attachments/1/rotation`. Picking "one attachment"
+replaces the list: `replace /backdrop/static/attachments` with `[attachment]`. `static.layers` stays `[]` (the server
+rejects layers in the static stack).
+
+### Catalog version 4
+
+- `gobos` items: `{ id, name, description, category, thumb, params, attachment: { scale, rotation }, focus,
+  defaults }`. `category`: `windows` | `blinds` | `nature` | `patterns` | `spots` (listed with display names in
+  `goboCategories`). `thumb` is relative to `/catalog/assets/` (see Thumbnails). `attachment` holds the scale and
+  rotation a new attachment of this gobo starts with, `focus` the focus that suits it, `defaults` overrides of
+  `goboParams` defaults. The old ids stay (`window` is the 6-pane window, `tree` the medium leaves, `spot` the hard
+  round spot). 33 attachments, see `docs/research/gobos.md`.
+- `goboParams`: `throw`, `skew`, `depth` (above). `stackLight`: `{ params: { intensity, focus, fringe, vignette,
+  haze }, kelvin: 5600, attachmentParams: { opacity, rotation, scale, offsetX, offsetY } }` (ranges for UIs).
+- `procedural` items gain `thumb`.
+- `colorGenerators`: `[{ id, name, description, animated, params }]`: animated colour (`hue-cycle`, `color-flow`,
+  `pulse`, `aurora`, `kelvin-cycle`). Used by a light's `colorLayer` and by a new backdrop layer kind
+  **`generator`** (`ref` = generator id, `params` validated against its schema, `light` null) in the `color` and
+  `live` stacks. Renderers implement them by id; `docs/effects.md` says how to add one.
+- `motionPresets`: `[{ id, name, description, motion }]` (`sun-lr`, `sun-rl`, `drift`, `sway`, `rise`, `set`), the
+  exact Motion a preset chip writes (with `startedAt` set by the client). `motionEasings`, `motionLoops`: the enums.
+- `sceneKinds`: `[{ id, name, mode, description }]`; `sceneTemplates`: `[{ id, kind, name, description }]`.
+
+### Motion
+
+```json
+"motion": { "on": true, "preset": "sun-lr",
+  "from": { "x": -0.6, "y": 0.08 }, "via": { "x": 0, "y": -0.04 }, "to": { "x": 0.6, "y": 0.08 },
+  "duration": 600, "easing": "inOut", "loop": "loop",
+  "rotate": 8, "scaleFrom": 1, "scaleTo": 1, "kelvinFrom": 0, "kelvinTo": 0,
+  "phase": 0, "startedAt": 1791700000123 }
+```
+
+On a stack light, an attachment, or a `photo` / `video` layer (`layer.motion`, which moves the picture inside the
+frame: it can enter and leave).
+
+- `from`, `to` (required), `via` (null = straight): offsets in frame fractions (x of the width, y of the height),
+  each −2…2. `duration` seconds 1…86400. `easing`: `linear` | `in` (u²) | `out` (1 − (1 − u)²) | `inOut`
+  (3u² − 2u³) | `sine` (½ − ½ cos πu). `loop`: `once` | `loop` | `pingpong`. `rotate` degrees −360…360 over the move.
+  `scaleFrom`, `scaleTo` 0.1…10 (default 1, 1; the sun rising shortens shadows: 1.45 → 1). `kelvinFrom`, `kelvinTo`
+  0 or 1000…12000 (0, 0 = no CCT drift; both set = drift, for CCT lights only). `preset`: the preset id it came from
+  or `""` (custom).
+- **Progress** runs on the server clock (Unix ms, not the hourly ambient clock, so hour-long moves stay smooth):
+  `u = on ? phase + (serverNowMs − startedAt) / (1000 × duration) : phase`. `once` clamps u to 0…1, `loop` takes
+  `u − floor(u)`, `pingpong` maps it to `1 − |1 − (u mod 2)|`. `e = ease(u)`. Position: without `via`,
+  `from + (to − from) × e`; with `via`, the quadratic curve through it,
+  `(1 − e)² from + 2e(1 − e) c + e² to` with `c = 2 via − (from + to) / 2`. Rotation adds `rotate × e`, scale
+  multiplies by `scaleFrom + (scaleTo − scaleFrom) × e`, kelvin is `kelvinFrom + (kelvinTo − kelvinFrom) × e`.
+- `phase` 0…2 (default 0), `startedAt` server Unix ms (default 0). Clients set `startedAt` to the server now when
+  they turn motion on, pick a preset or change the speed. Pause writes `on: false` and `phase` = the current u;
+  play writes `on: true` and `startedAt` = now. A speed change keeps the place: `phase` = current u,
+  `startedAt` = now, then the new `duration`.
+- **Timeline.** A layer track (§12) may target an attachment id, a backdrop layer id, or the light (`target.id` =
+  `light:static` or `light:live`). Clips on it with effect **`motion`** and `params { from, to }` (progress values,
+  default 0 → 1) set u from the playhead (`from + (to − from) × progress`, holding like reveal clips); while a
+  target has motion clips its own clock is ignored. The target needs a `motion` to move.
+- The phone's speed slider maps to `duration` (log scale, 5 s … 2 h).
+
+### Scene kinds
+
+- `scene.kind`: `static` | `live` | `color` | `scenery` | `mapping`. What the scene is for: it picks the controls
+  the clients open. Its **mode** is `kind` itself, `objects` for `mapping`.
+- **Activating a scene puts its kind's mode on air**: `show.activate` sets `scene.mode` to the kind's mode (a
+  `replace /mode` patch by `server`) when it differs.
+- Absent on decode: the server infers it on load and stores it: a scene with objects is `mapping`; otherwise its
+  `mode` (`objects` → `mapping`). Clients infer the same way when it is missing.
+- `GET /scenes` and the `scenes` channel list `[{ id, name, setupId, version, kind, mode }]`.
+- `POST /scenes { name, setupId?, duplicate?, kind?, template? }`: with `template` (a `sceneTemplates` id) or a
+  `kind` (its default template), the server builds the scene from the template:
+  - `static-window` (static): the static light at 3200 K, intensity 0.85, focus 0.68, one `window-4` attachment
+    (catalog defaults, `throw` 0.25) with the `sun-lr` motion present but `on: false`.
+  - `live-window-tree` (live): the live light at 3200 K with a `window-4` attachment and a `tree-sway` layer
+    (multiply).
+  - `color-ember` (color): one `ember` gradient layer. `scenery-flowers` (scenery): one `flowers` photo layer.
+  - `mapping-empty` (mapping): mode `objects`, no objects; the editor opens the reference photo step.
+  Without either it is the empty static scene as before (`kind: "static"`).
+
+### Upgrade (server, on start)
+
+Scenes stored before this change are rewritten once:
+
+- In `static` and `live`, every `gobo` layer becomes an attachment (same id, `gobo` = its ref, `rotation` = its
+  `light.angle`, `offsetX`/`offsetY` and `scale` from its light, `opacity` from the layer, `visible` kept, `params`
+  = its params). The stack light takes the first gobo layer's light: `intensity`, `color`, `fx`, and
+  `focus = 1 − softness`. `static.layers` becomes `[]` (non-gobo layers there are dropped); `live` keeps its other
+  layers. A `live` stack without gobo layers gets `light: null`. A `static` stack without one gets the default light.
+- `kind` is inferred as above.
+- Presets of mode `static` are upgraded the same way (`backdrop` becomes the static stack shape).
+
+### Frame slide on the phone and the web
+
+The slide is `light.slide` (above), sent as `param` on drags. Both clients show a slider for the long axis and accept
+a horizontal (vertical in portrait) drag on the preview, with a reset.
+
+### Viewer (web route)
+
+| route | what |
+| --- | --- |
+| `/view?token=…` | the viewer: exactly what the projector shows (the active scene in its mode, at the wall's clock, with the test pattern, solo, video and YouTube layers and live animation) in a chrome-less page with a small hover bar (scene name, mode, fullscreen, close). Role `remote`, name `viewer`, no caps: read only, never the output, never an audio client. Its own sound toggle plays video layers' sound and the timeline's sound clips locally |
+
+`/preview` gains `scene=<id>`: it then follows that scene (in its own mode, at the wall's clock) instead of the
+active one, without putting it on air. The phone's long-press preview and the web's quick preview use it.
+
+The editor's "open viewer" buttons open it in a new window sized 16:9 (9:16 in portrait), passing the editor's token
+when it has one. The viewer and the editor share nothing but the server.
+
+### Thumbnails
+
+`GET /catalog/thumbs/<id>.png` (no auth, immutable cache headers): a 384 × 216 PNG of a gobo (one attachment under a
+warm light) or a procedural layer, rendered by the web engine at build time and embedded in the server
+(`/catalog/assets/thumbs/<id>.png` serves the same file; catalog items carry `thumb`). 404 for unknown ids.
+
+### Settings
+
+`agentLiveEdits` (default false) joins the settings (§8): when on, the backdrop MCP tools write straight to the live
+scene (the phone, viewer and wall change at once); when off they write to the agent's draft as every other write
+tool does.
+
+### MCP tools (backdrop side)
+
+| tool | args | does |
+| --- | --- | --- |
+| `catalog_get` | `{ section? }` (`gobos`, `procedural`, `gradients`, `colorGenerators`, `scenery`, `videos`, `sounds`, `motionPresets`, `sceneTemplates`) | the catalog (and the video and sound libraries), compact |
+| `scene_list` | `{}` | scenes with id, name, kind, mode, and which is on the wall |
+| `scene_create` | `{ name, kind, template? }` | creates a scene from a template; does not activate it |
+| `scene_activate` | `{ scene }` (id or name) | puts it on the wall (its kind's mode goes on air) |
+| `mode_set` | `{ mode, scene? }` | `replace /mode` |
+| `light_set` | `{ stack?: "static" \| "live", intensity?, focus?, kelvin?, tint?, hue?, sat?, colorMode?, fx?, fxSpeed?, colorLayer?, fringe?, vignette?, haze?, slideX?, slideY? }` | edits the stack light (creates it in `live` if null) |
+| `attachment_add` | `{ stack?, gobo, params?, rotation?, offsetX?, offsetY?, scale?, opacity?, motion? }` | adds an attachment (catalog defaults filled in), returns its id |
+| `attachment_update` | `{ stack?, id, … }` | changes any of those fields |
+| `attachment_remove` | `{ stack?, id }` | removes it |
+| `gobo_set` | `{ stack?, gobo, params? }` | the quick pick: replaces every attachment with one of this gobo |
+| `backdrop_set` | `{ mode, layers }` | replaces the `live`, `color` or `scenery` layers (ids made when missing, defaults filled) |
+| `motion_set` | `{ target: "light" \| <attachment id> \| <layer id>, stack?, preset?, on?, from?, via?, to?, duration?, easing?, loop?, rotate?, scaleFrom?, scaleTo?, kelvinFrom?, kelvinTo? }` | sets or clears (`preset: "none"`) a motion; `startedAt` = now |
+| `preset_apply` | `{ preset }` (id or name) | applies a preset to the active scene |
+
+Every write tool targets the active scene (or `scene`). With `agentLiveEdits` on they patch the scene as author
+`agent:<name>`; otherwise they append to the agent's draft. Their results say which ("live on the wall" or "in your
+draft").
+
+### Server notes (backend)
+
+- **Defaults (backend).** A `motion` object decodes absent fields as `on: true`, `preset: ""`, `via: null`,
+  `duration: 60`, `easing: "linear"`, `loop: "loop"`, `rotate: 0`, `scaleFrom`/`scaleTo: 1`, `kelvinFrom`/`kelvinTo: 0`,
+  `phase: 0`, `startedAt: 0`. An attachment decodes absent `visible` as true, `opacity` and `scale` as 1. `startedAt`
+  may carry a fraction (server ms as a number).
+- **Ids (backend).** Attachment ids are not checked for the `att_` prefix (upgraded attachments keep their gobo
+  layer's `lay_` id); they must be unique with the layer ids. A layer track whose target is an `att_` or `lay_` id that
+  no stack has any more stays valid and moves nothing, so a preset or a pick that replaces the attachments never fails
+  on a motion track.
+- **Older clients (backend).** A patch that replaces a whole `static` or `live` stack with only `{ layers }` (no
+  `attachments` key) is upgraded on the way in like a stored v3 stack (gobo layers become attachments); a patch that
+  puts layers into a `static` stack that has `attachments` answers 422 `invalid`. Stored `live` presets are upgraded
+  too. Applying a preset gives its layer and attachment ids that another stack of the scene uses fresh ids.
+- **Scenes (backend).** `POST /scenes`: `template` wins over `kind`; an unknown `kind` or `template` answers 400
+  `bad_request`; `duplicate` keeps the source's kind. Summaries always carry `kind` and `mode`. The activation patch's
+  author is `server`; a scene already in its kind's mode is not patched. `POST /scenes/from-photo` makes a `mapping`
+  scene (mode `objects`).
+- **Templates (backend).** `static-window`'s `sun-lr` motion is `on: false` with `phase: 0.5`: parked in the middle of
+  its path, so the window shows in the frame until the motion is turned on.
+- **Agent sessions (backend).** A live backdrop write attaches the MCP client's agent session without a draft
+  (`draftId: ""`) so its tool events show on `agent:{id}`; its first draft write gives it a draft.
+- **Thumbnails (backend).** `/catalog/thumbs/<id>.png` sends `Cache-Control: public, max-age=86400`, like
+  `/catalog/assets`.
+- **MCP (backend).** The tool args are camelCase as in the table. `scene_activate` needs `agentLiveEdits` or
+  `agentMayGoLive`. Live writes are patches against the version the tool read; a concurrent structural edit answers
+  "call the tool again". `attachment_add` takes `motion` as a `motionPresets` id; `motion_set` with `on: false`
+  stores the current progress in `phase`. `light_set` takes `colorLayer: { kind: "none" }` to clear the colour layer.

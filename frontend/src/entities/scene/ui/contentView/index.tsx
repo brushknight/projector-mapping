@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type PointerEvent } from 'react'
 import { atlasAffines, atlasFaces, autoAtlas, Renderer, resolveAtlas, surfaceFlatSize, type RenderInput } from '../../../../render'
-import { Cap, ColorField, EmptyState, HintBar, Icon, Menu, NumField, Pill, Segmented, Switch, TextInput } from '../../../../shared/components'
+import { Cap, ColorField, EmptyState, HintBar, NumField, Pill, Switch, TextInput, type MenuItem } from '../../../../shared/components'
 import { newId } from '../../../../shared/lib/ids'
 import { useRaf } from '../../../../shared/lib/useRaf'
 import { ambientClock } from '../../../show/live'
@@ -10,20 +10,28 @@ import { addContentLayer, contentLayerPath, gradientLayer, locateContentLayer, l
 import { atlasShapes, canvasPng, download, faceTemplateCanvas, fileStem, templateCanvas, templateSvg, zipStore } from '../../template'
 import type { Atlas, AtlasRect, AtlasRotation, Scene, Stroke, StrokeTool } from '../../types'
 import { appendStroke, buildStroke, clearStrokes, drawingEffect, drawOnClip, hitStroke, removeStroke, strokesOf, type Px, type Size, type StrokeStyle } from '../flatView/strokes'
+import { addEffectTo, EffectMenu, EmptyActions } from './emptyActions'
 import { LayerHandles, type LayerChange } from './handles'
+import { ContentHead, MoreMenu, TipPill, ToolButton } from './head'
+import { MiniMap } from './miniMap'
+import { faceHasContent, objectHasContent } from './model'
+import { useContentTour } from './tour'
 import s from './styles.module.css'
 
 type FaceTool = 'move' | StrokeTool | 'erase'
 
-const FACE_TOOLS: Array<{ value: FaceTool; label: string; key: string; title: string }> = [
-  { value: 'move', label: 'move', key: 'v', title: 'move (V): drag a layer, its corners scale it, the knob turns it' },
-  { value: 'pen', label: 'pen', key: '1', title: 'pen (1): drag to draw freehand' },
-  { value: 'line', label: 'line', key: '2', title: 'line (2): drag from start to end' },
-  { value: 'rect', label: 'rect', key: '3', title: 'rectangle (3): drag corner to corner' },
-  { value: 'ellipse', label: 'ellipse', key: '4', title: 'ellipse (4): drag corner to corner of its box' },
-  { value: 'text', label: 'text', key: '5', title: 'text (5): click where the text starts, type, press enter' },
-  { value: 'erase', label: 'erase', key: '6', title: 'erase (6): click a stroke to remove it' },
+const FACE_TOOLS: Array<{ value: FaceTool; label: string; icon: string; key: string; title: string }> = [
+  { value: 'move', label: 'move', icon: 'select', key: 'v', title: 'move (V): drag a picture, its corners scale it, the knob turns it' },
+  { value: 'pen', label: 'pen', icon: 'pen', key: '1', title: 'pen (1): drag to draw freehand' },
+  { value: 'line', label: 'line', icon: 'line', key: '2', title: 'line (2): drag from start to end' },
+  { value: 'rect', label: 'box', icon: 'quad', key: '3', title: 'box (3): drag corner to corner' },
+  { value: 'ellipse', label: 'ellipse', icon: 'circle', key: '4', title: 'ellipse (4): drag corner to corner of its box' },
+  { value: 'text', label: 'text', icon: 'text', key: '5', title: 'text (5): click where the text starts, type, press enter' },
+  { value: 'erase', label: 'erase', icon: 'eraser', key: '6', title: 'erase (6): click a stroke to remove it' },
 ]
+
+/** The column on the right of the view kept free for the mini map and the stage picture, so they never cover the face. */
+const SIDE = 250
 
 /** The ink colour from the theme, as #rrggbb (strokes store plain hex). */
 function themeInk(): string {
@@ -70,7 +78,7 @@ function useInput(): () => RenderInput | null {
   const ed = useEditor()
   return () =>
     ed.setup
-      ? { setup: ed.setup, scene: ed.scene, catalog: ed.catalog, effects: ed.userEffects, t: ed.preview.t(), clock: ambientClock(ed.hub), blackout: 0, mutedTracks: ed.mutedTracks, mode: 'objects' }
+      ? { setup: ed.setup, scene: ed.scene, catalog: ed.catalog, effects: ed.userEffects, t: ed.preview.t(), clock: ambientClock(ed.hub), now: ed.hub.serverNow(), blackout: 0, mutedTracks: ed.mutedTracks, mode: 'objects' }
       : null
 }
 
@@ -133,49 +141,55 @@ export function ContentView() {
     return () => window.removeEventListener('paste', paste)
   }, [ed, objectId, zoom])
 
+  const tour = useContentTour(false)
+  const [startTool, setStartTool] = useState<FaceTool | null>(null)
+  // the tour opens once, the first time the unfold shows
+  const hasObj = !!obj
+  const startTour = tour.start
+  useEffect(() => {
+    if (hasObj && !zoom) startTour()
+  }, [hasObj, zoom, startTour])
+
   if (!scene) return <section className={s.content} aria-label="content" />
   if (!obj) {
     return (
       <section className={s.content} aria-label="content" data-testid="content-view">
         <div className={s.empty}>
-          <EmptyState>no faces yet. press tab for the map and draw the faces of the object with Q.</EmptyState>
+          <EmptyState>
+            Content puts pictures, drawings and effects on the faces of an object. This scene has no faces yet.
+            <br />
+            <Pill size="sm" icon="quad" onClick={() => ed.setSpace('map')} className={s.emptyGo} data-testid="content-go-map">
+              open map to draw the faces
+            </Pill>
+          </EmptyState>
         </div>
       </section>
     )
   }
   return (
     <section className={s.content} aria-label="content" data-testid="content-view">
-      {zoom ? <FacePane key={zoom} surfaceId={zoom} objectId={obj.id} /> : <AtlasPane key={obj.id} objectId={obj.id} />}
-      <Pip />
-    </section>
-  )
-}
-
-function ObjectPicker({ objectId }: { objectId: string }) {
-  const ed = useEditor()
-  const scene = ed.scene!
-  const obj = scene.objects.find((o) => o.id === objectId)!
-  const choices = scene.objects.filter((o) => atlasFaces(o).length > 0)
-  return (
-    <Menu
-      width={240}
-      trigger={({ toggle }) => (
-        <Pill size="sm" icon="cube" onClick={toggle} aria-label="choose object" data-testid="content-object">
-          {obj.name}
-          <Icon name="chevronDown" size={13} />
-        </Pill>
+      {zoom ? (
+        <FacePane key={zoom} surfaceId={zoom} objectId={obj.id} initialTool={startTool} onStarted={() => setStartTool(null)} onHelp={tour.replay} />
+      ) : (
+        <AtlasPane
+          key={obj.id}
+          objectId={obj.id}
+          onHelp={tour.replay}
+          onDrawFace={(id) => {
+            setStartTool('pen')
+            ed.editFace(id)
+          }}
+        />
       )}
-      items={[
-        { key: 'cap', caption: true, label: 'objects' },
-        ...choices.map((o) => ({ key: o.id, label: o.name, on: o.id === objectId, meta: `${atlasFaces(o).length} faces`, onSelect: () => ed.select({ objectId: o.id, surfaceId: null, focus: 'object' }) })),
-      ]}
-    />
+      <Pip />
+      {tour.el}
+    </section>
   )
 }
 
 // ── the unfold ───────────────────────────────────────────────────────────────
 
-function AtlasPane({ objectId }: { objectId: string }) {
+function AtlasPane({ objectId, onHelp, onDrawFace }: { objectId: string; onHelp: () => void; onDrawFace: (surfaceId: string) => void }) {
   const ed = useEditor()
   const scene = ed.scene!
   const obj = scene.objects.find((o) => o.id === objectId)!
@@ -193,9 +207,10 @@ function AtlasPane({ objectId }: { objectId: string }) {
   const file = useRef<HTMLInputElement>(null)
   const artwork = useRef<HTMLInputElement>(null)
   const [dropHint, setDropHint] = useState(false)
+  const [hideEmpty, setHideEmpty] = useState(false)
 
   const pad = 40
-  const k = Math.max(0.01, Math.min((box.w - pad * 2) / atlas.width, (box.h - pad * 2) / atlas.height))
+  const k = Math.max(0.01, Math.min((box.w - pad * 2 - SIDE) / atlas.width, (box.h - pad * 2) / atlas.height))
   const dispW = Math.max(16, atlas.width * k)
   const dispH = Math.max(16, atlas.height * k)
   const u = 1 / k // atlas units per css px
@@ -236,7 +251,8 @@ function AtlasPane({ objectId }: { objectId: string }) {
     e.stopPropagation()
     const isDetail = !!obj.surfaces.find((x) => x.id === id)?.parentId
     ed.select({ surfaceId: id, objectId, focus: 'surface', pointId: null })
-    if (!arrange || isDetail || !atlas.faces[id]) return
+    if (!arrange) return
+    if (isDetail || !atlas.faces[id]) return
     ;(e.currentTarget as Element).setPointerCapture(e.pointerId)
     drag.current = { id, start: toAtlas(e), rect: atlas.faces[id] }
   }
@@ -327,70 +343,72 @@ function AtlasPane({ objectId }: { objectId: string }) {
   const objLayer = sel && sel.owner.kind === 'object' && sel.owner.id === objectId ? sel.layer : null
   const selFace = ed.sel.surfaceId && atlas.faces[ed.sel.surfaceId] ? ed.sel.surfaceId : null
 
+  const addSweep = () => {
+    const layer = gradientLayer(newId('cl'))
+    void ed.editing.edit((sc) => {
+      const ops = addContentLayer(sc, { kind: 'object', id: objectId }, layer)
+      const o = sc.objects.find((x) => x.id === objectId)
+      if (ops && o && !o.atlas) ops.unshift(...(setAtlas(sc, objectId, autoAtlas(sc, o)) ?? []))
+      return ops
+    })
+    ed.select({ contentLayerId: layer.id, focus: 'content' })
+  }
+  const faces = atlasFaces(obj).filter((f) => !f.parentId)
+  const firstFace = (selFace && faces.some((f) => f.id === selFace) ? selFace : null) ?? faces[0]?.id ?? null
+  const empty = !hideEmpty && !arrange && !objectHasContent(scene, objectId)
+
+  const more: MenuItem[] = [
+    { key: 'c0', caption: true, label: 'layout' },
+    { key: 'arrange', icon: 'layers', label: arrange ? 'stop arranging the faces' : 'arrange the faces by dragging', on: arrange, onSelect: () => setArrange(!arrange) },
+    {
+      key: 'relayout',
+      icon: 'loop',
+      label: stored ? 're-layout from the mapping' : 'pin this layout',
+      onSelect: () => void ed.editing.edit((sc) => setAtlas(sc, objectId, autoAtlas(sc, sc.objects.find((o) => o.id === objectId)!))),
+    },
+    { key: 'c', caption: true, label: `template · ${baseAtlas.width}×${baseAtlas.height} px` },
+    { key: 'png', icon: 'download', label: 'save the template as PNG', onSelect: () => void exportPng() },
+    { key: 'svg', icon: 'download', label: 'save the template as SVG', onSelect: exportSvg },
+    { key: 'zip', icon: 'download', label: 'save each face as a PNG (zip)', onSelect: () => void exportZip() },
+    { key: 'imp', icon: 'upload', label: 'import artwork made on the template', onSelect: () => artwork.current?.click() },
+  ]
+
   return (
     <>
-      <div className={s.cbar}>
-        <ObjectPicker objectId={objectId} />
-        <span className={s.meta} data-testid="atlas-size">
-          unfold · {atlas.width}×{atlas.height} px{stored ? '' : ' · auto'}
-        </span>
-        <Pill size="sm" ghost={!arrange} on={arrange} icon="layers" aria-pressed={arrange} onClick={() => setArrange(!arrange)} title="drag faces to arrange the unfold; their content follows" data-testid="arrange">
-          arrange faces
-        </Pill>
+      <ContentHead
+        objectId={objectId}
+        surfaceId={null}
+        onHelp={onHelp}
+        meta={
+          <span data-testid="atlas-size">
+            unfold · {atlas.width}×{atlas.height} px{stored ? '' : ' · auto'}
+          </span>
+        }
+        hint="Click a face to open it. Drop a picture on a face, or between faces to span the object."
+      >
+        <TipPill tip="add a picture or a video that spans every face of the object" icon="image" onClick={() => file.current?.click()} data-testid="add-object-media">
+          add picture across
+        </TipPill>
+        <TipPill tip="add a band of light that runs across every face; a sweep clip moves it" icon="gradient" onClick={addSweep} data-testid="add-sweep">
+          add sweep
+        </TipPill>
+        {arrange && (
+          <TipPill tip="drag faces to arrange the unfold; their content follows. click to stop" on icon="check" onClick={() => setArrange(false)} data-testid="arrange">
+            done arranging
+          </TipPill>
+        )}
         {arrange && selFace && (
-          <Pill size="sm" icon="loop" onClick={() => turnFace(selFace)} title="turn the selected face 90° in the unfold">
+          <TipPill tip="turn the selected face 90° in the unfold" icon="loop" onClick={() => turnFace(selFace)}>
             turn 90°
-          </Pill>
+          </TipPill>
         )}
         <span className={s.sp} />
-        <Pill size="sm" icon="image" onClick={() => file.current?.click()} title="add a picture or a video across the whole object" data-testid="add-object-media">
-          picture across
-        </Pill>
-        <Pill
-          size="sm"
-          icon="gradient"
-          onClick={() => {
-            const layer = gradientLayer(newId('cl'))
-            void ed.editing.edit((sc) => {
-              const ops = addContentLayer(sc, { kind: 'object', id: objectId }, layer)
-              const o = sc.objects.find((x) => x.id === objectId)
-              if (ops && o && !o.atlas) ops.unshift(...(setAtlas(sc, objectId, autoAtlas(sc, o)) ?? []))
-              return ops
-            })
-            ed.select({ contentLayerId: layer.id, focus: 'content' })
-          }}
-          title="add a band of light that runs across every face; a sweep clip moves it"
-          data-testid="add-sweep"
-        >
-          sweep
-        </Pill>
-        <Menu
-          align="right"
-          width={280}
-          trigger={({ toggle }) => (
-            <Pill size="sm" icon="download" onClick={toggle} data-testid="template-menu">
-              template
-            </Pill>
-          )}
-          items={[
-            { key: 'c', caption: true, label: `template · ${baseAtlas.width}×${baseAtlas.height} px` },
-            { key: 'png', icon: 'download', label: 'save the template as PNG', onSelect: () => void exportPng() },
-            { key: 'svg', icon: 'download', label: 'save the template as SVG', onSelect: exportSvg },
-            { key: 'zip', icon: 'download', label: 'save each face as a PNG (zip)', onSelect: () => void exportZip() },
-            { key: 'imp', icon: 'upload', label: 'import artwork made on the template', onSelect: () => artwork.current?.click() },
-            { key: 'c2', caption: true, label: 'layout' },
-            {
-              key: 'relayout',
-              icon: 'loop',
-              label: stored ? 're-layout from the mapping' : 'pin this layout',
-              onSelect: () => void ed.editing.edit((sc) => setAtlas(sc, objectId, autoAtlas(sc, sc.objects.find((o) => o.id === objectId)!))),
-            },
-          ]}
-        />
-      </div>
+        <MoreMenu items={more} testId="template-menu" />
+      </ContentHead>
       <div
         ref={bodyRef}
         className={`${s.body} ${dropHint ? s.dropping : ''}`}
+        style={{ paddingRight: SIDE }}
         onDragOver={(e) => {
           if (e.dataTransfer.types.includes('Files') || e.dataTransfer.types.includes('text/plain')) {
             e.preventDefault()
@@ -417,10 +435,12 @@ function AtlasPane({ objectId }: { objectId: string }) {
                   onPointerMove={onFaceMove}
                   onPointerUp={onFaceUp}
                   onPointerCancel={onFaceUp}
-                  onDoubleClick={() => ed.editFace(sh.id)}
+                  onClick={() => !arrange && ed.editFace(sh.id)}
                   data-testid={`atlas-face-${sh.id}`}
                   data-face={sh.id}
-                />
+                >
+                  <title>{arrange ? `drag ${sh.name} to arrange the unfold` : `open ${sh.name}`}</title>
+                </polygon>
               )
             })}
             {shapes
@@ -438,13 +458,26 @@ function AtlasPane({ objectId }: { objectId: string }) {
           </svg>
         </div>
         {dropHint && <div className={s.dropNote}>drop on a face for that face, hold alt (or drop between faces) to span the object</div>}
+        <MiniMap objectId={objectId} current={null} />
+        {empty && (
+          <EmptyActions
+            title={`${obj.name} shows nothing yet`}
+            text="Start with one of these. You can add more, or open a single face, at any time."
+            pictureNote="one picture across all its faces"
+            drawNote={firstFace ? `open ${obj.surfaces.find((x) => x.id === firstFace)?.name} with the pen` : 'pen, shapes and text'}
+            effectNote="a moving effect on every face"
+            onPicture={() => file.current?.click()}
+            onDraw={() => firstFace && onDrawFace(firstFace)}
+            onEffect={(d) => addEffectTo(ed, faces.map((f) => f.id), d)}
+            onClose={() => setHideEmpty(true)}
+          />
+        )}
       </div>
       <div className={s.hints}>
         <HintBar
           hints={[
-            { keys: 'dbl-click', text: 'open a face' },
+            { keys: 'click', text: 'open a face' },
             { keys: '[ ]', text: 'faces' },
-            { keys: 'F', text: 'edit face' },
             { keys: 'S', text: 'solo' },
             { keys: '⌘V', text: 'paste picture' },
             { keys: 'tab', text: 'map' },
@@ -483,7 +516,7 @@ function writeLayer(ed: ReturnType<typeof useEditor>, layerId: string, c: LayerC
 
 // ── one face ─────────────────────────────────────────────────────────────────
 
-function FacePane({ surfaceId, objectId }: { surfaceId: string; objectId: string }) {
+function FacePane({ surfaceId, objectId, initialTool, onStarted, onHelp }: { surfaceId: string; objectId: string; initialTool: FaceTool | null; onStarted: () => void; onHelp: () => void }) {
   const ed = useEditor()
   const scene = ed.scene!
   const loc = locateSurface(scene, surfaceId)!
@@ -500,7 +533,13 @@ function FacePane({ surfaceId, objectId }: { surfaceId: string; objectId: string
   const svgRef = useRef<SVGSVGElement>(null)
   const renderer = useRenderer(canvasRef)
   const input = useInput()
-  const [tool, setTool] = useState<FaceTool>('move')
+  const [tool, setTool] = useState<FaceTool>(initialTool ?? 'move')
+  const [hideEmpty, setHideEmpty] = useState(false)
+  // the start tool is used once, by the face that opened with it
+  const started = useRef(onStarted)
+  useEffect(() => {
+    if (initialTool) started.current()
+  }, [initialTool])
   const [style, setStyle] = useState<StrokeStyle>(() => ({ color: themeInk(), width: Math.max(2, Math.round(Math.min(size.width, size.height) / 80)), fill: false, size: Math.max(12, Math.round(size.height / 8)) }))
   const [live, setLive] = useState<{ tool: StrokeTool; pts: Px[] } | null>(null)
   const [textAt, setTextAt] = useState<Px | null>(null)
@@ -514,7 +553,7 @@ function FacePane({ surfaceId, objectId }: { surfaceId: string; objectId: string
   const idx = order.indexOf(surfaceId)
 
   const pad = 40
-  const k = Math.max(0.01, Math.min((box.w - pad * 2) / size.width, (box.h - pad * 2) / size.height))
+  const k = Math.max(0.01, Math.min((box.w - pad * 2 - SIDE) / size.width, (box.h - pad * 2) / size.height))
   const dispW = Math.max(16, size.width * k)
   const dispH = Math.max(16, size.height * k)
   const u = 1 / k
@@ -621,28 +660,46 @@ function FacePane({ surfaceId, objectId }: { surfaceId: string; objectId: string
   const sw = style.width
   const drawing = tool !== 'move'
 
+  const empty = !hideEmpty && tool === 'move' && !faceHasContent(scene, surfaceId)
+  const more: MenuItem[] = [
+    { key: 'c', caption: true, label: `${surface.name} · ${Math.round(size.width)}×${Math.round(size.height)} px` },
+    { key: 'all', icon: 'layers', label: 'back to all faces (esc)', onSelect: () => ed.setFaceZoom(null) },
+    { key: 'prev', icon: 'prev', label: 'previous face ([)', disabled: order.length < 2, onSelect: () => go(-1) },
+    { key: 'next', icon: 'next', label: 'next face (])', disabled: order.length < 2, onSelect: () => go(1) },
+    { key: 'c2', caption: true, label: 'drawing' },
+    { key: 'clear', icon: 'trash', label: 'remove every stroke on this face', danger: true, disabled: !strokes.length, onSelect: () => void ed.editing.edit((sc) => clearStrokes(sc, surfaceId)) },
+  ]
+
   return (
     <>
-      <div className={s.cbar}>
-        <Pill size="sm" ghost icon="prev" onClick={() => ed.setFaceZoom(null)} title="back to the whole unfold (esc)" data-testid="face-back">
-          unfold
-        </Pill>
-        <Pill size="sm" ghost icon="prev" aria-label="previous face ([)" title="previous face ([)" onClick={() => go(-1)} disabled={order.length < 2} />
-        <span className={s.title} data-testid="face-title">
-          {obj.name} / {surface.name}
-        </span>
-        <Pill size="sm" ghost icon="next" aria-label="next face (])" title="next face (])" onClick={() => go(1)} disabled={order.length < 2} />
-        <span className={s.meta}>
-          {Math.round(size.width)}×{Math.round(size.height)} px
-        </span>
-        <Segmented<FaceTool> ariaLabel="face tool" size="sm" value={tool} onChange={setTool} options={FACE_TOOLS.map((t) => ({ value: t.value, label: t.label, title: t.title }))} />
+      <ContentHead
+        objectId={objectId}
+        surfaceId={surfaceId}
+        onHelp={onHelp}
+        meta={`${Math.round(size.width)}×${Math.round(size.height)} px`}
+        hint="What this face shows on the wall. Esc goes back to all faces."
+      >
+        <div className={s.toolGroup} role="group" aria-label="face tool">
+          {FACE_TOOLS.map((ft) => (
+            <ToolButton key={ft.value} icon={ft.icon} label={ft.label} on={tool === ft.value} tip={ft.title} onClick={() => setTool(ft.value)} testId={`face-tool-${ft.value}`} />
+          ))}
+        </div>
+        <TipPill tip="add a picture or a video to this face" icon="image" onClick={() => file.current?.click()} data-testid="add-face-media">
+          add picture
+        </TipPill>
+        <EffectMenu
+          onPick={(d) => addEffectTo(ed, [surfaceId], d)}
+          trigger={({ toggle, open }) => (
+            <TipPill tip="add a moving effect to this face: grid, scan, glitch and more" icon="sparkle" aria-expanded={open} onClick={toggle} data-testid="add-face-effect">
+              add effect
+            </TipPill>
+          )}
+        />
         <span className={s.sp} />
-        <Pill size="sm" icon="image" onClick={() => file.current?.click()} title="add a picture or a video to this face" data-testid="add-face-media">
-          picture
-        </Pill>
-      </div>
+        <MoreMenu items={more} />
+      </ContentHead>
       {drawing && (
-        <div className={s.tools}>
+        <div className={s.tools} data-testid="draw-options">
           <div className={s.color}>
             <ColorField label="colour" value={style.color} onChange={(c) => setStyle((x) => ({ ...x, color: c }))} />
           </div>
@@ -658,17 +715,14 @@ function FacePane({ surfaceId, objectId }: { surfaceId: string; objectId: string
             </label>
           )}
           <span className={s.sp} />
-          <Pill size="sm" ghost icon="undo" disabled={!strokes.length} onClick={() => strokes.length && void ed.editing.edit((sc) => removeStroke(sc, surfaceId, strokes[strokes.length - 1]))} title="remove the last stroke">
+          <TipPill tip="remove the last stroke" size="sm" ghost icon="undo" disabled={!strokes.length} onClick={() => strokes.length && void ed.editing.edit((sc) => removeStroke(sc, surfaceId, strokes[strokes.length - 1]))}>
             undo stroke
-          </Pill>
-          <Pill size="sm" ghost icon="trash" disabled={!strokes.length} onClick={() => void ed.editing.edit((sc) => clearStrokes(sc, surfaceId))} title="remove every stroke on this face">
-            clear
-          </Pill>
-          <Pill
+          </TipPill>
+          <TipPill
+            tip="add a timeline clip at the playhead that draws these strokes on over 3 s"
             size="sm"
             icon="play"
             disabled={!strokes.length}
-            title="add a timeline clip at the playhead that draws these strokes on over 3 s"
             onClick={() => {
               const ids = { track: newId('trk'), clip: newId('clp') }
               const at = ed.preview.t()
@@ -676,10 +730,13 @@ function FacePane({ surfaceId, objectId }: { surfaceId: string; objectId: string
             }}
           >
             draw on
-          </Pill>
+          </TipPill>
+          <TipPill tip="put the pen down and go back to moving pictures (V)" size="sm" icon="select" onClick={() => setTool('move')}>
+            done drawing
+          </TipPill>
         </div>
       )}
-      <div ref={bodyRef} className={s.body} onDragOver={(e) => (e.dataTransfer.types.includes('Files') || e.dataTransfer.types.includes('text/plain')) && e.preventDefault()} onDrop={onDrop} data-testid="face-body">
+      <div ref={bodyRef} className={s.body} style={{ paddingRight: SIDE }} onDragOver={(e) => (e.dataTransfer.types.includes('Files') || e.dataTransfer.types.includes('text/plain')) && e.preventDefault()} onDrop={onDrop} data-testid="face-body">
         <div className={s.sheet} style={{ width: dispW, height: dispH }}>
           <canvas ref={canvasRef} className={s.canvas} data-testid="face-canvas" />
           <svg
@@ -721,11 +778,25 @@ function FacePane({ surfaceId, objectId }: { surfaceId: string; objectId: string
             />
           )}
         </div>
+        <MiniMap objectId={objectId} current={surfaceId} />
+        {empty && (
+          <EmptyActions
+            title={`${surface.name} is empty`}
+            text="What should this face show? Pick one. You can add more at any time."
+            pictureNote="a photo or a video from this computer"
+            drawNote="pen, shapes and text, right on the face"
+            effectNote="a moving effect: grid, scan, glitch"
+            onPicture={() => file.current?.click()}
+            onDraw={() => setTool('pen')}
+            onEffect={(d) => addEffectTo(ed, [surfaceId], d)}
+            onClose={() => setHideEmpty(true)}
+          />
+        )}
       </div>
       <div className={s.hints}>
         <HintBar
           hints={[
-            { keys: 'esc', text: 'unfold' },
+            { keys: 'esc', text: 'all faces' },
             { keys: '[ ]', text: 'faces' },
             { keys: 'V', text: 'move' },
             { keys: '1–6', text: 'draw' },
@@ -737,14 +808,14 @@ function FacePane({ surfaceId, objectId }: { surfaceId: string; objectId: string
         const fs = [...(e.target.files ?? [])]
         e.target.value = ''
         if (fs.length) void ed.addMedia(fs, { kind: 'surface', id: surfaceId })
-      }} />
+      }} data-testid="face-media-input" />
     </>
   )
 }
 
 // ── picture in picture: the warped stage, live ───────────────────────────────
 
-const PIP_W = 248
+const PIP_W = 226
 
 function Pip() {
   const ed = useEditor()
@@ -778,16 +849,18 @@ function Pip() {
   }
   if (!open) {
     return (
-      <Pill size="sm" className={s.pipOpen} icon="pip" onClick={() => setOpen(true)} title="show the warped stage in a corner" data-testid="pip-open">
-        stage
-      </Pill>
+      <span className={s.pipOpen} data-tour="content-pip">
+        <TipPill tip="show the stage picture: your content warped onto the object, live" side="top" size="sm" icon="pip" onClick={() => setOpen(true)} data-testid="pip-open">
+          show the stage
+        </TipPill>
+      </span>
     )
   }
   return (
-    <div className={s.pip} style={{ right: pos.right, bottom: pos.bottom, width: PIP_W }} data-testid="pip">
-      <div className={s.pipHead} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={() => (drag.current = null)} title="drag to move">
-        <Cap>stage · live at the preview</Cap>
-        <Pill size="sm" ghost icon="minus" aria-label="hide the stage picture" onClick={() => setOpen(false)} data-testid="pip-close" />
+    <div className={s.pip} style={{ right: pos.right, bottom: pos.bottom, width: PIP_W }} data-testid="pip" data-tour="content-pip">
+      <div className={s.pipHead} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={() => (drag.current = null)} title="drag to move the stage picture">
+        <Cap>the stage, live</Cap>
+        <TipPill tip="hide the stage picture" side="top" size="sm" ghost icon="minus" aria-label="hide the stage picture" onClick={() => setOpen(false)} data-testid="pip-close" />
       </div>
       <canvas ref={canvasRef} className={s.pipCanvas} style={{ height: h }} data-testid="pip-canvas" />
     </div>

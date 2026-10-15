@@ -144,7 +144,9 @@ func prompt(user string, sess *agents.Session) string {
 		"surface_create, clip_add, output_render and so on). Your edits go into draft " + sess.DraftID + " of scene " + sess.SceneID +
 		", never live. Start with scene_get, look before you write (reference_photo_get, camera_snapshot, output_render), " +
 		"and finish with proposal_submit and a one-line summary. For sound effects, sound_list shows the library and clip_add {sound} " +
-		"puts one on the timeline.\n\nRequest: " + user
+		"puts one on the timeline. For the backdrop (the light, gobos as attachments, motion, presets, scenes) use catalog_get, " +
+		"scene_list, light_set, attachment_add, gobo_set, motion_set, backdrop_set and preset_apply; when the editor's \"agents edit " +
+		"live\" switch is on (scene_list says so) those change the wall at once instead of the draft.\n\nRequest: " + user
 }
 
 func (s *Service) run(ctx context.Context, id string, spec agentport.Spec, deviceID string) {
@@ -236,6 +238,40 @@ func (s *Service) Attach(ctx context.Context, agent, sceneID string) (*agents.Se
 	return s.create(ctx, agent, "(connected over MCP)", sceneID)
 }
 
+func (s *Service) AttachLive(ctx context.Context, agent, sceneID string) (*agents.Session, error) {
+	if !agents.IsValidAgent(agent) {
+		agent = "claude"
+	}
+	sceneID, err := s.sceneOr(ctx, sceneID)
+	if err != nil {
+		return nil, err
+	}
+	sess := &agents.Session{ID: services.NewID("agt"), Agent: agent, Prompt: "(connected over MCP)", Status: agents.Running, SceneID: sceneID,
+		CreatedAt: time.Now().UTC()}
+	if err := s.repo.Save(ctx, sess); err != nil {
+		return nil, err
+	}
+	s.publishSession(sess)
+	return sess, nil
+}
+
+func (s *Service) EnsureDraft(ctx context.Context, id string) (*agents.Session, error) {
+	sess, err := s.repo.Get(ctx, id)
+	if err != nil || sess.DraftID != "" {
+		return sess, err
+	}
+	dr, err := s.drafts.Create(ctx, sess.SceneID, "agent:"+sess.Agent+"#"+strings.TrimPrefix(id, "agt_"))
+	if err != nil {
+		return nil, err
+	}
+	sess.DraftID = dr.ID
+	if err := s.repo.Save(ctx, sess); err != nil {
+		return nil, err
+	}
+	s.publishSession(sess)
+	return sess, nil
+}
+
 func (s *Service) Log(ctx context.Context, id string, e agents.Event) {
 	s.mu.Lock()
 	n, ok := s.seq[id]
@@ -298,7 +334,7 @@ func (s *Service) UpdateSettings(ctx context.Context, partial json.RawMessage) (
 	}
 	var next agents.Settings
 	if err := json.Unmarshal(merged, &next); err != nil {
-		return cur, app_errors.BadRequest("agentMayPreview, agentMayGoLive and agentMayApply must be true or false.")
+		return cur, app_errors.BadRequest("agentMayPreview, agentMayGoLive, agentMayApply and agentLiveEdits must be true or false.")
 	}
 	out, _ := json.Marshal(next)
 	if err := s.kv.Put(ctx, settingsKey, out); err != nil {

@@ -5,11 +5,27 @@ export const lightShape = obj({
   color: obj({ mode: lit('cct', 'hsi'), kelvin: num, tint: num, hue: num, sat: num }),
   fx: obj({ kind: lit('none', 'candle', 'fire', 'lightning', 'paparazzi', 'tv', 'breathe', 'strobe', 'police'), speed: num }),
 })
-export const layerShape = obj({
-  id: str, kind: lit('gobo', 'procedural', 'gradient', 'photo', 'solid', 'video'), ref: str, name: str, visible: bool,
-  opacity: num, blend: lit('normal', 'multiply', 'screen', 'add'), light: nullable(lightShape), params: record(any),
+const ptShape = obj({ x: num, y: num })
+export const motionShape = obj({
+  on: bool, preset: str, from: ptShape, via: nullable(ptShape), to: ptShape, duration: num,
+  easing: lit('linear', 'in', 'out', 'inOut', 'sine'), loop: lit('once', 'loop', 'pingpong'),
+  rotate: num, scaleFrom: num, scaleTo: num, kelvinFrom: num, kelvinTo: num, phase: num, startedAt: num,
 })
-export const stackShape = obj({ layers: arr(layerShape) })
+export const layerShape = obj({
+  id: str, kind: lit('gobo', 'procedural', 'gradient', 'photo', 'solid', 'video', 'generator'), ref: str, name: str, visible: bool,
+  opacity: num, blend: lit('normal', 'multiply', 'screen', 'add'), light: nullable(lightShape), params: record(any), motion: nullable(motionShape),
+})
+export const stackLightShape = obj({
+  intensity: num, focus: num,
+  color: obj({ mode: lit('cct', 'hsi'), kelvin: num, tint: num, hue: num, sat: num }),
+  fx: obj({ kind: lit('none', 'candle', 'fire', 'lightning', 'paparazzi', 'tv', 'breathe', 'strobe', 'police'), speed: num }),
+  colorLayer: nullable(obj({ kind: lit('gradient', 'generator'), ref: str, params: record(any) })),
+  fringe: num, vignette: num, haze: num, slide: ptShape, motion: nullable(motionShape),
+})
+export const attachmentShape = obj({
+  id: str, gobo: str, name: str, visible: bool, opacity: num, rotation: num, offsetX: num, offsetY: num, scale: num, params: record(any), motion: nullable(motionShape),
+})
+export const stackShape = obj({ layers: arr(layerShape), light: nullable(stackLightShape), attachments: optional(arr(attachmentShape)) })
 export const backdropShape = obj({ static: stackShape, live: stackShape, color: stackShape, scenery: stackShape })
 export const sceneModeShape = lit('static', 'live', 'color', 'scenery', 'objects')
 export const underlayShape = obj({ on: bool, from: lit('static', 'live', 'color', 'scenery'), level: num })
@@ -47,9 +63,10 @@ export const padShape = obj({
 export const soundsShape = obj({ pads: arr(padShape) })
 export const timelineShape = obj({ duration: num, tracks: arr(trackShape), clips: arr(clipShape), cues: arr(cueShape) })
 export const sceneShape = obj({
-  id: str, setupId: str, name: str, version: int, mode: sceneModeShape, backdrop: backdropShape, underlay: optional(underlayShape), points: arr(pointShape), objects: arr(objectShape),
+  id: str, setupId: str, name: str, version: int, mode: sceneModeShape, kind: optional(lit('static', 'live', 'color', 'scenery', 'mapping')), backdrop: backdropShape, underlay: optional(underlayShape), points: arr(pointShape), objects: arr(objectShape),
   sounds: optional(soundsShape), timeline: timelineShape,
 })
+export const sceneSummaryShape = obj({ id: str, name: str, setupId: str, version: int, kind: optional(lit('static', 'live', 'color', 'scenery', 'mapping')), mode: optional(sceneModeShape) })
 export const patchOpShape = oneOf(
   obj({ op: lit('add', 'replace', 'test'), path: str, value: any }),
   obj({ op: lit('remove'), path: str }),

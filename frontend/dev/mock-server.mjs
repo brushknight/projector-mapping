@@ -33,7 +33,7 @@
 import { createHash } from 'node:crypto'
 import { readFileSync, existsSync, readdirSync } from 'node:fs'
 import { createServer } from 'node:http'
-import { dirname, extname, join, resolve } from 'node:path'
+import { basename, dirname, extname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { WebSocketServer } from 'ws'
 
@@ -169,7 +169,7 @@ function reset() {
     videos: [{ id: 'vid_bunny', name: 'big buck bunny', ref: 'youtube:aqz-KE-bpKQ', source: 'youtube', url: 'https://www.youtube.com/watch?v=aqz-KE-bpKQ', youtubeId: 'aqz-KE-bpKQ', sha: null, thumb: null, duration: 0, width: 0, height: 0, createdAt: '2026-10-14T10:00:00Z' }],
     imports: new Map(),
     tools: { ytdlp: !!process.env.MOCK_YTDLP, ffmpeg: !!process.env.MOCK_YTDLP },
-    settings: { agentMayPreview: false, agentMayGoLive: false, agentMayApply: false },
+    settings: { agentMayPreview: false, agentMayGoLive: false, agentMayApply: false, agentLiveEdits: false },
     log: [],
     camera: null,
     pairCode: 'K7Q2',
@@ -210,7 +210,66 @@ function pushSnapshot(ch) {
   const doc = channelDoc(ch)
   if (doc) broadcast(ch, { t: 'snapshot', v: doc.v, d: doc.d })
 }
-const sceneList = () => [...S.scenes.values()].map((s) => ({ id: s.doc.id, name: s.doc.name, setupId: s.doc.setupId, version: s.version }))
+const sceneList = () => [...S.scenes.values()].map((s) => ({ id: s.doc.id, name: s.doc.name, setupId: s.doc.setupId, version: s.version, kind: kindOf(s.doc), mode: s.doc.mode }))
+
+// ── §15 scene kinds and templates (the Go server builds the same documents) ───
+function kindOf(doc) {
+  if (doc.kind) return doc.kind
+  if (doc.objects?.length) return 'mapping'
+  return doc.mode === 'objects' ? 'mapping' : doc.mode ?? 'static'
+}
+const kindMode = (k) => (k === 'mapping' ? 'objects' : k)
+const schemaDefaults = (schema) => Object.fromEntries(Object.entries(schema ?? {}).map(([k, v]) => [k, v.default]))
+function mockAttachment(gobo, id) {
+  const item = catalogDoc.gobos.find((g) => g.id === gobo)
+  return {
+    id, gobo, name: item?.name ?? gobo, visible: true, opacity: 1, rotation: item?.attachment?.rotation ?? 0, offsetX: 0, offsetY: 0,
+    scale: item?.attachment?.scale ?? 1, params: { ...schemaDefaults(catalogDoc.goboParams), ...(item?.defaults ?? {}), ...schemaDefaults(item?.params) }, motion: null,
+  }
+}
+function mockLight(over = {}) {
+  return { intensity: 0.85, focus: 0.7, color: { mode: 'cct', kelvin: catalogDoc.stackLight?.kelvin ?? 5600, tint: 0, hue: 212, sat: 0.7 }, fx: { kind: 'none', speed: 0.35 }, colorLayer: null, fringe: 0.2, vignette: 0.3, haze: 0, slide: { x: 0, y: 0 }, motion: null, ...over }
+}
+const TEMPLATE_OF_KIND = { static: 'static-window', live: 'live-window-tree', color: 'color-ember', scenery: 'scenery-flowers', mapping: 'mapping-empty' }
+function sceneFromTemplate(id, name, setupId, template) {
+  const doc = { id, setupId, name, version: 1, kind: 'static', mode: 'static', backdrop: { static: { layers: [], light: mockLight(), attachments: [] }, live: { layers: [], light: null, attachments: [] }, color: { layers: [] }, scenery: { layers: [] } }, underlay: { on: false, from: 'static', level: 0.35 }, points: [], objects: [], sounds: { pads: [] }, timeline: { duration: 20, tracks: [], clips: [], cues: [] } }
+  const warm = { mode: 'cct', kelvin: 3200, tint: 0, hue: 212, sat: 0.7 }
+  const sun = catalogDoc.motionPresets?.find((m) => m.id === 'sun-lr')?.motion
+  switch (template) {
+    case 'static-window': {
+      const a = mockAttachment('window-4', rid('att'))
+      // off, parked in the middle of its path (phase 0.5), ready to play
+      a.motion = sun ? { ...clone(sun), on: false, phase: 0.5, startedAt: Date.now() } : null
+      doc.backdrop.static = { layers: [], light: mockLight({ color: warm, intensity: 0.85, focus: 0.68 }), attachments: [a] }
+      break
+    }
+    case 'live-window-tree': {
+      const tree = catalogDoc.procedural.find((x) => x.id === 'tree-sway')
+      doc.kind = doc.mode = 'live'
+      doc.backdrop.live = {
+        light: mockLight({ color: warm, focus: 0.68 }),
+        attachments: [mockAttachment('window-4', rid('att'))],
+        layers: [{ id: rid('lay'), kind: 'procedural', ref: 'tree-sway', name: tree?.name ?? 'tree sway', visible: true, opacity: 0.9, blend: 'multiply', light: { intensity: 0.8, softness: 0.5, angle: 0, scale: 1, offsetX: 0, offsetY: 0, color: warm, fx: { kind: 'none', speed: 0.35 } }, params: schemaDefaults(tree?.params) }],
+      }
+      break
+    }
+    case 'color-ember': {
+      const g = catalogDoc.gradients.find((x) => x.id === 'ember')
+      doc.kind = doc.mode = 'color'
+      doc.backdrop.color = { layers: [{ id: rid('lay'), kind: 'gradient', ref: 'ember', name: 'ember', visible: true, opacity: 1, blend: 'normal', light: null, params: clone(g?.defaults ?? {}) }] }
+      break
+    }
+    case 'scenery-flowers':
+      doc.kind = doc.mode = 'scenery'
+      doc.backdrop.scenery = { layers: [{ id: rid('lay'), kind: 'photo', ref: 'flowers', name: 'flowers', visible: true, opacity: 1, blend: 'normal', light: null, params: schemaDefaults(catalogDoc.photoParams) }] }
+      break
+    case 'mapping-empty':
+      doc.kind = 'mapping'
+      doc.mode = 'objects'
+      break
+  }
+  return doc
+}
 
 // ── §14 audio routing ────────────────────────────────────────────────────────
 const AUDIO_ROLE = { projector: 'output', editor: 'editor', phone: 'remote' }
@@ -374,6 +433,9 @@ function showAction(action, args = {}) {
       if (!s) throw Object.assign(new Error(`Scene ${args.sceneId} does not exist.`), { code: 'not_found' })
       S.show.activeSceneId = s.doc.id
       S.show.activeSetupId = s.doc.setupId
+      // (§15) its kind's mode goes on air
+      const want = kindMode(kindOf(s.doc))
+      if (s.doc.mode !== want) commit(`scene:${s.doc.id}`, [{ op: 'replace', path: '/mode', value: want }], 'server')
       Object.assign(t, { state: 'stopped', offset: 0, startedAt: 0, cue: 0 })
       S.show.preview = null
       clearLoops()
@@ -843,7 +905,9 @@ async function api(req, res, path, url) {
       if (!src) return err(res, 404, 'not_found', `Scene ${b.duplicate} does not exist.`)
       doc = { ...clone(src.doc), id, name, version: 1 }
     } else {
-      doc = { id, setupId: b.setupId ?? S.show.activeSetupId, name, version: 1, mode: 'static', backdrop: { static: { layers: [] }, live: { layers: [] }, color: { layers: [] }, scenery: { layers: [] } }, underlay: { on: false, from: 'static', level: 0.35 }, points: [], objects: [], sounds: { pads: [] }, timeline: { duration: 20, tracks: [], clips: [], cues: [] } }
+      const template = b.template ?? (b.kind ? TEMPLATE_OF_KIND[b.kind] : null)
+      if (b.kind && !TEMPLATE_OF_KIND[b.kind]) return err(res, 400, 'bad_request', `kind ${b.kind} is not one of static, live, color, scenery, mapping.`)
+      doc = sceneFromTemplate(id, name, b.setupId ?? S.show.activeSetupId, template)
     }
     S.scenes.set(id, { doc, version: 1, undo: [], redo: [] })
     S.history.set(id, [])
@@ -916,7 +980,7 @@ async function api(req, res, path, url) {
     if (r[2]) {
       const b = j()
       const sid = b.sceneId ?? S.show.activeSceneId
-      commit(`scene:${sid}`, [{ op: 'replace', path: `/backdrop/${p.mode}`, value: { layers: p.backdrop.layers } }, { op: 'replace', path: '/mode', value: p.mode }], 'rest')
+      commit(`scene:${sid}`, [{ op: 'replace', path: `/backdrop/${p.mode}`, value: clone(p.backdrop) }, { op: 'replace', path: '/mode', value: p.mode }], 'rest')
       return json(res, 200, { ok: true })
     }
     if (m === 'DELETE') {
@@ -1104,6 +1168,13 @@ const server = createServer(async (req, res) => {
       if (!a) return err(res, 404, 'not_found', 'No such asset.')
       res.writeHead(200, { 'content-type': a.asset.mime, 'cache-control': 'public, max-age=31536000, immutable' })
       return res.end(a.data)
+    }
+    // (§15) thumbnails rendered at build time
+    if (path.startsWith('/catalog/thumbs/')) {
+      const f = resolve(catalogAssets, 'thumbs', basename(decodeURIComponent(path.slice('/catalog/thumbs/'.length))))
+      if (!f.startsWith(catalogAssets) || !existsSync(f)) return err(res, 404, 'not_found', 'No such thumbnail.')
+      res.writeHead(200, { 'content-type': 'image/png', 'cache-control': 'public, max-age=3600' })
+      return res.end(readFileSync(f))
     }
     if (path.startsWith('/catalog/assets/')) {
       const f = resolve(catalogAssets, '.' + decodeURIComponent(path.slice('/catalog/assets'.length)))

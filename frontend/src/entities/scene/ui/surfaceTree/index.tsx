@@ -97,7 +97,7 @@ export function SurfaceTree({ header = true }: { header?: boolean }) {
                     onDoubleClick={() => srf.kind !== 'line' && srf.kind !== 'mask' && ed.editFace(srf.id)}
                     action={
                       srf.kind !== 'line' && srf.kind !== 'mask' ? (
-                        <Pill size="sm" on={ed.sel.surfaceId === srf.id} icon="edit" iconSize={12} className={s.edit} onClick={() => ed.editFace(srf.id)} title={`edit what ${srf.name} shows, flat (F)`} data-testid={`edit-face-${srf.id}`}>
+                        <Pill size="sm" on={ed.sel.surfaceId === srf.id} icon="edit" iconSize={12} className={s.edit} onClick={() => ed.editFace(srf.id)} title={`open ${srf.name} in content to add pictures, drawings or effects (F)`} data-testid={`edit-face-${srf.id}`}>
                           edit
                         </Pill>
                       ) : undefined

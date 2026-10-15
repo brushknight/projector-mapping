@@ -17,9 +17,6 @@
 .dim {
   color: var(--dim);
 }
-.ws {
-  margin-left: 4px;
-}
 .sp {
   flex: 1;
   min-width: 8px;
@@ -105,4 +102,28 @@
 .dev .dim,
 .devOff .dim {
   margin-left: auto;
+}
+.spaces {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 4px;
+  flex: none;
+}
+.showBtn {
+  padding: 0 16px;
+}
+.mapCap {
+  margin-left: 6px;
+  font-size: var(--fs-xxs);
+  letter-spacing: var(--cap-spacing);
+  text-transform: uppercase;
+  color: var(--dim);
+}
+/* the top bar is full below this width: the output size stays in the set up panel */
+@media (max-width: 1720px) {
+  .setupMeta,
+  .mapCap {
+    display: none;
+  }
 }

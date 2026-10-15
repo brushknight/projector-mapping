@@ -27,7 +27,7 @@ func TestHello(t *testing.T) {
 		CatalogVersion int
 	}
 	ws.Hello.Into(t, &w)
-	if w.Device.Role != "output" || !w.Device.Online || w.ServerTime < before || w.Show.ActiveSceneID != "scn_desk" || w.CatalogVersion != 3 {
+	if w.Device.Role != "output" || !w.Device.Online || w.ServerTime < before || w.Show.ActiveSceneID != "scn_desk" || w.CatalogVersion != 4 {
 		t.Fatalf("welcome %s", ws.Hello.D)
 	}
 	// a LAN client without a token is refused
@@ -95,7 +95,7 @@ func TestParamCoalescing(t *testing.T) {
 	ph := h.Connect("remote", "phone")
 	ed.Sub("scene:scn_desk")
 	ph.Sub("scene:scn_desk")
-	path := "/backdrop/static/layers/0/light/intensity"
+	path := "/backdrop/static/light/intensity"
 	for _, v := range []float64{0.5, 0.55, 0.6, 0.62} {
 		ph.Send(apitest.Msg{T: "param", Ch: "scene:scn_desk", D: apitest.Data(map[string]any{"path": path, "value": v})})
 	}

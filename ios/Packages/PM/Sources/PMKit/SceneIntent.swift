@@ -9,6 +9,13 @@ public enum ScenePath {
     public static func layer(_ mode: String, _ i: Int, _ field: String...) -> String { layer(mode, i) + field.map { "/" + JSONPointer.escape($0) }.joined() }
     public static func light(_ mode: String, _ i: Int, _ field: String...) -> String { layer(mode, i) + "/light" + field.map { "/" + JSONPointer.escape($0) }.joined() }
     public static func param(_ mode: String, _ i: Int, _ key: String) -> String { layer(mode, i) + "/params/\(JSONPointer.escape(key))" }
+
+    // Protocol §15: the stack light and its attachments (`static` and `live`).
+    public static func stackLight(_ mode: String, _ field: String...) -> String { stack(mode) + "/light" + field.map { "/" + JSONPointer.escape($0) }.joined() }
+    public static func attachments(_ mode: String) -> String { stack(mode) + "/attachments" }
+    public static func attachment(_ mode: String, _ i: Int, _ field: String...) -> String {
+        attachments(mode) + "/\(i)" + field.map { "/" + JSONPointer.escape($0) }.joined()
+    }
 }
 
 /// A structural edit as an intent, so the outbox can turn it into ops again on a newer document after a stale
@@ -33,6 +40,15 @@ public enum SceneIntent: Codable, Sendable, Hashable {
     case addPad(JSONValue)
     case setPadField(padId: String, field: [String], value: JSONValue)
     case removePad(padId: String)
+    /// Protocol §15. Replaces the attachments of `mode` (`static` or `live`): the "one attachment" pick.
+    case replaceAttachments(mode: String, attachments: JSONValue)
+    /// Adds an attachment on top (masks multiply).
+    case addAttachment(mode: String, attachment: JSONValue)
+    /// Sets `field` of the attachment with `attachmentId` (in whichever light stack holds it).
+    case setAttachmentField(attachmentId: String, field: [String], value: JSONValue)
+    case removeAttachment(attachmentId: String)
+    /// Sets `field` of the stack light of `mode` (creates the default light first when the stack has none).
+    case setLight(mode: String, field: [String], value: JSONValue)
     /// A raw op list for edits that have no intent yet; resent as is.
     case raw([PatchOp])
 
@@ -44,6 +60,28 @@ public enum SceneIntent: Codable, Sendable, Hashable {
         return nil
     }
 
+    /// The stack and index of an attachment id (`static` or `live`).
+    public static func locateAttachment(_ doc: JSONValue, _ id: String) -> (mode: String, index: Int)? {
+        for mode in ["static", "live"] {
+            if let i = doc.value(at: ScenePath.attachments(mode))?.array?.firstIndex(where: { $0["id"]?.string == id }) { return (mode, i) }
+        }
+        return nil
+    }
+
+    /// Ops that set `field` below `base`, creating missing (or null) parent objects.
+    static func setField(_ doc: JSONValue, base: String, _ field: [String], _ value: JSONValue) -> [PatchOp] {
+        var path = base
+        var ops: [PatchOp] = []
+        for (n, token) in field.enumerated() {
+            path += "/" + JSONPointer.escape(token)
+            if n < field.count - 1, doc.value(at: path) == nil || doc.value(at: path) == .null {
+                ops.append(doc.value(at: path) == nil ? .add(path, [:]) : .replace(path, [:]))
+            }
+        }
+        ops.append(doc.value(at: path) == nil ? .add(path, value) : .replace(path, value))
+        return ops
+    }
+
     /// The index of a pad id in `/sounds/pads`.
     public static func locatePad(_ doc: JSONValue, _ id: String) -> Int? {
         doc.value(at: "/sounds/pads")?.array?.firstIndex { $0["id"]?.string == id }
@@ -53,8 +91,9 @@ public enum SceneIntent: Codable, Sendable, Hashable {
     static func ensureStack(_ doc: JSONValue, _ mode: String) -> [PatchOp] {
         var ops: [PatchOp] = []
         if doc.value(at: "/backdrop")?.object == nil { ops.append(doc["backdrop"] == nil ? .add("/backdrop", [:]) : .replace("/backdrop", [:])) }
-        if doc.value(at: ScenePath.stack(mode))?.object == nil { ops.append(.add(ScenePath.stack(mode), ["layers": []])) }
-        else if doc.value(at: ScenePath.layers(mode))?.array == nil { ops.append(.add(ScenePath.layers(mode), [])) }
+        if doc.value(at: ScenePath.stack(mode))?.object == nil {
+            ops.append(doc.value(at: ScenePath.stack(mode)) == nil ? .add(ScenePath.stack(mode), ["layers": []]) : .replace(ScenePath.stack(mode), ["layers": []]))
+        } else if doc.value(at: ScenePath.layers(mode))?.array == nil { ops.append(.add(ScenePath.layers(mode), [])) }
         return ops
     }
 
@@ -63,17 +102,8 @@ public enum SceneIntent: Codable, Sendable, Hashable {
         switch self {
         case .setLayerField(let id, let field, let value):
             guard let (mode, i) = Self.locate(doc, id) else { return nil }
-            var path = ScenePath.layer(mode, i)
-            var ops: [PatchOp] = []
-            // Create missing parents (a layer without `light` gets one when its light is set).
-            for (n, token) in field.enumerated() {
-                path += "/" + JSONPointer.escape(token)
-                if n < field.count - 1, doc.value(at: path) == nil || doc.value(at: path) == .null {
-                    ops.append(.add(path, [:]))
-                }
-            }
-            ops.append(doc.value(at: path) == nil ? .add(path, value) : .replace(path, value))
-            return ops
+            // Creates missing parents (a layer without `light` gets one when its light is set).
+            return Self.setField(doc, base: ScenePath.layer(mode, i), field, value)
         case .addLayer(let mode, let layer, let index):
             let pre = Self.ensureStack(doc, mode)
             let count = doc.value(at: ScenePath.layers(mode))?.array?.count ?? 0
@@ -118,6 +148,33 @@ public enum SceneIntent: Codable, Sendable, Hashable {
         case .removePad(let id):
             guard let i = Self.locatePad(doc, id) else { return nil }
             return [.remove("/sounds/pads/\(i)")]
+        case .replaceAttachments(let mode, let list):
+            let pre = Self.ensureStack(doc, mode)
+            return pre + [doc.value(at: ScenePath.attachments(mode)) == nil ? .add(ScenePath.attachments(mode), list) : .replace(ScenePath.attachments(mode), list)]
+        case .addAttachment(let mode, let a):
+            let pre = Self.ensureStack(doc, mode)
+            if doc.value(at: ScenePath.attachments(mode))?.array == nil {
+                return pre + [doc.value(at: ScenePath.attachments(mode)) == nil ? .add(ScenePath.attachments(mode), [a]) : .replace(ScenePath.attachments(mode), [a])]
+            }
+            return pre + [.add(ScenePath.attachments(mode) + "/-", a)]
+        case .setAttachmentField(let id, let field, let value):
+            guard let (mode, i) = Self.locateAttachment(doc, id), !field.isEmpty else { return nil }
+            return Self.setField(doc, base: ScenePath.attachment(mode, i), field, value)
+        case .removeAttachment(let id):
+            guard let (mode, i) = Self.locateAttachment(doc, id) else { return nil }
+            return [.remove(ScenePath.attachment(mode, i))]
+        case .setLight(let mode, let field, let value):
+            guard !field.isEmpty else { return nil }
+            var pre = Self.ensureStack(doc, mode)
+            let lightPath = ScenePath.stackLight(mode)
+            var base = doc
+            if doc.value(at: lightPath)?.object == nil {
+                let fresh = (try? JSONValue(encoding: StackLight())) ?? [:]
+                pre.append(doc.value(at: lightPath) == nil ? .add(lightPath, fresh) : .replace(lightPath, fresh))
+            }
+            guard let next = try? doc.applying(pre) else { return nil }
+            base = next
+            return pre + Self.setField(base, base: lightPath, field, value)
         case .raw(let ops):
             return ops
         }

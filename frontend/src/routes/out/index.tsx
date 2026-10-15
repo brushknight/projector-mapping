@@ -155,6 +155,7 @@ export function OutPage() {
         effects: L.effects,
         t: playheadNow(hub, L.show),
         clock: ambientClock(hub),
+        now: hub.serverNow(),
         blackout: blackout.step(now),
         pattern: pattern.current,
         outline: outline.current,

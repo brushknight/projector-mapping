@@ -130,15 +130,15 @@ import PMTestSupport
     @Test func structuralEditGoesOutAsPatchAndIsAcked() async throws {
         let (hub, c, db) = try await online()
         hub.edit(sceneId: "scn_desk", .setLayerField(layerId: "lay_tree", field: ["visible"], value: false))
-        #expect(try db.read(Queries.active).scene?.layers("live")[1].visible == false)
+        #expect(try db.read(Queries.active).scene?.layers("live")[0].visible == false)
         let patch = try await c.message("patch")
         #expect(patch.ch == "scene:scn_desk")
         #expect(patch.base == 418)
-        #expect(PatchedMessage(patch.d)?.ops == [.replace("/backdrop/live/layers/1/visible", false)])
-        c.push(Envelope(t: "patched", ch: "scene:scn_desk", re: patch.id, v: 419, d: ["ops": try JSONValue(encoding: [PatchOp.replace("/backdrop/live/layers/1/visible", false)]), "by": "dev_7k2"]))
+        #expect(PatchedMessage(patch.d)?.ops == [.replace("/backdrop/live/layers/0/visible", false)])
+        c.push(Envelope(t: "patched", ch: "scene:scn_desk", re: patch.id, v: 419, d: ["ops": try JSONValue(encoding: [PatchOp.replace("/backdrop/live/layers/0/visible", false)]), "by": "dev_7k2"]))
         try await eventually { (try? db.pendingItems().isEmpty) == true }
         #expect(try db.sceneVersion("scn_desk") == 419)
-        #expect(try db.read(Queries.active).scene?.layers("live")[1].visible == false)
+        #expect(try db.read(Queries.active).scene?.layers("live")[0].visible == false)
         hub.stop()
     }
 
@@ -146,7 +146,7 @@ import PMTestSupport
         let (hub, c, db) = try await online()
         hub.edit(sceneId: "scn_desk", .setLayerField(layerId: "lay_tree", field: ["opacity"], value: 0.5))
         let first = try await c.message("patch")
-        #expect(PatchedMessage(first.d)?.ops == [.replace("/backdrop/live/layers/1/opacity", 0.5)])
+        #expect(PatchedMessage(first.d)?.ops == [.replace("/backdrop/live/layers/0/opacity", 0.5)])
         // Meanwhile the editor inserted a layer at the bottom (version 419) and the server rejects our base.
         c.push(Envelope(t: "reject", re: first.id, v: 419, d: ["code": "stale", "message": "Scene changed; rebase on version 419."]))
         _ = try await c.message("sub", ch: "scene:scn_desk", skipping: 1)
@@ -156,8 +156,8 @@ import PMTestSupport
         let second = try await c.message("patch", skipping: 1)
         #expect(second.id == first.id)
         #expect(second.base == 419)
-        #expect(PatchedMessage(second.d)?.ops == [.replace("/backdrop/live/layers/2/opacity", 0.5)])
-        #expect(try db.read(Queries.active).scene?.layers("live")[2].opacity == 0.5)
+        #expect(PatchedMessage(second.d)?.ops == [.replace("/backdrop/live/layers/1/opacity", 0.5)])
+        #expect(try db.read(Queries.active).scene?.layers("live")[1].opacity == 0.5)
         hub.stop()
     }
 
@@ -165,13 +165,13 @@ import PMTestSupport
         let (hub, fake, db) = try makeHub()
         try db.saveSceneSnapshot(Fixtures.json("scene"), version: 418)
         hub.edit(sceneId: "scn_desk", .removeLayer(layerId: "lay_tree"))
-        #expect(try db.read(Queries.active).scene?.layers("live").count == 1)
+        #expect(try db.read(Queries.active).scene?.layers("live").count == 0)
         hub.start(server: server, token: nil)
         let c = try await fake.connection()
         try c.welcome(show: show())
         c.push(Envelope(t: "snapshot", ch: "scene:scn_desk", v: 418, d: try Fixtures.json("scene")))
         let patch = try await c.message("patch")
-        #expect(PatchedMessage(patch.d)?.ops == [.remove("/backdrop/live/layers/1")])
+        #expect(PatchedMessage(patch.d)?.ops == [.remove("/backdrop/live/layers/0")])
         hub.stop()
     }
 
@@ -186,7 +186,7 @@ import PMTestSupport
         var clock = 100.0
         hub.now = { clock }
         for v in [0.2, 0.3, 0.4, 0.5, 0.6] {
-            hub.param("scene:scn_desk", "/backdrop/static/layers/0/light/intensity", .number(v))
+            hub.param("scene:scn_desk", "/backdrop/static/light/intensity", .number(v))
             clock += 0.002
         }
         clock += 0.02
@@ -195,14 +195,14 @@ import PMTestSupport
         #expect(params[0].d?["value"] == 0.2)
         #expect(abs((params[1].d?["value"]?.double ?? 0) - 0.6) < 1e-9)
         #expect(params[1].ch == "scene:scn_desk")
-        #expect(abs((try db.read(Queries.active).scene?.layers("static")[0].light?.intensity ?? 0) - 0.6) < 1e-9)
+        #expect(abs((try db.read(Queries.active).scene?.light("static")?.intensity ?? 0) - 0.6) < 1e-9)
         hub.stop()
     }
 
     @Test func incomingParamsAndPatchesReachTheStore() async throws {
         let (hub, c, db) = try await online()
-        c.push(Envelope(t: "param", ch: "scene:scn_desk", d: ["path": "/backdrop/static/layers/0/light/intensity", "value": 0.62, "by": "dev_x"]))
-        try await eventually { (try? db.read(Queries.active).scene?.layers("static")[0].light?.intensity) == 0.62 }
+        c.push(Envelope(t: "param", ch: "scene:scn_desk", d: ["path": "/backdrop/static/light/slide/x", "value": 0.25, "by": "dev_x"]))
+        try await eventually { (try? db.read(Queries.active).scene?.light("static")?.slide.x) == 0.25 }
         c.push(Envelope(t: "patched", ch: "scene:scn_desk", v: 419, d: ["ops": [["op": "replace", "path": "/name", "value": "Desk 2"]], "by": "dev_x"]))
         try await eventually { (try? db.read(Queries.active).scene?.name) == "Desk 2" }
         // A gap: the hub asks for a new snapshot.
@@ -287,9 +287,9 @@ import PMTestSupport
         try db.saveSceneSnapshot(Fixtures.json("scene"), version: 1)
         try db.saveSetup(Fixtures.json("setup"), version: 1)
         hub.startDemo()
-        hub.edit(sceneId: "scn_desk", .setLayerField(layerId: "lay_window", field: ["ref"], value: "blinds"))
+        hub.edit(sceneId: "scn_desk", .setAttachmentField(attachmentId: "att_window", field: ["gobo"], value: "blinds"))
         #expect(try db.pendingItems().isEmpty)
-        #expect(try db.read(Queries.active).scene?.layers("static")[0].ref == "blinds")
+        #expect(try db.read(Queries.active).scene?.attachments("static")[0].gobo == "blinds")
         try await hub.command("show.blackout", ["on": true])
         #expect(try db.read(Queries.active).show?.onAir == false)
         try await hub.command("show.go")
@@ -386,5 +386,34 @@ import PMTestSupport
         try await hub.deleteScene(id)
         #expect(try db.read(Queries.scenes).contains { $0.id == id } == false)
         await #expect(throws: WireError.self) { try await hub.deleteScene("scn_desk") }
+    }
+
+    @Test func demoKindScenesActivateTheirMode() async throws {
+        let (hub, _, db) = try makeHub()
+        try db.saveShow(show())
+        try db.saveSceneSnapshot(Fixtures.json("scene"), version: 1)
+        try db.saveSetup(Fixtures.json("setup"), version: 1)
+        try db.saveCatalog(Data(contentsOf: Fixtures.catalogURL), version: 4)
+        hub.startDemo()
+        let id = try await hub.createScene(name: "rain", kind: "live")
+        let row = try #require(try db.read(Queries.scenes).first { $0.id == id })
+        #expect(row.kind == "live" && row.mode == "live")
+        // Activating puts the scene's kind's mode on air (§15).
+        try db.saveSceneSnapshot(try #require(try db.sceneDoc(id)).applying(.replace("/mode", "static")), version: 2)
+        try await hub.command("show.activate", ["sceneId": .string(id)])
+        #expect(try db.read(Queries.active).scene?.mode == "live")
+        #expect(try db.read(Queries.active).scene?.attachments("live").count == 1)
+    }
+
+    @Test func attachmentEditsGoOutAsPatchesAndSlideAsParams() async throws {
+        let (hub, c, db) = try await online()
+        hub.edit(sceneId: "scn_desk", .setAttachmentField(attachmentId: "att_window", field: ["rotation"], value: 15))
+        let patch = try await c.message("patch")
+        #expect(PatchedMessage(patch.d)?.ops == [.replace("/backdrop/static/attachments/0/rotation", 15)])
+        #expect(try db.read(Queries.active).scene?.attachments("static")[0].rotation == 15)
+        hub.param("scene:scn_desk", ScenePath.stackLight("static", "slide", "x"), 0.25)
+        let param = try await c.message("param")
+        #expect(param.d?["path"] == "/backdrop/static/light/slide/x" && param.d?["value"] == 0.25)
+        hub.stop()
     }
 }

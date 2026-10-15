@@ -201,3 +201,56 @@ Tried by hand on port 7461 with real ffmpeg: an MP3 gets duration 3.03 s and 128
 
 Left out: imports are not resumed after a restart (jobs live in memory); progress of yt-dlp's separate video and
 audio downloads shows as one bar that never runs backwards; no ffmpeg re-encode of untrimmed downloads.
+
+## Light, attachments, motion, scene kinds and agent live edits (protocol §15, 2026-10-15)
+
+- **Domain** (`domain/scene/light.go`): `StackLight`, `ColorLayer`, `Attachment`, `Motion`, `Pt`; `LayerStack` gains
+  `light` and `attachments` (static always writes a light, live writes `light: null` when it has none, both write
+  `attachments: []`; color and scenery stacks and presets write `{layers}` only, through `Backdrop.MarshalJSON` and
+  `Preset.MarshalJSON`). `Layer.motion` (photo and video only), layer kind `generator`, `Scene.kind`. Absent fields
+  decode to the §15 defaults (custom `UnmarshalJSON` on the light, attachment and motion). `scene.NewID` makes
+  `att_<8 base36>` ids.
+- **Validation** (`domain/scene/validate.go`): every §15 range; `static.layers` must be empty; attachment ids share the
+  layer namespace; gobos in the catalog; attachment params against `goboParams` merged with the gobo's params (item
+  `defaults` override, `catalog.GoboSchema`); generator layers and generator colour layers against
+  `colorGenerators[ref].params`, gradient colour layers against `gradientParams` plus `stops`; motion enums and ranges;
+  `kind`. Layer tracks may target attachment ids, backdrop layer ids and `light:static` / `light:live` with clip effect
+  `motion` (`from`, `to` 0..1); content layer tracks keep reveal and sweep.
+- **Upgrade** (`domain/scene/upgrade.go`): `scene.Decode` runs the v1 → modes step, then `UpgradeStack` on static and
+  live (gobo layers become attachments, the light from the first gobo with focus = 1 − softness, defaults otherwise)
+  and infers `kind`. On start `UpgradeStored` rewrites scenes once (and fills the new `scenes.kind` / `scenes.mode`
+  columns, migration `00003_scene_kind.sql`); `Presets.UpgradeStored` rewrites static and live presets. Tested with
+  the scene and preset fixtures as they were (`domain/scene/testdata/*-v3.json`).
+- **Scene kinds**: summaries `{id, name, setupId, version, kind, mode}` on `GET /scenes` and the `scenes` channel (a
+  commit that changes name, kind or mode republishes the list). `POST /scenes {name, setupId?, duplicate?, kind?,
+  template?}` builds the five templates (`scene.FromTemplate`, catalog defaults for attachments and layers, `sun-lr`
+  from `motionPresets` with `on: false`). `show.activate` (cmd and REST) patches `/mode` to the kind's mode as
+  `server` when it differs.
+- **Presets**: a static preset snapshots `{layers: [], light, attachments}`; applying replaces the stack in its mode's
+  shape and gives clashing layer or attachment ids fresh ids. Starter presets use the light model.
+- **Settings**: `agentLiveEdits` (default false).
+- **Thumbnails**: `GET /catalog/thumbs/<id>.png` from the embedded `internal/catalog/assets/thumbs/` (no auth, the same
+  cache header as `/catalog/assets`, 404 for unknown ids). The web build renders the PNGs into that folder.
+- **MCP** (`infrastructure/mcp/tools/backdrop`): `catalog_get`, `scene_list`, `scene_create`, `scene_activate`,
+  `mode_set`, `light_set`, `attachment_add`, `attachment_update`, `attachment_remove`, `gobo_set`, `backdrop_set`,
+  `motion_set`, `preset_apply`. With `agentLiveEdits` they patch the scene on the wall as `agent:<name>` (a stale base
+  answers "call the tool again"); without it they append to the agent's draft. `scene_get` shows each stack's light
+  and attachments, `draft_diff` names attachment and light changes, the server instructions and the agent prompt
+  list the tools. `motion_set` sets `startedAt` to the server clock in ms and pauses at the current progress.
+
+Tests: `domain/scene/light_test.go` (v3 scene and preset upgrades, defaults on decode, every validation rule, the five
+templates), `contract` (scene-summary.json, settings.json, catalog v4), `apitest/scenes` (`kinds_test.go`: templates,
+summaries, the list on mode change, activate; `modes_test.go`: the light model on the seeded scene, upgrades of a v1
+and a v3 database on restart; presets in their new shape), `apitest/mcp/backdrop_test.go` (every tool, draft and live
+behaviour, patched by `agent:claude` on the scene channel), `handlers/assets/thumbs_test.go`. Tried by hand on port
+7413: a fresh data folder seeds, `POST /scenes {kind: "static"}` builds the window scene and the thumbs serve.
+
+- **Live writes in the agent panel**: with `agentLiveEdits` the first backdrop write attaches the MCP client's agent
+  session without a draft (`AgentService.AttachLive`, `draftId: ""`), so its tool events (`motion_set · att_window ·
+  sun-lr`) stream on `agent:{id}` as for draft writes. A later draft write gives the same session its draft
+  (`EnsureDraft`); reads of a session without a draft show the live scene.
+- **New scene from photo** (`POST /scenes/from-photo`) makes a `mapping` scene (mode `objects`, template
+  `mapping-empty`).
+
+Notes: a motion track whose `att_` or `lay_` target is gone stays valid (a preset or pick that replaces the stack
+must not fail on it); it moves nothing.

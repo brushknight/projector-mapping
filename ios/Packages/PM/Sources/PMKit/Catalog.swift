@@ -92,11 +92,35 @@ public struct LightCatalog: Decodable, Sendable, Hashable {
     enum CodingKeys: String, CodingKey { case params, fx, cctPresets }
 }
 
-public struct GoboItem: Codable, Sendable, Hashable, Identifiable {
+/// A catalog gobo (an attachment's shape, protocol §15 catalog v4).
+public struct GoboItem: Decodable, Sendable, Hashable, Identifiable {
+    public struct Start: Decodable, Sendable, Hashable {
+        public var scale: Double
+        public var rotation: Double
+        public init(scale: Double = 1, rotation: Double = 0) { self.scale = scale; self.rotation = rotation }
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            scale = c.v(.scale, 1)
+            rotation = c.v(.rotation, 0)
+        }
+        enum CodingKeys: String, CodingKey { case scale, rotation }
+    }
+
     public var id: String
     public var name: String
     public var description: String
+    /// `windows` | `blinds` | `nature` | `patterns` | `spots` (v3 catalogs say other things; see `browseCategory`).
     public var category: String
+    /// Relative to `/catalog/assets/`, e.g. `thumbs/window-4.png`.
+    public var thumb: String?
+    /// The gobo's own shape params (panes, slats…).
+    public var params: ParamList
+    /// Scale and rotation a new attachment of this gobo starts with.
+    public var attachment: Start
+    /// The focus that suits it (nil in v3).
+    public var focus: Double?
+    /// Overrides of the `goboParams` defaults.
+    public var defaults: JSONObject
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -104,7 +128,135 @@ public struct GoboItem: Codable, Sendable, Hashable, Identifiable {
         name = c.v(.name, "")
         description = c.v(.description, "")
         category = c.v(.category, "shadows")
+        thumb = c.opt(.thumb)
+        params = c.v(.params, ParamList())
+        attachment = c.v(.attachment, Start())
+        focus = c.opt(.focus)
+        defaults = c.v(.defaults, [:])
     }
+
+    enum CodingKeys: String, CodingKey { case id, name, description, category, thumb, params, attachment, focus, defaults }
+
+    /// The browser category: the v4 one, or a guess for a v3 catalog.
+    public var browseCategory: String {
+        if GoboCategory.known.contains(category) { return category }
+        switch id {
+        case let i where i.contains("blind") || i.contains("shutters"): return "blinds"
+        case let i where i.contains("window") || i == "arch": return "windows"
+        case let i where i.contains("tree") || i.contains("palm") || i.contains("leaf") || i.contains("leaves"): return "nature"
+        case let i where i.hasPrefix("spot") || i == "iris" || i == "oval": return "spots"
+        default: return "patterns"
+        }
+    }
+}
+
+public struct GoboCategory: Decodable, Sendable, Hashable, Identifiable {
+    public static let known = ["windows", "blinds", "nature", "patterns", "spots"]
+    public var id: String
+    public var name: String
+    public init(id: String, name: String) { self.id = id; self.name = name }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = c.v(.id, "")
+        name = c.v(.name, "")
+    }
+    enum CodingKeys: String, CodingKey { case id, name }
+}
+
+/// `stackLight`: ranges for the light and attachment controls.
+public struct StackLightCatalog: Decodable, Sendable, Hashable {
+    public var params: ParamList
+    public var kelvin: Double
+    public var attachmentParams: ParamList
+
+    public init(params: ParamList = ParamList(), kelvin: Double = 5600, attachmentParams: ParamList = ParamList()) {
+        self.params = params; self.kelvin = kelvin; self.attachmentParams = attachmentParams
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        params = c.v(.params, ParamList())
+        kelvin = c.v(.kelvin, 5600)
+        attachmentParams = c.v(.attachmentParams, ParamList())
+    }
+
+    enum CodingKeys: String, CodingKey { case params, kelvin, attachmentParams }
+}
+
+/// An animated colour (`colorGenerators`), for a light's colour layer and the `generator` layer kind.
+public struct ColorGeneratorItem: Decodable, Sendable, Hashable, Identifiable {
+    public var id: String
+    public var name: String
+    public var description: String
+    public var animated: Bool
+    public var params: ParamList
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = c.v(.id, "")
+        name = c.v(.name, "")
+        description = c.v(.description, "")
+        animated = c.v(.animated, true)
+        params = c.v(.params, ParamList())
+    }
+
+    enum CodingKeys: String, CodingKey { case id, name, description, animated, params }
+}
+
+/// A motion preset chip: the exact Motion it writes (the client sets `startedAt`).
+public struct MotionPreset: Decodable, Sendable, Hashable, Identifiable {
+    public var id: String
+    public var name: String
+    public var description: String
+    public var motion: Motion
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = c.v(.id, "")
+        name = c.v(.name, "")
+        description = c.v(.description, "")
+        motion = c.v(.motion, Motion())
+    }
+
+    enum CodingKeys: String, CodingKey { case id, name, description, motion }
+}
+
+public struct SceneKindItem: Decodable, Sendable, Hashable, Identifiable {
+    public var id: String
+    public var name: String
+    public var mode: String
+    public var description: String
+
+    public init(id: String, name: String, mode: String, description: String = "") {
+        self.id = id; self.name = name; self.mode = mode; self.description = description
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = c.v(.id, "")
+        name = c.v(.name, "")
+        mode = c.v(.mode, SceneKind.mode(c.v(.id, "")))
+        description = c.v(.description, "")
+    }
+
+    enum CodingKeys: String, CodingKey { case id, name, mode, description }
+}
+
+public struct SceneTemplate: Decodable, Sendable, Hashable, Identifiable {
+    public var id: String
+    public var kind: String
+    public var name: String
+    public var description: String
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = c.v(.id, "")
+        kind = c.v(.kind, "static")
+        name = c.v(.name, "")
+        description = c.v(.description, "")
+    }
+
+    enum CodingKeys: String, CodingKey { case id, kind, name, description }
 }
 
 public struct ProceduralItem: Decodable, Sendable, Hashable, Identifiable {
@@ -113,6 +265,8 @@ public struct ProceduralItem: Decodable, Sendable, Hashable, Identifiable {
     public var category: String
     public var animated: Bool
     public var params: ParamList
+    /// Relative to `/catalog/assets/` (catalog v4).
+    public var thumb: String?
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -121,9 +275,10 @@ public struct ProceduralItem: Decodable, Sendable, Hashable, Identifiable {
         category = c.v(.category, "")
         animated = c.v(.animated, false)
         params = c.v(.params, ParamList())
+        thumb = c.opt(.thumb)
     }
 
-    enum CodingKeys: String, CodingKey { case id, name, category, animated, params }
+    enum CodingKeys: String, CodingKey { case id, name, category, animated, params, thumb }
 
     /// The params' defaults as a layer `params` object.
     public var defaults: JSONObject {
@@ -188,6 +343,16 @@ public struct Catalog: Decodable, Sendable, Hashable {
     /// Video layer params (catalog v3, protocol §14): the photo controls plus `start`, `end`, `audio`, `volume`.
     public var videoParams: ParamList
     public var effects: [Effect]
+    // Catalog v4 (protocol §15).
+    public var stackLight: StackLightCatalog
+    public var goboParams: ParamList
+    public var goboCategories: [GoboCategory]
+    public var colorGenerators: [ColorGeneratorItem]
+    public var motionPresets: [MotionPreset]
+    public var motionEasings: [String]
+    public var motionLoops: [String]
+    public var sceneKinds: [SceneKindItem]
+    public var sceneTemplates: [SceneTemplate]
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -201,9 +366,23 @@ public struct Catalog: Decodable, Sendable, Hashable {
         photoParams = c.v(.photoParams, ParamList())
         videoParams = c.v(.videoParams, ParamList())
         effects = c.v(.effects, [])
+        stackLight = c.v(.stackLight, StackLightCatalog())
+        goboParams = c.v(.goboParams, ParamList())
+        let cats: [GoboCategory] = c.v(.goboCategories, [])
+        goboCategories = cats.isEmpty ? GoboCategory.known.map { GoboCategory(id: $0, name: $0) } : cats
+        colorGenerators = c.v(.colorGenerators, [])
+        motionPresets = c.v(.motionPresets, [])
+        motionEasings = c.v(.motionEasings, ["linear", "in", "out", "inOut", "sine"])
+        motionLoops = c.v(.motionLoops, ["once", "loop", "pingpong"])
+        let kinds: [SceneKindItem] = c.v(.sceneKinds, [])
+        sceneKinds = kinds.isEmpty ? SceneKind.all.map { SceneKindItem(id: $0, name: $0, mode: SceneKind.mode($0)) } : kinds
+        sceneTemplates = c.v(.sceneTemplates, [])
     }
 
-    enum CodingKeys: String, CodingKey { case version, light, gobos, procedural, gradients, gradientParams, scenery, photoParams, videoParams, effects }
+    enum CodingKeys: String, CodingKey {
+        case version, light, gobos, procedural, gradients, gradientParams, scenery, photoParams, videoParams, effects
+        case stackLight, goboParams, goboCategories, colorGenerators, motionPresets, motionEasings, motionLoops, sceneKinds, sceneTemplates
+    }
 
     public static let empty = try! Catalog.decode(Data("{}".utf8))
 
@@ -216,7 +395,47 @@ public struct Catalog: Decodable, Sendable, Hashable {
         cat.gradientParams.order(by: order["/gradientParams"])
         cat.photoParams.order(by: order["/photoParams"])
         cat.videoParams.order(by: order["/videoParams"])
+        cat.goboParams.order(by: order["/goboParams"])
+        cat.stackLight.params.order(by: order["/stackLight/params"])
+        cat.stackLight.attachmentParams.order(by: order["/stackLight/attachmentParams"])
+        for i in cat.gobos.indices { cat.gobos[i].params.order(by: order["/gobos/\(i)/params"]) }
+        for i in cat.colorGenerators.indices { cat.colorGenerators[i].params.order(by: order["/colorGenerators/\(i)/params"]) }
         return cat
+    }
+
+    public func colorGenerator(_ id: String) -> ColorGeneratorItem? { colorGenerators.first { $0.id == id } }
+    public func motionPreset(_ id: String) -> MotionPreset? { motionPresets.first { $0.id == id } }
+
+    /// Gobos of one browser category, in catalog order.
+    public func gobos(in category: String) -> [GoboItem] { gobos.filter { $0.browseCategory == category } }
+
+    /// The thumbnail id of a gobo or procedural item: `/catalog/thumbs/<id>.png`.
+    public func thumbId(_ id: String) -> String {
+        let path = gobo(id)?.thumb ?? procedural(id)?.thumb
+        guard let path, path.hasPrefix("thumbs/"), path.hasSuffix(".png") else { return id }
+        return String(path.dropFirst(7).dropLast(4))
+    }
+
+    /// The params an attachment of `item` starts with: the gobo's own defaults, then `goboParams` defaults overridden
+    /// by the item's `defaults` (§15).
+    public func attachmentParams(_ item: GoboItem) -> JSONObject {
+        var o = Self.defaults(item.params)
+        for (k, v) in Self.defaults(goboParams) { o[k] = v }
+        for (k, v) in item.defaults { o[k] = v }
+        return o
+    }
+
+    /// A new attachment of `item` from the catalog defaults (id `att_<8 base36>`).
+    public func newAttachment(_ item: GoboItem, id: String = ClientID.make("att")) -> Attachment {
+        Attachment(id: id, gobo: item.id, name: item.name, rotation: item.attachment.rotation, scale: item.attachment.scale,
+                   params: attachmentParams(item))
+    }
+
+    /// The params that shape an attachment: the gobo's own, then `throw`, `skew`, `depth`.
+    public func shapeParams(_ gobo: String) -> [NamedParam] {
+        let own = self.gobo(gobo)?.params.items ?? []
+        let keys = Set(own.map(\.key))
+        return own + goboParams.items.filter { !keys.contains($0.key) }
     }
 
     public func gobo(_ id: String) -> GoboItem? { gobos.first { $0.id == id } }
@@ -245,6 +464,7 @@ public struct Catalog: Decodable, Sendable, Hashable {
         case "gradient": gradientParams
         case "photo": photoParams
         case "video": videoParams
+        case "generator": colorGenerator(layer.ref)?.params ?? ParamList()
         default: ParamList()
         }
     }

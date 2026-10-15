@@ -71,6 +71,7 @@ enum Fmt {
             return "\(Int(value.rounded())) \(unit)"
         }
         if spec.lower == 0 && spec.upper == 1 { return percent(value) }
+        if spec.lower == -1 && spec.upper == 1 { return plusMinus(Int((value * 100).rounded())) + "%" }
         return String(format: "%.2f", value)
     }
 
@@ -78,6 +79,29 @@ enum Fmt {
     static func clock(_ t: Double) -> String {
         let s = Int(max(0, t).rounded())
         return s >= 3600 ? String(format: "%d:%02d:%02d", s / 3600, s / 60 % 60, s % 60) : String(format: "%d:%02d", s / 60, s % 60)
+    }
+
+    /// A move's length: "5 s", "45 s", "1 min 30 s", "10 min", "1 h 20 min", "2 h".
+    static func duration(_ seconds: Double) -> String {
+        let s = Int(seconds.rounded())
+        if s < 60 { return "\(s) s" }
+        if s < 600 { return s % 60 == 0 ? "\(s / 60) min" : "\(s / 60) min \(s % 60) s" }
+        let m = Int((seconds / 60).rounded())
+        if m < 60 { return "\(m) min" }
+        return m % 60 == 0 ? "\(m / 60) h" : "\(m / 60) h \(m % 60) min"
+    }
+
+    /// Focus 0…1 (1 is sharp): "sharp", "soft", or a percentage between.
+    static func focus(_ f: Double) -> String {
+        if f >= 0.97 { return "sharp" }
+        if f <= 0.03 { return "fully soft" }
+        return percent(f)
+    }
+
+    /// A slide offset −1…1 in frame fractions: "0", "+25 %", "−10 %".
+    static func slide(_ v: Double) -> String {
+        let n = Int((v * 100).rounded())
+        return n == 0 ? "centred" : (n > 0 ? "+\(n) %" : "−\(-n) %")
     }
 
     /// "06.4 s"

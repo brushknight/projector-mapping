@@ -70,6 +70,7 @@ func (p *Presets) Save(ctx context.Context, pr *scene.Preset) error {
 	if pr.Backdrop.Layers == nil {
 		pr.Backdrop.Layers = []scene.Layer{}
 	}
+	pr.Upgrade()
 	if err := p.repo.Save(ctx, pr); err != nil {
 		return err
 	}
@@ -82,24 +83,39 @@ func (p *Presets) Apply(ctx context.Context, id, sceneID, by string) (int64, err
 	if err != nil {
 		return 0, err
 	}
+	pr.Upgrade()
 	if sceneID == "" {
 		return 0, app_errors.BadRequest("Pick the scene to apply the preset to (sceneId).")
 	}
-	return p.scenes.commitRebase(ctx, sceneID, ApplyPresetOps(pr), by)
+	sc, err := p.scenes.Scene(ctx, sceneID)
+	if err != nil {
+		return 0, err
+	}
+	return p.scenes.commitRebase(ctx, sceneID, ApplyPresetOps(pr, sc), by)
 }
 
-// ApplyPresetOps replace the preset's mode stack and put that mode on air (protocol §1 Preset).
-func ApplyPresetOps(pr *scene.Preset) []docpatch.Op {
-	mode := pr.Mode
-	if !scene.IsBackdropMode(mode) {
-		mode = scene.ModeStatic
+// UpgradeStored rewrites the stored static and live presets from before the light model (protocol §15, Upgrade)
+// and reports how many it changed.
+func (p *Presets) UpgradeStored(ctx context.Context) (int, error) {
+	list, err := p.repo.List(ctx)
+	if err != nil {
+		return 0, err
 	}
-	layers := pr.Backdrop.Layers
-	if layers == nil {
-		layers = []scene.Layer{}
+	n := 0
+	for i := range list {
+		if !list[i].Upgrade() {
+			continue
+		}
+		if err := p.repo.Save(ctx, &list[i]); err != nil {
+			return n, err
+		}
+		n++
 	}
-	return []docpatch.Op{docpatch.Replace("/backdrop/"+mode, scene.LayerStack{Layers: layers}), docpatch.Replace("/mode", mode)}
+	return n, nil
 }
+
+// ApplyPresetOps replace the preset's mode stack and put that mode on air (see scene.PresetOps).
+func ApplyPresetOps(pr *scene.Preset, sc *scene.Scene) []docpatch.Op { return scene.PresetOps(pr, sc) }
 
 func (p *Presets) Delete(ctx context.Context, id string) error {
 	if err := p.repo.Delete(ctx, id); err != nil {

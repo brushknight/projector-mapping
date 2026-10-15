@@ -9,13 +9,13 @@ const scene: Scene = JSON.parse(readFileSync(fileURLToPath(new URL('../../../../
 const pad: SoundPad = { id: 'pad_door', name: 'door', sound: 'a77c31', volume: 1, color: 'amber', icon: 'door', key: 'd', loop: false }
 
 describe('show ops: picks', () => {
-  it('a gobo pick keeps the layer id and the light, and puts static on air', () => {
-    const s = applyPatch({ ...scene, mode: 'live' }, ops.pickOne({ ...scene, mode: 'live' }, 'static', { id: 'lay_new', kind: 'gobo', ref: 'blinds', name: 'blinds', visible: true, opacity: 1, blend: 'normal', light: { ...scene.backdrop.static.layers[0].light!, intensity: 0.1 }, params: {} }))
+  it('an attachment pick replaces the attachments, keeps the light, and puts static on air', () => {
+    const att = { id: 'att_new', gobo: 'blinds', name: 'blinds', visible: true, opacity: 1, rotation: 0, offsetX: 0, offsetY: 0, scale: 1.4, params: {}, motion: null }
+    const s = applyPatch({ ...scene, mode: 'live' }, ops.pickAttachment({ ...scene, mode: 'live' }, 'static', att))
     expect(s.mode).toBe('static')
-    expect(s.backdrop.static.layers).toHaveLength(1)
-    expect(s.backdrop.static.layers[0].id).toBe('lay_window')
-    expect(s.backdrop.static.layers[0].ref).toBe('blinds')
-    expect(s.backdrop.static.layers[0].light).toEqual(scene.backdrop.static.layers[0].light)
+    expect(s.backdrop.static.attachments).toEqual([att])
+    expect(s.backdrop.static.light).toEqual(scene.backdrop.static.light)
+    expect(s.backdrop.static.layers).toEqual([])
   })
 
   it('a video pick replaces the scenery stack and keeps the photo controls of the visible layer', () => {

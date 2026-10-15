@@ -98,6 +98,9 @@ func New(ctx context.Context, o Options) (*App, error) {
 	if _, err := a.Scenes.Service.UpgradeStored(ctx); err != nil {
 		return nil, fmt.Errorf("upgrade scenes: %w", err)
 	}
+	if _, err := a.Scenes.Presets.UpgradeStored(ctx); err != nil {
+		return nil, fmt.Errorf("upgrade presets: %w", err)
+	}
 	if err := a.Setups.Service.ExpireTestPatterns(ctx); err != nil {
 		return nil, fmt.Errorf("test patterns: %w", err)
 	}
@@ -149,7 +152,7 @@ func New(ctx context.Context, o Options) (*App, error) {
 	a.Agents.Register(api)
 	a.e.Any("/ws", echo.WrapHandler(a.Hub))
 	mh := mcp.Handler(&tools.Deps{Scenes: a.Scenes.Service, Drafts: a.Scenes.Drafts, Presets: a.Scenes.Presets, Setups: a.Setups.Service,
-		Show: a.Show.Service, Catalog: a.Catalog.Service, Assets: a.Assets.Service, Sounds: a.Sounds.Service, Agents: a.Agents.Service, Camera: a.Camera.Camera,
+		Show: a.Show.Service, Catalog: a.Catalog.Service, Assets: a.Assets.Service, Sounds: a.Sounds.Service, Videos: a.Videos.Service, Agents: a.Agents.Service, Camera: a.Camera.Camera,
 		Calibrations: a.Camera.Calibrations, Caller: a.Hub, EffectAPI: catalog.EffectAPI, Port: cfg.Port}, a.Devices.Service)
 	a.e.Any("/mcp", echo.WrapHandler(mh))
 	a.e.Any("/mcp/*", echo.WrapHandler(mh))

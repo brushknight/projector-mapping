@@ -49,4 +49,7 @@ type Settings struct {
 	AgentMayGoLive  bool `json:"agentMayGoLive"`
 	// AgentMayApply lets an agent apply its own draft to the live scene (MCP draft_apply).
 	AgentMayApply bool `json:"agentMayApply"`
+	// AgentLiveEdits sends the backdrop MCP tools' writes straight to the live scene instead of the agent's draft
+	// (protocol §15).
+	AgentLiveEdits bool `json:"agentLiveEdits"`
 }

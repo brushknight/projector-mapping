@@ -31,6 +31,11 @@ export interface RenderInput {
   t: number
   /** ambient clock, seconds (backdrop animation, light fx); keeps running while the transport is stopped */
   clock: number
+  /**
+   * (§15) the server clock in Unix ms, for motion (hour-long moves need the unwrapped clock). Absent = motions hold at
+   * their phase.
+   */
+  now?: number
   /** 0 = on air, 1 = black. The caller animates the fade over setup.blackoutFadeMs */
   blackout: number
   /** calibration override, drawn in physical framebuffer pixels over everything (physical space only) */

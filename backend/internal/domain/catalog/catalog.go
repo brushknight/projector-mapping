@@ -133,8 +133,178 @@ type Catalog struct {
 	// VideoParams are the params of a video backdrop layer (catalog version 3).
 	VideoParams Schema `json:"videoParams"`
 
+	// Catalog version 4 (protocol §15): the stack light, attachments (gobos), colour generators, motion and scene kinds.
+	StackLight      StackLightSpec  `json:"stackLight"`
+	GoboParams      Schema          `json:"goboParams"`
+	GoboCategories  []Named         `json:"goboCategories"`
+	ColorGenerators []Item          `json:"colorGenerators"`
+	MotionPresets   []MotionPreset  `json:"motionPresets"`
+	MotionEasings   []string        `json:"motionEasings"`
+	MotionLoops     []string        `json:"motionLoops"`
+	SceneKinds      []SceneKind     `json:"sceneKinds"`
+	SceneTemplates  []SceneTemplate `json:"sceneTemplates"`
+
 	Raw json.RawMessage `json:"-"`
 }
+
+// StackLightSpec is catalog.stackLight: the ranges UIs use for the stack light and attachments.
+type StackLightSpec struct {
+	Params           Schema  `json:"params"`
+	Kelvin           float64 `json:"kelvin"`
+	AttachmentParams Schema  `json:"attachmentParams"`
+}
+
+// Named is an {id, name} pair (gobo categories).
+type Named struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// MotionPreset is one motion chip: the exact Motion it writes (the scene package decodes Motion).
+type MotionPreset struct {
+	ID          string          `json:"id"`
+	Name        string          `json:"name"`
+	Description string          `json:"description"`
+	Motion      json.RawMessage `json:"motion"`
+}
+
+// SceneKind is what a scene is for, and the mode it puts on air.
+type SceneKind struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Mode        string `json:"mode"`
+	Description string `json:"description"`
+}
+
+// SceneTemplate is a starting point for a new scene of a kind.
+type SceneTemplate struct {
+	ID          string `json:"id"`
+	Kind        string `json:"kind"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
+// Gobo is a gobos item with its version 4 fields.
+type Gobo struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Category    string `json:"category"`
+	Thumb       string `json:"thumb"`
+	Params      Schema `json:"params"`
+	// Attachment is the scale and rotation a new attachment of this gobo starts with.
+	Attachment struct {
+		Scale    float64 `json:"scale"`
+		Rotation float64 `json:"rotation"`
+	} `json:"attachment"`
+	// Focus is the focus that suits the gobo.
+	Focus float64 `json:"focus"`
+	// Defaults override goboParams defaults.
+	Defaults map[string]any `json:"defaults"`
+}
+
+// Gobo returns a gobo by id, or nil.
+func (c *Catalog) Gobo(id string) *Gobo {
+	it := find(c.Gobos, id)
+	if it == nil {
+		return nil
+	}
+	var g Gobo
+	_ = json.Unmarshal(it.Raw, &g)
+	if g.Attachment.Scale == 0 {
+		g.Attachment.Scale = 1
+	}
+	return &g
+}
+
+// GoboSchema is an attachment's param schema: goboParams merged with the gobo's own params, the gobo's defaults
+// overriding goboParams defaults. It reports whether the gobo exists.
+func (c *Catalog) GoboSchema(id string) (Schema, bool) {
+	g := c.Gobo(id)
+	if g == nil {
+		return nil, false
+	}
+	out := Schema{}
+	for k, p := range c.GoboParams {
+		out[k] = p
+	}
+	for k, p := range g.Params {
+		out[k] = p
+	}
+	for k, v := range g.Defaults {
+		if p, ok := out[k]; ok {
+			p.Default = v
+			out[k] = p
+		}
+	}
+	return out, true
+}
+
+// Defaults are a schema's default values.
+func Defaults(s Schema) map[string]any {
+	out := map[string]any{}
+	for k, p := range s {
+		if p.Default != nil {
+			out[k] = p.Default
+		}
+	}
+	return out
+}
+
+// GoboDefaults are every param default of an attachment of this gobo (nil when the gobo does not exist).
+func (c *Catalog) GoboDefaults(id string) map[string]any {
+	s, ok := c.GoboSchema(id)
+	if !ok {
+		return nil
+	}
+	return Defaults(s)
+}
+
+// Generator returns a colour generator by id, or nil.
+func (c *Catalog) Generator(id string) *Item { return find(c.ColorGenerators, id) }
+
+// MotionPreset returns a motion preset by id, or nil.
+func (c *Catalog) MotionPreset(id string) *MotionPreset {
+	for i := range c.MotionPresets {
+		if c.MotionPresets[i].ID == id {
+			return &c.MotionPresets[i]
+		}
+	}
+	return nil
+}
+
+// SceneKind returns a scene kind by id, or nil.
+func (c *Catalog) SceneKind(id string) *SceneKind {
+	for i := range c.SceneKinds {
+		if c.SceneKinds[i].ID == id {
+			return &c.SceneKinds[i]
+		}
+	}
+	return nil
+}
+
+// SceneTemplate returns a template by id, or nil.
+func (c *Catalog) SceneTemplate(id string) *SceneTemplate {
+	for i := range c.SceneTemplates {
+		if c.SceneTemplates[i].ID == id {
+			return &c.SceneTemplates[i]
+		}
+	}
+	return nil
+}
+
+// DefaultTemplate is the first template of a kind, or nil.
+func (c *Catalog) DefaultTemplate(kind string) *SceneTemplate {
+	for i := range c.SceneTemplates {
+		if c.SceneTemplates[i].Kind == kind {
+			return &c.SceneTemplates[i]
+		}
+	}
+	return nil
+}
+
+// ProceduralItem returns a procedural item by id, or nil.
+func (c *Catalog) ProceduralItem(id string) *Item { return find(c.Procedural, id) }
 
 // Light is the light block of the catalog.
 type Light struct {
@@ -165,7 +335,11 @@ func find(items []Item, id string) *Item {
 func (c *Catalog) LayerSchema(kind, ref string) (Schema, bool) {
 	switch kind {
 	case "gobo":
-		return nil, find(c.Gobos, ref) != nil
+		return c.GoboSchema(ref)
+	case "generator":
+		if it := find(c.ColorGenerators, ref); it != nil {
+			return it.Params, true
+		}
 	case "procedural":
 		if it := find(c.Procedural, ref); it != nil {
 			return it.Params, true

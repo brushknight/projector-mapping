@@ -32,6 +32,10 @@ type AgentService interface {
 	Cancel(ctx context.Context, id string) (*agents.Session, error)
 	// Attach makes a session (and its draft) for an MCP client that connected on its own (Claude Code, Codex).
 	Attach(ctx context.Context, agent, sceneID string) (*agents.Session, error)
+	// AttachLive makes a session without a draft for an MCP client whose first write went live (agentLiveEdits).
+	AttachLive(ctx context.Context, agent, sceneID string) (*agents.Session, error)
+	// EnsureDraft gives a session made by AttachLive its draft (on its first draft write).
+	EnsureDraft(ctx context.Context, sessionID string) (*agents.Session, error)
 	// Log appends an event to a session's log (MCP tool calls of attached sessions).
 	Log(ctx context.Context, sessionID string, e agents.Event)
 	// Finish ends a session started over MCP (its proposal is in).

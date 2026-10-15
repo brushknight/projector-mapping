@@ -21,9 +21,10 @@ struct AddLayerSheet: View {
     /// Live shadows first, then the gobos not on the wall yet, then the rest (the board's order).
     var items: [Item] {
         let cat = model.catalog
-        let inStack = Set(model.layers("live").map(\.ref))
+        let inStack = Set(model.layers("live").map(\.ref) + model.attachments("live").map(\.gobo))
         func p(_ x: ProceduralItem) -> Item { Item(id: x.id, name: x.name, category: x.category, kind: "procedural", animated: x.animated, description: "") }
-        func g(_ x: GoboItem) -> Item { Item(id: x.id, name: x.name, category: x.category, kind: "gobo", animated: false, description: x.description) }
+        // Gobos join the live stack as attachments in front of its light (§15), listed under "shadows".
+        func g(_ x: GoboItem) -> Item { Item(id: x.id, name: x.name, category: "shadows", kind: "gobo", animated: false, description: x.description) }
         let nature = cat.procedural.filter { $0.category == "nature" }.map(p)
         let lateGobos: Set<String> = ["dots", "spot"]
         let gobos = cat.gobos.filter { !inStack.contains($0.id) && $0.id != "tree" && $0.id != "palm" }
@@ -62,7 +63,7 @@ struct AddLayerSheet: View {
             ScrollView {
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
                     ForEach(shown) { item in
-                        ImageCard(item.name, badge: item.animated ? "live" : nil, action: { add(item) }) { GoboArt(item.id) }
+                        ImageCard(item.name, badge: item.animated ? "live" : nil, action: { add(item) }) { CatalogThumb(item.id) { GoboArt(GoboFallback.art(item.id, category: model.catalog.gobo(item.id)?.browseCategory ?? "")) } }
                     }
                 }
                 .padding(.bottom, 20)
@@ -81,6 +82,12 @@ struct AddLayerSheet: View {
     }
 
     func add(_ item: Item) {
+        if item.kind == "gobo", let g = model.catalog.gobo(item.id), let a = try? JSONValue(encoding: model.catalog.newAttachment(g)) {
+            if model.light("live") == nil { model.edit(.setLight(mode: "live", field: ["intensity"], value: 0.85)) }
+            model.edit(.addAttachment(mode: "live", attachment: a))
+            dismiss()
+            return
+        }
         let light = (try? JSONValue(encoding: Light(intensity: 0.8, softness: 0.62))) ?? [:]
         var params: JSONValue = [:]
         var blend = "normal"

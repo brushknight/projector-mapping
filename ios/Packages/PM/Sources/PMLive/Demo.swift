@@ -72,6 +72,15 @@ extension LiveHub {
             if let id = args["sceneId"]?.string {
                 show.activeSceneId = id
                 show.transport = Transport()
+                // §15: activating a scene puts its kind's mode on air.
+                if let doc = (try? db.confirmedScene(id)) ?? nil, let scene = try? doc.decode(Scene.self),
+                   let version = (try? db.sceneVersion(id)) ?? nil {
+                    let mode = SceneKind.mode(scene.kind)
+                    if scene.mode != mode {
+                        let op: PatchOp = doc["mode"] == nil ? .add("/mode", .string(mode)) : .replace("/mode", .string(mode))
+                        _ = try? db.applyScenePatch(id, ops: [op], version: version + 1)
+                    }
+                }
                 if !show.audio.loops.isEmpty { demoSound(.stop(SoundStop()), show: show) }
                 show.audio.loops = []
             }

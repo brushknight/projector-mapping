@@ -82,7 +82,7 @@ test('edit face opens the face alone; drawing a rect appends a stroke; esc goes 
   await page.getByTestId('tree-surface-srf_left').click()
   await page.getByTestId('inspector-edit-face').click()
   await expect(page.getByTestId('editor')).toHaveAttribute('data-space', 'content')
-  await expect(page.getByTestId('face-title')).toContainText('zimacube / left')
+  await expect(page.getByTestId('face-title')).toHaveText('zimacube · left face')
   // the fixture's drawing (a rect border, a squiggle and "hello") renders flat
   await expect.poll(async () => (await litSamples(page, '[data-testid="face-canvas"]', 7)).lit).toBeGreaterThan(5)
 
@@ -103,7 +103,7 @@ test('edit face opens the face alone; drawing a rect appends a stroke; esc goes 
 
   // ] goes to the next face, esc back to the unfold
   await page.keyboard.press(']')
-  await expect(page.getByTestId('face-title')).toContainText('zimacube / right')
+  await expect(page.getByTestId('face-title')).toHaveText('zimacube · right face')
   await page.keyboard.press('Escape')
   await expect(page.getByTestId('atlas')).toBeVisible()
 })

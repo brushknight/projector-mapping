@@ -1,9 +1,10 @@
 import { useNavigate } from '@tanstack/react-router'
 import { useRef } from 'react'
-import { Cap, Icon, Menu, OnAirDot, Pill, Segmented, type ToolItem } from '../../../../shared/components'
+import { Cap, Icon, Menu, OnAirDot, Pill, Segmented, Tooltip, type ToolItem } from '../../../../shared/components'
 import { useChannel, useServerSecond } from '../../../../shared/lib/useHub'
 import { useRaf } from '../../../../shared/lib/useRaf'
 import type { Device } from '../../../device/types'
+import { openViewer } from '../../../output/viewer'
 import { SetupPanel } from '../../../setup'
 import { playheadNow, soloSecondsLeft } from '../../../show/live'
 import { useEditor, type Space, type Tool } from '../../editor/context'
@@ -45,6 +46,13 @@ export function EditorBar() {
   return (
     <header className={s.bar}>
       <span className={s.wm}>projector map</span>
+      {ed.workspace === 'automap' ? (
+        <Pill icon="close" onClick={() => ed.setSpace('map')} data-testid="close-automap">
+          close auto map
+        </Pill>
+      ) : (
+        <SpaceSwitch />
+      )}
       <SceneSwitcher
         hub={ed.hub}
         show={ed.show}
@@ -57,26 +65,9 @@ export function EditorBar() {
         onCreated={inShow ? undefined : (id) => ed.openScene(id)}
         onFromPhoto={ed.openFromPhoto}
       />
-      {ed.workspace === 'automap' ? (
-        <Pill icon="close" onClick={() => ed.setSpace('map')} data-testid="close-automap">
-          close auto map
-        </Pill>
-      ) : (
-        <Segmented<Space>
-          ariaLabel="space"
-          width={250}
-          className={s.ws}
-          value={ed.space}
-          onChange={ed.setSpace}
-          options={[
-            { value: 'show', label: 'show', title: 'run the wall: modes, scenes, cues and the soundboard' },
-            { value: 'map', label: 'map', title: 'place the faces on the object (tab)' },
-            { value: 'content', label: 'content', title: 'the faces unfolded flat, to put content on them (tab)' },
-          ]}
-        />
-      )}
       {!inShow && <PreviewMini />}
       <span className={s.sp} />
+      <ViewerButton />
       <SetUpMenu />
       {!inShow && <Segmented
         ariaLabel="output"
@@ -91,6 +82,57 @@ export function EditorBar() {
       />}
       <WallGroup />
     </header>
+  )
+}
+
+/**
+ * Show first: the home of the editor, where the wall runs. Map and Content are the mapping workshop beside it,
+ * reached on purpose.
+ */
+function SpaceSwitch() {
+  const ed = useEditor()
+  const inShow = ed.space === 'show'
+  return (
+    <div className={s.spaces} role="group" aria-label="space">
+      <Tooltip text="Show runs the wall: modes, scenes, cues and the soundboard. Start here.">
+        <Pill on={inShow} aria-pressed={inShow} icon="modeStatic" onClick={() => ed.setSpace('show')} className={s.showBtn} data-testid="space-show">
+          show
+        </Pill>
+      </Tooltip>
+      <span className={s.mapCap} aria-hidden="true">
+        mapping
+      </span>
+      <Segmented<Space>
+        ariaLabel="mapping space"
+        size="sm"
+        width={150}
+        value={inShow ? null : ed.space}
+        onChange={ed.setSpace}
+        options={[
+          { value: 'map', label: 'map', title: 'map: place the faces on the real object (tab switches map and content)' },
+          { value: 'content', label: 'content', title: 'content: put pictures, drawings and effects on the faces (tab switches map and content)' },
+        ]}
+      />
+    </div>
+  )
+}
+
+/** Opens a window with exactly what the projector shows (the /view route). */
+function ViewerButton() {
+  const ed = useEditor()
+  const portrait = !!ed.setup && ed.setup.output.orientation !== 'landscape'
+  return (
+    <Tooltip text="open a window that shows exactly what the projector shows">
+      <Pill
+        icon="window"
+        onClick={() => {
+          if (!openViewer({ portrait })) ed.toast('The browser blocked the viewer window. Allow pop-ups for this page and click again.', { bad: true })
+        }}
+        data-testid="open-viewer"
+      >
+        open viewer
+      </Pill>
+    </Tooltip>
   )
 }
 
@@ -155,7 +197,7 @@ function SetUpMenu() {
       trigger={({ toggle }) => (
         <Pill icon="projector" onClick={toggle} aria-label="set up" data-testid="setup-chip" className={outputs.some((o) => (o.telemetry?.dropped ?? 0) > 5) ? s.warn : undefined}>
           set up
-          {setup && <span className={s.dim}>{`${ratio(setup.output.width, setup.output.height)} · ${setup.output.width}×${setup.output.height}`}</span>}
+          {setup && <span className={`${s.dim} ${s.setupMeta}`}>{`${ratio(setup.output.width, setup.output.height)} · ${setup.output.width}×${setup.output.height}`}</span>}
         </Pill>
       )}
     >

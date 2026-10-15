@@ -27,6 +27,7 @@ import (
 	setupssvc "projmap/internal/application/services/setups"
 	showsvc "projmap/internal/application/services/show"
 	soundssvc "projmap/internal/application/services/sounds"
+	videossvc "projmap/internal/application/services/videos"
 	"projmap/internal/domain/agents"
 	"projmap/internal/domain/devices"
 	"projmap/internal/domain/docpatch"
@@ -44,6 +45,7 @@ type Deps struct {
 	Catalog      catalogsvc.CatalogService
 	Assets       assetssvc.AssetService
 	Sounds       soundssvc.SoundService
+	Videos       videossvc.VideoService
 	Agents       agentssvc.AgentService
 	Camera       camerasvc.CameraService
 	Calibrations camerasvc.CalibrationService
@@ -101,7 +103,7 @@ func (s *Session) AgentName() string {
 func (e *Env) AgentSession(ctx context.Context, create bool) (*agents.Session, error) {
 	e.S.mu.Lock()
 	defer e.S.mu.Unlock()
-	if e.S.agent != nil && e.S.P.SessionID == "" {
+	if e.S.agent != nil && e.S.P.SessionID == "" && e.S.agent.DraftID != "" {
 		// a client that attached on its own starts over once its draft is applied or discarded, so it can keep
 		// working (and its look tools show the live scene until it writes again)
 		if d, err := e.D.Drafts.Get(ctx, e.S.agent.DraftID); err == nil && !d.IsOpen() {
@@ -130,11 +132,44 @@ func (e *Env) AgentSession(ctx context.Context, create bool) (*agents.Session, e
 	return a, nil
 }
 
+// LiveSession is the session's agent session for a live write (agentLiveEdits): attached on first use without a
+// draft, so the tool events reach the editor's agent panel and nothing lands in a draft.
+func (e *Env) LiveSession(ctx context.Context) (*agents.Session, error) {
+	e.S.mu.Lock()
+	defer e.S.mu.Unlock()
+	if e.S.agent != nil {
+		return e.S.agent, nil
+	}
+	if e.S.P.SessionID != "" {
+		a, err := e.D.Agents.Get(ctx, e.S.P.SessionID)
+		if err != nil {
+			return nil, err
+		}
+		e.S.agent = a
+		return a, nil
+	}
+	a, err := e.D.Agents.AttachLive(ctx, e.S.AgentName(), "")
+	if err != nil {
+		return nil, err
+	}
+	e.S.agent = a
+	return a, nil
+}
+
 // DraftID is the session's draft (created on first use).
 func (e *Env) DraftID(ctx context.Context) (string, error) {
 	a, err := e.AgentSession(ctx, true)
 	if err != nil {
 		return "", err
+	}
+	if a.DraftID == "" {
+		// a session that only wrote live so far gets its draft now
+		if a, err = e.D.Agents.EnsureDraft(ctx, a.ID); err != nil {
+			return "", err
+		}
+		e.S.mu.Lock()
+		e.S.agent = a
+		e.S.mu.Unlock()
 	}
 	d, err := e.D.Drafts.Get(ctx, a.DraftID)
 	if err != nil {
@@ -152,7 +187,7 @@ func (e *Env) View(ctx context.Context) (*scene.Scene, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
-	if a != nil {
+	if a != nil && a.DraftID != "" {
 		s, err := e.D.Drafts.View(ctx, a.DraftID)
 		return s, a.DraftID, err
 	}
@@ -249,7 +284,8 @@ func (e *Env) log(ctx context.Context, tool string, in any, ok bool, d time.Dura
 	if json.Unmarshal(b, &m) == nil && len(m) > 0 {
 		// a readable line for the agent panel: the tool, then what it acted on
 		var parts []string
-		for _, k := range []string{"name", "surface_id", "object_id", "layer_id", "layer_name", "id", "summary"} {
+		for _, k := range []string{"name", "surface_id", "object_id", "layer_id", "layer_name", "id", "target", "scene", "stack", "gobo",
+			"preset", "mode", "section", "summary"} {
 			if v, ok := m[k].(string); ok && v != "" {
 				parts = append(parts, v)
 			}

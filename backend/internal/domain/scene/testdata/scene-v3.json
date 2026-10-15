@@ -1,0 +1,1145 @@
+{
+ "id": "scn_desk",
+ "setupId": "set_desk",
+ "name": "Desk",
+ "version": 1,
+ "mode": "static",
+ "backdrop": {
+  "static": {
+   "layers": [
+    {
+     "id": "lay_window",
+     "kind": "gobo",
+     "ref": "window",
+     "name": "window 2×3",
+     "visible": true,
+     "opacity": 1.0,
+     "blend": "normal",
+     "light": {
+      "intensity": 0.8,
+      "softness": 0.62,
+      "angle": -22,
+      "scale": 1.4,
+      "offsetX": 0,
+      "offsetY": 0,
+      "color": {
+       "mode": "cct",
+       "kelvin": 3200,
+       "tint": 0.04,
+       "hue": 212,
+       "sat": 0.7
+      },
+      "fx": {
+       "kind": "none",
+       "speed": 0.35
+      }
+     },
+     "params": {}
+    }
+   ]
+  },
+  "live": {
+   "layers": [
+    {
+     "id": "lay_live_window",
+     "kind": "gobo",
+     "ref": "window",
+     "name": "window 2×3",
+     "visible": true,
+     "opacity": 1.0,
+     "blend": "normal",
+     "light": {
+      "intensity": 0.8,
+      "softness": 0.55,
+      "angle": -22,
+      "scale": 1.4,
+      "offsetX": 0,
+      "offsetY": 0,
+      "color": {
+       "mode": "cct",
+       "kelvin": 3200,
+       "tint": 0.04,
+       "hue": 212,
+       "sat": 0.7
+      },
+      "fx": {
+       "kind": "none",
+       "speed": 0.35
+      }
+     },
+     "params": {}
+    },
+    {
+     "id": "lay_tree",
+     "kind": "procedural",
+     "ref": "tree-sway",
+     "name": "tree sway",
+     "visible": true,
+     "opacity": 0.88,
+     "blend": "multiply",
+     "light": {
+      "intensity": 0.8,
+      "softness": 0.62,
+      "angle": -22,
+      "scale": 1.4,
+      "offsetX": 0,
+      "offsetY": 0,
+      "color": {
+       "mode": "cct",
+       "kelvin": 3200,
+       "tint": 0.04,
+       "hue": 212,
+       "sat": 0.7
+      },
+      "fx": {
+       "kind": "none",
+       "speed": 0.35
+      }
+     },
+     "params": {
+      "wind": 0.4,
+      "gust": 0.18,
+      "focus": 0.7,
+      "seed": 7
+     }
+    }
+   ]
+  },
+  "color": {
+   "layers": [
+    {
+     "id": "lay_ember",
+     "kind": "gradient",
+     "ref": "ember",
+     "name": "ember",
+     "visible": true,
+     "opacity": 1.0,
+     "blend": "normal",
+     "light": null,
+     "params": {
+      "stops": [
+       {
+        "color": "#ff4d00",
+        "pos": 0.0
+       },
+       {
+        "color": "#ff2e63",
+        "pos": 0.5
+       },
+       {
+        "color": "#6a00f4",
+        "pos": 1.0
+       }
+      ],
+      "angle": 135,
+      "drift": 0.24,
+      "grain": 0.12,
+      "brightness": 0.9
+     }
+    }
+   ]
+  },
+  "scenery": {
+   "layers": [
+    {
+     "id": "lay_waves",
+     "kind": "video",
+     "ref": "youtube:aqz-KE-bpKQ",
+     "name": "big buck bunny",
+     "visible": false,
+     "opacity": 1,
+     "blend": "normal",
+     "light": null,
+     "params": {
+      "blur": 0.2,
+      "brightness": 0.8,
+      "warmth": 0,
+      "drift": 0,
+      "start": 12,
+      "end": 0,
+      "audio": false,
+      "volume": 1
+     }
+    },
+    {
+     "id": "lay_flowers",
+     "kind": "photo",
+     "ref": "flowers",
+     "name": "flowers",
+     "visible": true,
+     "opacity": 1.0,
+     "blend": "normal",
+     "light": null,
+     "params": {
+      "blur": 0.74,
+      "brightness": 0.66,
+      "warmth": 0,
+      "drift": 0.1
+     }
+    }
+   ]
+  }
+ },
+ "underlay": {
+  "on": false,
+  "from": "static",
+  "level": 0.35
+ },
+ "points": [
+  {
+   "id": "p_t",
+   "x": 960,
+   "y": 300
+  },
+  {
+   "id": "p_r",
+   "x": 1230,
+   "y": 450
+  },
+  {
+   "id": "p_br",
+   "x": 1230,
+   "y": 750
+  },
+  {
+   "id": "p_b",
+   "x": 960,
+   "y": 900
+  },
+  {
+   "id": "p_bl",
+   "x": 690,
+   "y": 750
+  },
+  {
+   "id": "p_l",
+   "x": 690,
+   "y": 450
+  },
+  {
+   "id": "p_c",
+   "x": 960,
+   "y": 600
+  },
+  {
+   "id": "p_bay0_0",
+   "x": 992,
+   "y": 642
+  },
+  {
+   "id": "p_bay0_1",
+   "x": 1033,
+   "y": 620
+  },
+  {
+   "id": "p_bay0_2",
+   "x": 1033,
+   "y": 800
+  },
+  {
+   "id": "p_bay0_3",
+   "x": 992,
+   "y": 822
+  },
+  {
+   "id": "p_bay1_0",
+   "x": 1046,
+   "y": 612
+  },
+  {
+   "id": "p_bay1_1",
+   "x": 1087,
+   "y": 590
+  },
+  {
+   "id": "p_bay1_2",
+   "x": 1087,
+   "y": 770
+  },
+  {
+   "id": "p_bay1_3",
+   "x": 1046,
+   "y": 792
+  },
+  {
+   "id": "p_bay2_0",
+   "x": 1100,
+   "y": 582
+  },
+  {
+   "id": "p_bay2_1",
+   "x": 1141,
+   "y": 560
+  },
+  {
+   "id": "p_bay2_2",
+   "x": 1141,
+   "y": 740
+  },
+  {
+   "id": "p_bay2_3",
+   "x": 1100,
+   "y": 762
+  },
+  {
+   "id": "p_bay3_0",
+   "x": 1154,
+   "y": 552
+  },
+  {
+   "id": "p_bay3_1",
+   "x": 1195,
+   "y": 530
+  },
+  {
+   "id": "p_bay3_2",
+   "x": 1195,
+   "y": 710
+  },
+  {
+   "id": "p_bay3_3",
+   "x": 1154,
+   "y": 732
+  },
+  {
+   "id": "p_fan_c",
+   "x": 825,
+   "y": 525
+  },
+  {
+   "id": "p_fan_r",
+   "x": 885,
+   "y": 525
+  },
+  {
+   "id": "p_cpu_0",
+   "x": 879,
+   "y": 450
+  },
+  {
+   "id": "p_cpu_1",
+   "x": 960,
+   "y": 405
+  },
+  {
+   "id": "p_cpu_2",
+   "x": 1041,
+   "y": 450
+  },
+  {
+   "id": "p_cpu_3",
+   "x": 960,
+   "y": 495
+  },
+  {
+   "id": "p_lamp0",
+   "x": 1600,
+   "y": 860
+  },
+  {
+   "id": "p_lamp1",
+   "x": 1600,
+   "y": 700
+  },
+  {
+   "id": "p_lamp2",
+   "x": 1560,
+   "y": 700
+  },
+  {
+   "id": "p_lamp3",
+   "x": 1590,
+   "y": 560
+  },
+  {
+   "id": "p_lamp4",
+   "x": 1700,
+   "y": 560
+  },
+  {
+   "id": "p_lamp5",
+   "x": 1730,
+   "y": 700
+  },
+  {
+   "id": "p_lamp6",
+   "x": 1690,
+   "y": 700
+  },
+  {
+   "id": "p_lamp7",
+   "x": 1690,
+   "y": 860
+  },
+  {
+   "id": "p_shelf0",
+   "x": 120,
+   "y": 160
+  },
+  {
+   "id": "p_shelf1",
+   "x": 480,
+   "y": 130
+  },
+  {
+   "id": "p_shelf2",
+   "x": 480,
+   "y": 420
+  },
+  {
+   "id": "p_shelf3",
+   "x": 120,
+   "y": 450
+  }
+ ],
+ "objects": [
+  {
+   "id": "obj_cube",
+   "name": "zimacube",
+   "tags": [
+    "hero"
+   ],
+   "visible": true,
+   "surfaces": [
+    {
+     "id": "srf_top",
+     "name": "top",
+     "kind": "quad",
+     "role": "face",
+     "pointIds": [
+      "p_l",
+      "p_t",
+      "p_r",
+      "p_c"
+     ],
+     "parentId": null,
+     "visible": true,
+     "mesh": null,
+     "effects": [
+      {
+       "id": "fx_trace",
+       "effect": "trace",
+       "enabled": true,
+       "params": {
+        "mode": "border",
+        "line": 3,
+        "speed": 2.0,
+        "glow": 0.62,
+        "pixelStep": 0,
+        "color": "#e9fbff"
+       }
+      }
+     ],
+     "opacity": 1.0,
+     "softEdge": 8
+    },
+    {
+     "id": "srf_left",
+     "name": "left",
+     "kind": "quad",
+     "role": "face",
+     "pointIds": [
+      "p_l",
+      "p_c",
+      "p_b",
+      "p_bl"
+     ],
+     "parentId": null,
+     "visible": true,
+     "mesh": null,
+     "effects": [
+      {
+       "id": "fx_draw",
+       "name": "sketch",
+       "effect": "drawing",
+       "enabled": true,
+       "params": {
+        "reveal": 1,
+        "strokes": [
+         {
+          "tool": "rect",
+          "points": [
+           [
+            0.08,
+            0.08
+           ],
+           [
+            0.92,
+            0.92
+           ]
+          ],
+          "color": "#e9fbff",
+          "width": 4,
+          "fill": false
+         },
+         {
+          "tool": "pen",
+          "points": [
+           [
+            0.2,
+            0.62
+           ],
+           [
+            0.3,
+            0.55
+           ],
+           [
+            0.4,
+            0.66
+           ],
+           [
+            0.5,
+            0.56
+           ],
+           [
+            0.6,
+            0.67
+           ],
+           [
+            0.7,
+            0.57
+           ],
+           [
+            0.8,
+            0.64
+           ]
+          ],
+          "color": "#ff3b30",
+          "width": 8
+         },
+         {
+          "tool": "text",
+          "points": [
+           [
+            0.18,
+            0.2
+           ]
+          ],
+          "color": "#ffffff",
+          "width": 0,
+          "text": "hello",
+          "size": 64
+         },
+         {
+          "tool": "polygon",
+          "points": [
+           [
+            0.7,
+            0.2
+           ],
+           [
+            0.85,
+            0.2
+           ],
+           [
+            0.78,
+            0.34
+           ]
+          ],
+          "color": "#ff3b30",
+          "width": 2,
+          "fill": true
+         },
+         {
+          "tool": "circle",
+          "points": [
+           [
+            0.88,
+            0.85
+           ],
+           [
+            0.9,
+            0.85
+           ]
+          ],
+          "color": "#34c759",
+          "width": 0,
+          "fill": true
+         }
+        ]
+       }
+      }
+     ],
+     "opacity": 1.0,
+     "softEdge": 8
+    },
+    {
+     "id": "srf_right",
+     "name": "right",
+     "kind": "quad",
+     "role": "face",
+     "pointIds": [
+      "p_c",
+      "p_r",
+      "p_br",
+      "p_b"
+     ],
+     "parentId": null,
+     "visible": true,
+     "mesh": null,
+     "effects": [],
+     "opacity": 1.0,
+     "softEdge": 8,
+     "layers": [
+      {
+       "id": "cl_flowers",
+       "kind": "media",
+       "name": "flowers",
+       "visible": true,
+       "opacity": 0.8,
+       "blend": "normal",
+       "x": 0,
+       "y": 0,
+       "scale": 1,
+       "rotation": 0,
+       "reveal": 1,
+       "revealAngle": 0,
+       "src": "flowers",
+       "media": "image",
+       "fit": "fill",
+       "crop": {
+        "x": 0,
+        "y": 0,
+        "w": 1,
+        "h": 1
+       }
+      }
+     ]
+    },
+    {
+     "id": "srf_edges",
+     "name": "edges",
+     "kind": "line",
+     "role": "edge",
+     "pointIds": [
+      "p_bl",
+      "p_l",
+      "p_t",
+      "p_r",
+      "p_br",
+      "p_b",
+      "p_bl"
+     ],
+     "parentId": null,
+     "visible": true,
+     "mesh": null,
+     "effects": [],
+     "opacity": 1.0,
+     "softEdge": 0
+    },
+    {
+     "id": "srf_bay0",
+     "name": "bay 1",
+     "kind": "quad",
+     "role": "detail",
+     "pointIds": [
+      "p_bay0_0",
+      "p_bay0_1",
+      "p_bay0_2",
+      "p_bay0_3"
+     ],
+     "parentId": "srf_right",
+     "visible": true,
+     "mesh": null,
+     "effects": [],
+     "opacity": 1.0,
+     "softEdge": 0
+    },
+    {
+     "id": "srf_bay1",
+     "name": "bay 2",
+     "kind": "quad",
+     "role": "detail",
+     "pointIds": [
+      "p_bay1_0",
+      "p_bay1_1",
+      "p_bay1_2",
+      "p_bay1_3"
+     ],
+     "parentId": "srf_right",
+     "visible": true,
+     "mesh": null,
+     "effects": [],
+     "opacity": 1.0,
+     "softEdge": 0
+    },
+    {
+     "id": "srf_bay2",
+     "name": "bay 3",
+     "kind": "quad",
+     "role": "detail",
+     "pointIds": [
+      "p_bay2_0",
+      "p_bay2_1",
+      "p_bay2_2",
+      "p_bay2_3"
+     ],
+     "parentId": "srf_right",
+     "visible": true,
+     "mesh": null,
+     "effects": [],
+     "opacity": 1.0,
+     "softEdge": 0
+    },
+    {
+     "id": "srf_bay3",
+     "name": "bay 4",
+     "kind": "quad",
+     "role": "detail",
+     "pointIds": [
+      "p_bay3_0",
+      "p_bay3_1",
+      "p_bay3_2",
+      "p_bay3_3"
+     ],
+     "parentId": "srf_right",
+     "visible": true,
+     "mesh": null,
+     "effects": [],
+     "opacity": 1.0,
+     "softEdge": 0
+    },
+    {
+     "id": "srf_cpu",
+     "name": "cpu",
+     "kind": "quad",
+     "role": "detail",
+     "pointIds": [
+      "p_cpu_0",
+      "p_cpu_1",
+      "p_cpu_2",
+      "p_cpu_3"
+     ],
+     "parentId": "srf_top",
+     "visible": true,
+     "mesh": null,
+     "effects": [],
+     "opacity": 1.0,
+     "softEdge": 0
+    },
+    {
+     "id": "srf_fan",
+     "name": "fan",
+     "kind": "circle",
+     "role": "detail",
+     "pointIds": [
+      "p_fan_c",
+      "p_fan_r"
+     ],
+     "parentId": "srf_left",
+     "visible": true,
+     "mesh": null,
+     "effects": [],
+     "opacity": 1.0,
+     "softEdge": 0
+    }
+   ],
+   "atlas": {
+    "width": 618,
+    "height": 609,
+    "faces": {
+     "srf_top": {
+      "x": 0,
+      "y": 0,
+      "w": 309,
+      "h": 309,
+      "rotation": 270
+     },
+     "srf_left": {
+      "x": 0,
+      "y": 309,
+      "w": 309,
+      "h": 300,
+      "rotation": 0
+     },
+     "srf_right": {
+      "x": 309,
+      "y": 309,
+      "w": 309,
+      "h": 300,
+      "rotation": 0
+     }
+    }
+   },
+   "layers": [
+    {
+     "id": "cl_sweep",
+     "kind": "gradient",
+     "name": "sweep",
+     "visible": true,
+     "opacity": 0.9,
+     "blend": "screen",
+     "x": 0,
+     "y": 0,
+     "scale": 1,
+     "rotation": 0,
+     "reveal": 1,
+     "revealAngle": 0,
+     "stops": [
+      {
+       "color": "#000000",
+       "pos": 0
+      },
+      {
+       "color": "#ff3b30",
+       "pos": 0.45
+      },
+      {
+       "color": "#e9fbff",
+       "pos": 0.5
+      },
+      {
+       "color": "#000000",
+       "pos": 0.6
+      }
+     ],
+     "angle": 30,
+     "offset": 0,
+     "repeat": true
+    }
+   ]
+  },
+  {
+   "id": "obj_lamp",
+   "name": "desk lamp",
+   "tags": [],
+   "visible": true,
+   "surfaces": [
+    {
+     "id": "srf_lamp",
+     "name": "outline",
+     "kind": "poly",
+     "role": "face",
+     "pointIds": [
+      "p_lamp0",
+      "p_lamp1",
+      "p_lamp2",
+      "p_lamp3",
+      "p_lamp4",
+      "p_lamp5",
+      "p_lamp6",
+      "p_lamp7"
+     ],
+     "parentId": null,
+     "visible": true,
+     "mesh": null,
+     "effects": [],
+     "opacity": 1.0,
+     "softEdge": 0
+    }
+   ]
+  },
+  {
+   "id": "obj_shelf",
+   "name": "shelf",
+   "tags": [],
+   "visible": true,
+   "surfaces": [
+    {
+     "id": "srf_shelf",
+     "name": "front",
+     "kind": "quad",
+     "role": "face",
+     "pointIds": [
+      "p_shelf0",
+      "p_shelf1",
+      "p_shelf2",
+      "p_shelf3"
+     ],
+     "parentId": null,
+     "visible": true,
+     "mesh": null,
+     "effects": [],
+     "opacity": 1.0,
+     "softEdge": 8
+    }
+   ]
+  }
+ ],
+ "sounds": {
+  "pads": [
+   {
+    "id": "pad_thunder",
+    "name": "thunder",
+    "sound": "a77c31",
+    "volume": 0.9,
+    "color": "blue",
+    "icon": "thunder",
+    "key": "t",
+    "loop": false
+   },
+   {
+    "id": "pad_rain",
+    "name": "rain",
+    "sound": "5d1e0a",
+    "volume": 0.6,
+    "color": "teal",
+    "icon": "rain",
+    "key": "r",
+    "loop": true
+   }
+  ]
+ },
+ "timeline": {
+  "duration": 20.0,
+  "tracks": [
+   {
+    "id": "trk_faces",
+    "name": "zimacube · faces",
+    "target": {
+     "kind": "object",
+     "id": "obj_cube"
+    }
+   },
+   {
+    "id": "trk_edges",
+    "name": "zimacube · edges",
+    "target": {
+     "kind": "surface",
+     "id": "srf_edges"
+    }
+   },
+   {
+    "id": "trk_bays",
+    "name": "zimacube · hdd bays",
+    "target": {
+     "kind": "surface",
+     "id": "srf_bay0"
+    }
+   },
+   {
+    "id": "trk_cpu",
+    "name": "zimacube · cpu",
+    "target": {
+     "kind": "surface",
+     "id": "srf_cpu"
+    }
+   },
+   {
+    "id": "trk_fan",
+    "name": "zimacube · fan",
+    "target": {
+     "kind": "surface",
+     "id": "srf_fan"
+    }
+   },
+   {
+    "id": "trk_lamp",
+    "name": "desk lamp",
+    "target": {
+     "kind": "object",
+     "id": "obj_lamp"
+    }
+   },
+   {
+    "id": "trk_shelf",
+    "name": "shelf",
+    "target": {
+     "kind": "object",
+     "id": "obj_shelf"
+    }
+   },
+   {
+    "id": "trk_all",
+    "name": "all",
+    "target": {
+     "kind": "all",
+     "id": null
+    }
+   },
+   {
+    "id": "trk_sweep",
+    "name": "zimacube · sweep",
+    "target": {
+     "kind": "layer",
+     "id": "cl_sweep"
+    }
+   },
+   {
+    "id": "trk_sound",
+    "name": "sound",
+    "target": {
+     "kind": "sound",
+     "id": null
+    }
+   }
+  ],
+  "clips": [
+   {
+    "id": "clp_grid",
+    "trackId": "trk_faces",
+    "effect": "grid-build",
+    "start": 0,
+    "end": 4,
+    "fadeIn": 0.2,
+    "fadeOut": 0.2,
+    "params": {}
+   },
+   {
+    "id": "clp_trace",
+    "trackId": "trk_faces",
+    "effect": "trace",
+    "start": 4,
+    "end": 6,
+    "fadeIn": 0.2,
+    "fadeOut": 0.2,
+    "params": {
+     "mode": "border"
+    }
+   },
+   {
+    "id": "clp_hl",
+    "trackId": "trk_faces",
+    "effect": "highlight",
+    "start": 6,
+    "end": 8,
+    "fadeIn": 0.2,
+    "fadeOut": 0.2,
+    "params": {}
+   },
+   {
+    "id": "clp_edges",
+    "trackId": "trk_edges",
+    "effect": "trace",
+    "start": 4,
+    "end": 6.5,
+    "fadeIn": 0.2,
+    "fadeOut": 0.2,
+    "params": {
+     "mode": "boomerang"
+    }
+   },
+   {
+    "id": "clp_bays",
+    "trackId": "trk_bays",
+    "effect": "scan",
+    "start": 8,
+    "end": 11,
+    "fadeIn": 0.2,
+    "fadeOut": 0.2,
+    "params": {}
+   },
+   {
+    "id": "clp_cpu",
+    "trackId": "trk_cpu",
+    "effect": "pulse",
+    "start": 9,
+    "end": 12,
+    "fadeIn": 0.2,
+    "fadeOut": 0.2,
+    "params": {}
+   },
+   {
+    "id": "clp_fan",
+    "trackId": "trk_fan",
+    "effect": "spin",
+    "start": 10,
+    "end": 14,
+    "fadeIn": 0.2,
+    "fadeOut": 0.2,
+    "params": {}
+   },
+   {
+    "id": "clp_lamp",
+    "trackId": "trk_lamp",
+    "effect": "trace",
+    "start": 10,
+    "end": 13,
+    "fadeIn": 0.2,
+    "fadeOut": 0.2,
+    "params": {}
+   },
+   {
+    "id": "clp_shelf",
+    "trackId": "trk_shelf",
+    "effect": "fill",
+    "start": 12,
+    "end": 15,
+    "fadeIn": 0.2,
+    "fadeOut": 0.2,
+    "params": {
+     "opacity": 0.4
+    }
+   },
+   {
+    "id": "clp_all",
+    "trackId": "trk_all",
+    "effect": "glitch",
+    "start": 16,
+    "end": 20,
+    "fadeIn": 0.2,
+    "fadeOut": 0.2,
+    "params": {}
+   },
+   {
+    "id": "clp_sweep",
+    "trackId": "trk_sweep",
+    "effect": "sweep",
+    "start": 0,
+    "end": 4,
+    "fadeIn": 0,
+    "fadeOut": 0,
+    "params": {
+     "from": -1,
+     "to": 1
+    }
+   },
+   {
+    "id": "clp_rain",
+    "trackId": "trk_sound",
+    "effect": "sound",
+    "start": 2,
+    "end": 9,
+    "fadeIn": 0.5,
+    "fadeOut": 1.5,
+    "params": {
+     "sound": "5d1e0a",
+     "offset": 0.5,
+     "volume": 0.8
+    }
+   }
+  ],
+  "cues": [
+   {
+    "id": "cue_1",
+    "at": 0,
+    "label": "grid build",
+    "autoFollow": false,
+    "sound": {
+     "sound": "a77c31",
+     "volume": 1
+    }
+   },
+   {
+    "id": "cue_2",
+    "at": 4,
+    "label": "trace",
+    "autoFollow": false
+   },
+   {
+    "id": "cue_3",
+    "at": 6,
+    "label": "highlight",
+    "autoFollow": false
+   },
+   {
+    "id": "cue_4",
+    "at": 8,
+    "label": "hardware",
+    "autoFollow": false
+   },
+   {
+    "id": "cue_5",
+    "at": 10,
+    "label": "lamp + shelf",
+    "autoFollow": false
+   },
+   {
+    "id": "cue_6",
+    "at": 16,
+    "label": "collide",
+    "autoFollow": false
+   }
+  ]
+ }
+}

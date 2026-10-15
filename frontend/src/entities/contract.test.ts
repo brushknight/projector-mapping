@@ -9,7 +9,7 @@ import { deviceShape, telemetryShape } from './device/schema'
 import { draftShape } from './draft/schema'
 import { effectShape } from './effect/schema'
 import { presetShape } from './preset/schema'
-import { patchOpShape, sceneShape } from './scene/schema'
+import { patchOpShape, sceneShape, sceneSummaryShape } from './scene/schema'
 import { setupShape } from './setup/schema'
 import { showShape } from './show/schema'
 import type { Scene } from './scene/types'
@@ -18,7 +18,7 @@ import { importJobShape, videoShape } from './video/schema'
 
 // (§14) a library sound: an asset of kind sound with its name, duration and peaks
 const soundShape: Guard = (v, p) => [...assetShape(v, p), ...obj({ kind: lit('sound'), name: str, duration: num, peaks: arr(num) })(v, p)]
-const sceneSummaryShape = obj({ id: str, name: str, setupId: str, version: int })
+const settingsShape = obj({ agentMayPreview: bool, agentMayGoLive: bool, agentMayApply: nullable(bool), agentLiveEdits: nullable(bool) })
 /** snapshot payloads by channel (prefix before ':') */
 const snapshots: Record<string, Guard> = {
   sounds: arr(soundShape),
@@ -53,6 +53,8 @@ const byFile: Record<string, Guard> = {
   'sound.json': soundShape,
   'video.json': videoShape,
   'import.json': importJobShape,
+  'scene-summary.json': arr(sceneSummaryShape),
+  'settings.json': settingsShape,
 }
 
 const envelope = obj({ t: str, ch: nullable(str), id: nullable(str), re: nullable(str), v: nullable(int), base: nullable(int) })
@@ -122,6 +124,22 @@ describe('contract fixtures', () => {
 
   it('decodes the catalog', () => {
     expect(() => assertShape(catalogShape, read('catalog.json'), 'catalog')).not.toThrow()
+  })
+
+  it('carries the §15 light, attachments, motion and kind', () => {
+    const scene = read('fixtures/scene.json') as Scene
+    expect(scene.kind).toBe('mapping')
+    expect(scene.backdrop.static.layers).toHaveLength(0)
+    expect(scene.backdrop.static.light?.focus).toBeGreaterThan(0)
+    expect(scene.backdrop.static.attachments?.[0].gobo).toBe('window')
+    expect(scene.backdrop.static.attachments?.[0].motion?.preset).toBe('sun-lr')
+    const cat = read('catalog.json')
+    expect(cat.version).toBe(4)
+    expect(cat.gobos.length).toBeGreaterThanOrEqual(30)
+    for (const g of cat.gobos) expect(cat.goboCategories.map((c: { id: string }) => c.id)).toContain(g.category)
+    expect(cat.motionPresets.map((m: { id: string }) => m.id)).toEqual(['sun-lr', 'sun-rl', 'drift', 'sway', 'rise', 'set'])
+    // an attachment needs its gobo
+    expect(sceneShape({ ...scene, backdrop: { ...scene.backdrop, static: { ...scene.backdrop.static, attachments: [{ id: 'att_x' }] } } }, '').length).toBeGreaterThan(0)
   })
 
   it('rejects a drifted shape', () => {

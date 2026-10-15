@@ -41,6 +41,7 @@ func (h *Handler) RegisterRoutes(root *echo.Echo, api *echo.Group) {
 	root.GET("/a/:sha", h.bytes)
 	root.HEAD("/a/:sha", h.bytes)
 	root.GET("/catalog/assets/*", h.catalogFile)
+	root.GET("/catalog/thumbs/:file", h.catalogThumb)
 }
 
 // ReadUpload reads the multipart "file" (or the first file part) of a request.
@@ -128,6 +129,26 @@ func (h *Handler) catalogFile(c echo.Context) error {
 	}
 	if _, err := fs.Stat(h.catalog, name); err != nil {
 		return app_errors.NotFound("Catalog file %s does not exist.", name)
+	}
+	c.Response().Header().Set("Cache-Control", "public, max-age=86400")
+	http.ServeFileFS(c.Response(), c.Request(), h.catalog, name)
+	return nil
+}
+
+// catalogThumb serves /catalog/thumbs/<id>.png: the built-in thumbnail of a gobo or procedural layer (protocol §15),
+// the same file as /catalog/assets/thumbs/<id>.png.
+func (h *Handler) catalogThumb(c echo.Context) error {
+	file := c.Param("file")
+	id, ok := strings.CutSuffix(file, ".png")
+	if !ok || id == "" || strings.ContainsAny(id, "/\\") || strings.HasPrefix(id, ".") {
+		return app_errors.NotFound("Thumbnail %s does not exist.", file)
+	}
+	name := "thumbs/" + id + ".png"
+	if !fs.ValidPath(name) {
+		return app_errors.NotFound("Thumbnail %s does not exist.", file)
+	}
+	if _, err := fs.Stat(h.catalog, name); err != nil {
+		return app_errors.NotFound("Thumbnail %s does not exist.", file)
 	}
 	c.Response().Header().Set("Cache-Control", "public, max-age=86400")
 	http.ServeFileFS(c.Response(), c.Request(), h.catalog, name)

@@ -100,17 +100,32 @@ func TestPresets(t *testing.T) {
 	r := h.Do("POST", "/api/v1/presets", map[string]any{"name": "desk now", "mode": "live", "sceneId": "scn_desk"})
 	apitest.Expect(t, r, http.StatusCreated)
 	p := r.Map(t)
-	if len(p["backdrop"].(map[string]any)["layers"].([]any)) != 2 || p["thumbAsset"] != nil || p["mode"] != "live" {
+	if pb := p["backdrop"].(map[string]any); len(pb["layers"].([]any)) != 1 || len(pb["attachments"].([]any)) != 1 || pb["light"] == nil || p["thumbAsset"] != nil || p["mode"] != "live" {
 		t.Fatalf("preset %v", p)
 	}
-	// without a mode the preset takes the scene's mode (static in the fixture) and snapshots that stack only
+	// without a mode the preset takes the scene's mode (static in the fixture) and snapshots that stack's shape
 	q := h.Do("POST", "/api/v1/presets", map[string]any{"name": "desk static", "sceneId": "scn_desk"}).Map(t)
-	if q["mode"] != "static" || len(q["backdrop"].(map[string]any)["layers"].([]any)) != 1 {
+	if qb := q["backdrop"].(map[string]any); q["mode"] != "static" || len(qb["layers"].([]any)) != 0 || len(qb["attachments"].([]any)) != 1 || qb["light"] == nil {
 		t.Fatalf("preset from the scene mode %v", q)
 	}
+	// a color preset is layers only
+	c := h.Do("POST", "/api/v1/presets", map[string]any{"name": "desk color", "mode": "color", "sceneId": "scn_desk"}).Map(t)
+	if cb := c["backdrop"].(map[string]any); len(cb) != 1 || len(cb["layers"].([]any)) != 2 {
+		t.Fatalf("color preset %v", c)
+	}
+	// every starter preset applies cleanly (their ids never clash with the scene's other stacks)
+	for _, id := range []string{"pre_golden", "pre_office", "pre_noir", "pre_breezy", "pre_storm"} {
+		apitest.Expect(t, h.Do("POST", "/api/v1/presets/"+id+"/apply", map[string]any{"sceneId": "scn_desk"}), http.StatusOK)
+	}
+	// a preset whose ids another stack of the scene uses gets fresh ids there (layers and attachments share one
+	// namespace): the desk's static snapshot holds att_window, applied as a live preset next to the static att_window
+	live := map[string]any{"name": "window live", "mode": "live", "sceneId": "scn_desk"}
+	lp := h.Do("POST", "/api/v1/presets", live).Map(t)
+	apitest.Expect(t, h.Do("POST", "/api/v1/presets/"+q["id"].(string)+"/apply", map[string]any{"sceneId": "scn_desk"}), http.StatusOK)
+	apitest.Expect(t, h.Do("POST", "/api/v1/presets/"+lp["id"].(string)+"/apply", map[string]any{"sceneId": "scn_desk"}), http.StatusOK)
 	apitest.ExpectErr(t, h.Do("POST", "/api/v1/presets", map[string]any{"name": "x", "mode": "loud"}), http.StatusBadRequest, "bad_request")
 	v := h.Do("POST", "/api/v1/presets/pre_ember/apply", map[string]any{"sceneId": "scn_desk"}).Map(t)["version"]
-	if v != float64(2) {
+	if v != float64(9) {
 		t.Fatalf("apply version %v", v)
 	}
 	sc := h.Do("GET", "/api/v1/scenes/scn_desk", nil).Map(t)
@@ -192,7 +207,7 @@ func TestFromPhoto(t *testing.T) {
 	sha := up.Map(t)["sha"].(string)
 	r := h.Do("POST", "/api/v1/scenes/from-photo", map[string]any{"asset": sha, "position": "lens", "name": "Shelf"})
 	apitest.Expect(t, r, http.StatusCreated)
-	if r.Map(t)["name"] != "Shelf" {
+	if m := r.Map(t); m["name"] != "Shelf" || m["kind"] != "mapping" || m["mode"] != "objects" {
 		t.Fatalf("scene %s", r.Body)
 	}
 	if h.Do("GET", "/api/v1/setups/set_desk", nil).Map(t)["referenceAsset"] != sha {

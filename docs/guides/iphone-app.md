@@ -49,7 +49,8 @@ The simulator reaches a server on the same Mac at `127.0.0.1:7400`. Useful launc
 | argument | does |
 | --- | --- |
 | `-pm-demo` | offline demo with sample data, no server |
-| `-pm-screen <name>` | open on one screen: `static`, `live`, `color`, `scenery`, `objects`, `setup`, `automap1`…`automap4`, `connect`, `scenes`, `sounds`, `youtube`, `videos` |
+| `-pm-screen <name>` | open on one screen: `static`, `live`, `color`, `scenery`, `objects`, `setup`, `automap1`…`automap4`, `connect`, `scenes`, `scenepreview`, `motion`, `sounds`, `youtube`, `videos` |
+| `-pm-scroll <points>` | scroll the opened tab down (screenshots of lower cards) |
 | `-pm-reset` | forget the server and the cache |
 | `-pm-connect "projmap://connect?server=127.0.0.1:7400&code=K7Q2"` | pair with a code |
 
@@ -81,8 +82,24 @@ The simulator has no camera; auto map shows a drawn desk there.
 ## Using it
 
 - **Tabs** are the modes (static, live, color, scenery, objects); opening one puts it on air.
-- **Scenes:** the scene button at the top of every tab lists the scenes, marks the one on the wall, and switches,
-  creates or duplicates scenes.
+- **Static** is a spotlight with attachments in front of it, like gobos in a real light:
+  - **Attachments**: pick a category (windows, blinds, nature, patterns, spots) and tap a tile to put that one in
+    front of the light. Turn on **add on top** (or hold a tile) to stack another one: each blocks more light.
+    Below, shape the selected one: **blocks** (100 % is metal, less is glass), rotation, scale, position, and under
+    **shape** its own controls (panes, slats, throw, keystone, frame depth).
+  - **Light**: intensity and the **focus** ring (soft to sharp, for the whole picture), then the colour: **white**
+    (temperature, tint, presets), **color** (hue, saturation), **layer** (a gradient or an animated colour such as hue
+    cycle or colour flow), **effects** (candle, fire, police…). **Lens** adds the colour fringe, vignette and haze.
+  - **Frame slide**: drag sideways on the picture, or use the slider, to slide the whole light across the wall (up and
+    down in portrait). **reset** centres it.
+  - **Motion**: pick a move (sun passes left to right, slow drift, rise, set…) for the whole light or for the selected
+    attachment. **speed** sets how long one pass takes (5 s to 2 h) without jumping; **pause** and **play** hold and
+    resume it where it is; **off** removes it. Every screen and the wall follow the server's clock.
+- **Live** shows the same light and attachments above its shadow layers (tree sway, clouds), which block light too.
+- **Scenes:** the scene button at the top of every tab lists the scenes grouped by kind (static, live, color,
+  scenery, mapping) with a picture of each; the chips filter by kind. Tap a scene to put it on the wall: its tab
+  opens. **Hold** a scene to preview it moving without putting it on air, then **put it on the wall** if you like it.
+  Make a new static, live or mapping scene at the bottom; rename, duplicate or delete from a scene's menu.
 - **Sounds:** the speaker button at the top of every tab opens the soundboard of the active scene, the sound library,
   the master volume and mute, and the audio output. With the output set to **phone**, the phone itself plays every
   sound, the timeline's sound clips and cue sounds included.
@@ -102,6 +119,11 @@ The simulator has no camera; auto map shows a drawn desk there.
 | Photos | sending a photo or a video you pick to the projector as scenery |
 
 The app speaks plain HTTP on the local network only (App Transport Security allows local networking).
+
+If the picture at the top of a tab stays on the drawn stand-in, the phone could not load the server's preview page
+yet (Local Network not allowed, Wi-Fi not joined, server not running). It tries again every few seconds, when the app
+comes back to the front and when the connection returns. In a Debug build, Safari › Develop › your phone shows the
+page's console.
 
 ## TestFlight and the App Store
 

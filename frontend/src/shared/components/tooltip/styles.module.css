@@ -1,0 +1,26 @@
+.wrap {
+  display: inline-flex;
+  flex: none;
+  min-width: 0;
+}
+.tip {
+  position: fixed;
+  z-index: 90;
+  max-width: 240px;
+  width: max-content;
+  transform: translateX(-50%);
+  padding: 6px 10px;
+  border-radius: var(--radius-num);
+  background: var(--dialog);
+  box-shadow: 0 0 0 1px var(--control-line), var(--shadow-dialog);
+  color: var(--ink-2);
+  font-family: var(--ui);
+  font-size: var(--fs-xs);
+  line-height: 1.4;
+  text-align: center;
+  pointer-events: none;
+  white-space: normal;
+}
+.tip.top {
+  transform: translate(-50%, -100%);
+}

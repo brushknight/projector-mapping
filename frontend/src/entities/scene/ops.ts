@@ -4,8 +4,8 @@
  * They return null when the target no longer exists.
  */
 import { pointer } from '../../shared/lib/jsonPatch'
-import { locateLayer, stackLayers } from './lib'
-import type { Atlas, AtlasRect, BackdropMode, Clip, ContentLayer, Cue, EffectInstance, Layer, LayerStack, Mesh, PatchOp, Point, Scene, SceneMode, SceneObject, SoundPad, Surface, Track, Underlay } from './types'
+import { findLayer, locateAttachment, locateLayer, stackAttachments, stackLayers } from './lib'
+import type { Atlas, AtlasRect, Attachment, BackdropMode, Clip, ContentLayer, Cue, EffectInstance, Layer, LayerStack, Mesh, Motion, PatchOp, Point, Scene, SceneMode, SceneObject, SoundPad, StackLight, Surface, Track, Underlay } from './types'
 
 type Ops = PatchOp[] | null
 
@@ -240,10 +240,10 @@ export function pickSingle(scene: Scene, mode: BackdropMode, layer: Layer, keep:
 
 /** Applies a preset: replaces its mode's stack and puts that mode on air (protocol §1 Preset). */
 export function applyPresetOps(preset: { mode: BackdropMode; backdrop: LayerStack }): PatchOp[] {
-  return [
-    { op: 'replace', path: pointer('backdrop', preset.mode), value: { layers: preset.backdrop.layers } },
-    ...setMode(preset.mode),
-  ]
+  // (§15) a static or live preset carries its light and attachments too: the whole stack
+  const b = preset.backdrop
+  const value: LayerStack = preset.mode === 'static' || preset.mode === 'live' ? { layers: b.layers ?? [], light: b.light ?? null, attachments: b.attachments ?? [] } : { layers: b.layers }
+  return [{ op: 'replace', path: pointer('backdrop', preset.mode), value }, ...setMode(preset.mode)]
 }
 
 export function setUnderlay(scene: Scene, underlay: Underlay): PatchOp[] {
@@ -549,4 +549,70 @@ export function setCueSound(scene: Scene, cueId: string, sound: { sound: string;
   const path = pointer('timeline', 'cues', i, 'sound')
   if (!sound) return has ? [{ op: 'remove', path }] : null
   return [{ op: has ? 'replace' : 'add', path, value: { sound: sound.sound, volume: Math.max(0, Math.min(1, sound.volume)) } }]
+}
+
+// ── (§15) the light and its attachments ──────────────────────────────────────
+
+export type LightStack = 'static' | 'live'
+
+/** A path into a static or live stack's light, e.g. lightPath('static', 'color', 'kelvin'). */
+export const lightPath = (mode: LightStack, ...rest: Array<string | number>) => pointer('backdrop', mode, 'light', ...rest)
+
+/** Sets (or, in a live stack without one, adds) the stack light. */
+export function setStackLight(scene: Scene, mode: LightStack, light: StackLight | null): PatchOp[] {
+  const st = scene.backdrop[mode]
+  return [{ op: st && 'light' in st ? 'replace' : 'add', path: lightPath(mode), value: light }]
+}
+
+/** The path of an attachment (or one of its fields), wherever it lives, or null. */
+export function attachmentPath(scene: Scene, id: string, ...rest: Array<string | number>): string | null {
+  const loc = locateAttachment(scene, id)
+  return loc ? pointer('backdrop', loc.mode, 'attachments', loc.i, ...rest) : null
+}
+
+/** Replaces every attachment of a stack (the quick pick: one gobo), and puts that stack on air. */
+export function setAttachments(scene: Scene, mode: LightStack, list: Attachment[], onAir = true): PatchOp[] {
+  const st = scene.backdrop[mode]
+  const ops: PatchOp[] = [{ op: st && st.attachments ? 'replace' : 'add', path: pointer('backdrop', mode, 'attachments'), value: list }]
+  if (mode === 'static' && !st?.light) ops.push({ op: st && 'light' in st ? 'replace' : 'add', path: lightPath(mode), value: null })
+  if (onAir && scene.mode !== mode) ops.push(...setMode(mode))
+  return ops
+}
+
+/**
+ * Picks one attachment: replaces the list with it, keeping the place, size and turn of the one it replaces when it is
+ * the same kind of shape (so swapping windows keeps the composition).
+ */
+export function pickAttachment(scene: Scene, mode: LightStack, att: Attachment): PatchOp[] {
+  return setAttachments(scene, mode, [att])
+}
+
+/** Adds an attachment on top (masks multiply: more attachments block more light). */
+export function addAttachment(scene: Scene, mode: LightStack, att: Attachment): PatchOp[] {
+  const st = scene.backdrop[mode]
+  if (!st?.attachments) return setAttachments(scene, mode, [att], false)
+  return [{ op: 'add', path: pointer('backdrop', mode, 'attachments', '-'), value: att }]
+}
+
+export function removeAttachment(scene: Scene, id: string): Ops {
+  const p = attachmentPath(scene, id)
+  return p ? [{ op: 'remove', path: p }] : null
+}
+
+/** Where a motion lives: the stack light, an attachment, or a photo / video layer. */
+export type MotionTarget = { kind: 'light'; mode: LightStack } | { kind: 'attachment'; id: string } | { kind: 'layer'; id: string }
+
+export function motionPath(scene: Scene, target: MotionTarget): string | null {
+  if (target.kind === 'light') return lightPath(target.mode, 'motion')
+  if (target.kind === 'attachment') return attachmentPath(scene, target.id, 'motion')
+  return layerPath(scene, target.id, 'motion')
+}
+
+/** Sets or clears (null) a motion. */
+export function setMotion(scene: Scene, target: MotionTarget, motion: Motion | null): Ops {
+  const p = motionPath(scene, target)
+  if (!p) return null
+  const parent = target.kind === 'light' ? scene.backdrop[target.mode]?.light : target.kind === 'attachment' ? stackAttachments(scene, locateAttachment(scene, target.id)?.mode ?? 'static').find((a) => a.id === target.id) : findLayer(scene, target.id)
+  if (!parent) return null
+  return [{ op: 'motion' in parent ? 'replace' : 'add', path: p, value: motion }]
 }

@@ -117,16 +117,22 @@ test('the overlay stays away with ?headless=1 and when another client plays soun
   await expect(page.getByTestId('enable-sound')).toHaveCount(0)
 })
 
-test('a video file layer draws its frames like a photo on /out', async ({ page, request }) => {
+test('a video file layer draws its frames like a photo on /out', async ({ page, context, request }) => {
   await page.goto('/out?headless=1')
   await waitForOutput(request)
-  // make a 1 s red WebM in the page (MediaRecorder) and upload it as a library video
-  const video = await page.evaluate(async () => {
+  // make a 1 s red WebM (MediaRecorder) in a quiet page of the same origin, so the busy output can't starve the
+  // recording, and upload it as a library video
+  const quiet = await context.newPage()
+  await quiet.goto('/catalog/thumbs/window-4.png')
+  await quiet.bringToFront()
+  const video = await quiet.evaluate(async () => {
     const c = document.createElement('canvas')
     c.width = 160
     c.height = 90
     const ctx = c.getContext('2d')!
     const rec = new MediaRecorder(c.captureStream(15), { mimeType: 'video/webm' })
+    // keep the canvas painting so the stream has frames to record
+    document.body.appendChild(c)
     const chunks: Blob[] = []
     rec.ondataavailable = (e) => chunks.push(e.data)
     const done = new Promise((r) => (rec.onstop = r))
@@ -143,6 +149,8 @@ test('a video file layer draws its frames like a photo on /out', async ({ page, 
     return (await fetch('/api/v1/videos', { method: 'POST', body: fd })).json()
   })
   expect(video.ref).toMatch(/^asset:/)
+  await quiet.close()
+  await page.bringToFront()
   const layer = { id: 'lay_vid', kind: 'video', ref: video.ref, name: 'red', visible: true, opacity: 1, blend: 'normal', light: null, params: { blur: 0, brightness: 0.72, warmth: 0, drift: 0, start: 0, end: 0, audio: false, volume: 1 } }
   const base = (await (await request.get(`${API}/api/v1/scenes/scn_desk`)).json()).version
   const res = await request.post(`${API}/api/v1/scenes/scn_desk/patch`, { data: { base, ops: [{ op: 'replace', path: '/backdrop/scenery/layers', value: [layer] }, { op: 'replace', path: '/mode', value: 'scenery' }] } })

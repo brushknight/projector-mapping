@@ -6,6 +6,7 @@
  * angle and divided by its scale.
  */
 import { FULLSCREEN_VS, HEADER, NOISE } from './common'
+import { SHAPES_GLSL } from './light'
 
 export const GOBO_IDS = ['window', 'blinds', 'tree', 'palm', 'arch', 'lattice', 'dots', 'spot'] as const
 export const PROCEDURAL_IDS = ['tree-sway', 'palm-sway', 'clouds', 'rain-glass', 'lightning', 'day-cycle', 'sun-drift', 'candle-flicker', 'caustics', 'dapple', 'film-grain', 'haze'] as const
@@ -53,11 +54,19 @@ uniform vec2 u_texSize;
 uniform float u_pBright;
 uniform float u_pWarm;
 uniform float u_pDrift;
+uniform vec2 u_pMove;        // (§15) motion offset, frame fractions
+uniform float u_pScale;      // (§15) motion zoom
 
 // solid
 uniform vec3 u_solid;
 
+// (§15) the attachment shapes, for tree and palm sway
+uniform vec4 u_gp0;
+uniform vec4 u_gp1;
+uniform vec4 u_gp2;
+
 ${NOISE}
+${SHAPES_GLSL}
 
 // ── gobos: return light passing 0..1 ─────────────────────────────────────────
 
@@ -199,21 +208,24 @@ float gobo(int id, vec2 q) {
 
 vec3 procedural(int id, vec2 q, vec2 p) {
   float t = u_clock;
-  if (id == 0) { // tree-sway: wind, gust, focus, seed
+  if (id == 0) { // tree-sway: the leaf breakup on a tree that sways from a trunk far below the frame
     float wind = u_pa.x, gust = u_pa.y;
-    float g = smoothstep(0.55, 0.9, noise(vec2(t * 0.35, u_pa.w)));
-    float sway = sin(t * (0.6 + wind * 1.6) + q.y * 1.5) * 0.035 * wind + g * gust * 0.08 * sin(t * 2.3);
-    vec2 d = vec2(sway * (0.4 + q.y + 0.6), sway * 0.3);
-    d += (vec2(noise(q * 6.0 + t * (0.4 + wind)), noise(q * 6.0 - t * (0.3 + wind))) - 0.5) * 0.012 * (wind + gust);
-    float s = treeShadow(q + d, u_pa.w * 0.137);
-    return vec3(1.0 - s * 0.92);
+    float g = smoothstep(0.5, 0.9, noise(vec2(t * 0.25, u_pa.w)));
+    float ang = (0.034 * sin(t * (0.55 + wind * 0.9)) + 0.016 * sin(t * (1.3 + wind) + 1.3)) * (0.25 + wind) + g * gust * 0.06 * sin(t * 2.1);
+    vec2 pivot = vec2(0.1, 1.7);
+    vec2 qq = pivot + rot(ang) * (q - pivot);
+    // leaves flutter on their own
+    qq += (vec2(noise(q * 5.0 + t * (0.5 + wind)), noise(q * 5.0 - t * (0.4 + wind) + 3.0)) - 0.5) * 0.01 * (wind + gust);
+    return vec3(shapeLeaves(qq / 1.4));
   }
-  if (id == 1) { // palm-sway
+  if (id == 1) { // palm-sway: fronds bending from the crown
     float wind = u_pa.x, gust = u_pa.y;
-    float g = smoothstep(0.55, 0.9, noise(vec2(t * 0.3, u_pa.w)));
-    float sway = sin(t * (0.5 + wind * 1.4)) * 0.12 * wind + g * gust * 0.25 * sin(t * 1.9);
-    float s = palmShadow(q, u_pa.w * 0.137, sway);
-    return vec3(1.0 - s * 0.92);
+    float g = smoothstep(0.5, 0.9, noise(vec2(t * 0.3, u_pa.w)));
+    vec2 crown = vec2(0.25, -0.75);
+    float r = length(q - crown);
+    float ang = (0.06 * sin(t * (0.5 + wind * 1.1)) + 0.03 * sin(t * 1.7 + 0.7)) * (0.3 + wind) * (0.4 + r) + g * gust * 0.08 * sin(t * 1.9);
+    vec2 qq = crown + rot(ang) * (q - crown);
+    return vec3(shapePalm(qq / 1.2));
   }
   if (id == 2) { // clouds: speed, density, softness
     vec2 c = q * 1.3 + vec2(t * (0.01 + u_pa.x * 0.08), t * 0.004);
@@ -335,9 +347,10 @@ void main() {
     c += g * u_gGrain * 0.22;
     outc = vec4(clamp(c, 0.0, 1.0) * u_opacity, u_opacity);
   } else if (u_kind == 3) {
-    // cover-fit with a slow ken-burns drift
+    // cover-fit with a slow ken-burns drift; a motion moves the picture (it can leave the frame)
+    vec2 mp = (p - 0.5 - u_pMove) / max(u_pScale, 0.05) + 0.5;
     float ta = u_texSize.x / max(u_texSize.y, 1.0);
-    vec2 uv = p - 0.5;
+    vec2 uv = mp - 0.5;
     if (ta > aspect) uv.x *= aspect / ta; else uv.y *= ta / aspect;
     float dt = u_clock * 0.02;
     float zoom = 1.0 + u_pDrift * (0.06 + 0.04 * sin(dt * 0.9));
@@ -346,7 +359,8 @@ void main() {
     vec3 c = texture(u_tex, uv + 0.5).rgb;
     c *= u_pBright * 1.4;
     c *= vec3(1.0 + 0.22 * u_pWarm, 1.0 + 0.04 * u_pWarm, 1.0 - 0.22 * u_pWarm);
-    outc = vec4(clamp(c, 0.0, 1.0) * u_opacity, u_opacity);
+    float inPic = step(0.0, mp.x) * step(mp.x, 1.0) * step(0.0, mp.y) * step(mp.y, 1.0);
+    outc = vec4(clamp(c, 0.0, 1.0) * u_opacity, u_opacity) * inPic;
   } else {
     outc = vec4(u_solid * u_opacity, u_opacity);
   }

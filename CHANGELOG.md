@@ -6,6 +6,62 @@ version section, and the release workflow uses that section as the GitHub releas
 
 ## [Unreleased]
 
+### Static light like a real spotlight
+
+- **The light model.** In static and live mode the projector is a spotlight: the light lights the whole frame (16:9
+  or 9:16), attachments in front of it block light and multiply as you add them, and one focus ring softens the
+  whole picture. Existing scenes upgrade on their own: their gobo becomes an attachment and its softness the focus.
+- **33 photorealistic attachments** in windows (4-pane, 6-pane, arched, church window with leaded glass, porthole,
+  French doors, skylight, barn), blinds (fine, standard and wide venetian, vertical, plantation shutters), nature
+  (three leaf breakups, palm, branch, ivy, bamboo), patterns (dots, lattice, Moroccan, honeycomb, stripes, grid, star
+  field, water ripple) and spots (hard, soft, oval, framing shutters with four draggable blades, iris). Each has
+  throw (low sun stretch), keystone, frame depth (the soft double edge) and its own shape controls; the lens adds
+  colour fringe, vignette and dust and haze. Research notes with sources: `docs/research/gobos.md`.
+- **Real thumbnails** rendered by the engine at build time and served at `/catalog/thumbs/<id>.png`, in a browser
+  by category on the web and the phone.
+- **Animated colour.** The light can carry a gradient gel or an animated colour (hue cycle, colour flow, colour
+  pulse, aurora, daylight cycle); the color tab offers them too. New generators are one GLSL function each
+  (`docs/effects.md`).
+- **Frame slide.** Pan the whole picture inside the frame with a slider or by dragging the preview sideways.
+- **Motion.** Move the light, one attachment, or a photo or video across the wall on the server clock: presets (sun
+  passes left to right or right to left, slow drift, sway, rise, set), a mini path editor, speed from seconds to
+  hours, easing, once, loop or back and forth, and turn, size and warm to cool drifts. Timeline clips can drive it.
+
+### Scenes by kind
+
+- Every scene has a kind (static, live, colour, scenery, mapping). Putting a scene on the wall puts its kind on air
+  and opens the matching controls.
+- The show space lists scenes grouped by kind with filter chips and live animated thumbnails; hover one for a quick
+  animated preview that leaves the wall alone, with **put on the wall**. New scenes start from templates (a golden
+  4-pane window with the sun pass ready, a window with a swaying tree, a mapping scene with the reference step). The
+  phone groups its scene picker the same way and previews a scene on a long press.
+
+### The viewer
+
+- **open viewer** (top bar, show preview, set up) opens `/view` in its own 16:9 (or 9:16) window: exactly what the
+  projector shows, read only, with a hover bar (scene, mode, sound, fullscreen, close).
+
+### A simpler content space
+
+- A clear title ("zimacube · right face"), breadcrumbs, a "where you are" mini map, an empty state with add picture,
+  draw and add effect, labelled tools with tooltips, a one-time tour (replay with ?), and rarely used controls under
+  **more**. Show is the home; content is reached on purpose.
+
+### Agents change the wall live
+
+- New MCP tools for the backdrop side: `catalog_get`, `scene_list`, `scene_create`, `scene_activate`, `mode_set`,
+  `light_set`, `attachment_add`, `attachment_update`, `attachment_remove`, `gobo_set`, `backdrop_set`, `motion_set`,
+  `preset_apply`. With **agents edit live** on (set up), they change the wall, the viewer and the phone at once.
+
+### Fixed
+
+- **Live layers look still in the web previews.** The tree and palm sway moved a few pixels at preview size and the
+  layer and scene thumbnails were drawn once; tree and palm sway now bend the real leaf and palm shapes from the trunk
+  and crown, scene thumbnails animate, and every preview takes the server clock for motion.
+- **The phone's hero preview stayed on the stand-in** after one failed load (first launch, Wi-Fi rejoining, server
+  restart). It now retries, reloads on return to the app and when the connection comes back.
+- **Scrolling the phone changed sliders.** Horizontal controls now start only on a clearly sideways drag.
+
 ### Run the show from the editor
 
 - **Show | Map | Content.** The editor opens on a new **show** space that runs the wall like the phone does: a big

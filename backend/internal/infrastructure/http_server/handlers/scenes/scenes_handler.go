@@ -65,8 +65,7 @@ func (h *Handler) list(c echo.Context) error {
 
 func (h *Handler) create(c echo.Context) error {
 	var in struct {
-		Name      string `json:"name"`
-		SetupID   string `json:"setupId"`
+		scenessvc.CreateIn
 		Duplicate string `json:"duplicate"`
 	}
 	if err := httpx.Bind(c, &in); err != nil {
@@ -85,7 +84,7 @@ func (h *Handler) create(c echo.Context) error {
 	if _, _, err := h.Setups.Get(c.Request().Context(), in.SetupID); err != nil {
 		return err
 	}
-	s, err := h.Scenes.Create(c.Request().Context(), in.Name, in.SetupID)
+	s, err := h.Scenes.Create(c.Request().Context(), in.CreateIn)
 	if err != nil {
 		return err
 	}
@@ -124,7 +123,8 @@ func (h *Handler) fromPhoto(c echo.Context) error {
 			return err
 		}
 	}
-	s, err := h.Scenes.Create(ctx, in.Name, in.SetupID)
+	// the flow exists to map objects from the photo: a mapping scene (mode objects, the mapping-empty template)
+	s, err := h.Scenes.Create(ctx, scenessvc.CreateIn{Name: in.Name, SetupID: in.SetupID, Kind: "mapping"})
 	if err != nil {
 		return err
 	}

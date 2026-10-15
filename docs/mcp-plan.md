@@ -116,6 +116,30 @@ The agent draws a real device's details (drive bays, fan grille, logo, LEDs, pan
 
 Resource `docs://drawing` explains face UV and strokes with a worked example (four drive bays on the right face). Prompt `dress-object(objectId, device)`: read the unfold, get the templates, draw details per face in named layers, render, compare, iterate, then `proposal_submit`.
 
+### Backdrop: light, attachments, motion, scenes (implemented, protocol §15)
+
+The wall outside mapping is a spotlight with a projection attachment: one light (intensity, focus, CCT or HSI colour,
+fx, an optional colour layer, lens fringe, vignette and haze, a frame slide) masked by attachments (gobos with their
+own rotation, offset, scale and params), plus the live, color and scenery layer stacks. These tools follow the
+editor's **agents edit live** switch (`agentLiveEdits`): on, a write is a normal patch on the scene on the wall by
+`agent:<name>` and every client gets `patched` at once; off, it goes into the agent's draft. Results say "live on the
+wall" or "in your draft".
+
+| tool | does |
+|---|---|
+| `catalog_get(section?)` | the catalog, compact: gobos (params, defaults, scale, rotation, focus), procedural, gradients, colorGenerators, scenery, the video and sound libraries, motionPresets, sceneTemplates |
+| `scene_list` | scenes with id, name, kind, mode and which is on the wall; says whether the switch is on |
+| `scene_create(name, kind, template?)` | a scene from a template (static-window, live-window-tree, color-ember, scenery-flowers, mapping-empty); not activated |
+| `scene_activate(scene)` | puts a scene (id or name) on the wall, its kind's mode on air. Needs the switch or "agent may go live" |
+| `mode_set(mode, scene?)` | `replace /mode` |
+| `light_set(stack?, intensity?, focus?, kelvin?, tint?, hue?, sat?, colorMode?, fx?, fxSpeed?, colorLayer?, fringe?, vignette?, haze?, slideX?, slideY?)` | edits the stack light (makes the live light when it is null) |
+| `attachment_add(stack?, gobo, params?, rotation?, offsetX?, offsetY?, scale?, opacity?, motion?)` | adds a gobo with the catalog defaults; `motion` is a motion preset id; returns the id |
+| `attachment_update(stack?, id, …)` / `attachment_remove(stack?, id)` | change or remove one |
+| `gobo_set(stack?, gobo, params?)` | the quick pick: one attachment of this gobo, keeping the old id and motion |
+| `backdrop_set(mode, layers)` | replaces the live, color or scenery layers (ids made, defaults filled) |
+| `motion_set(target, stack?, preset?, on?, from?, via?, to?, duration?, easing?, loop?, rotate?, scaleFrom?, scaleTo?, kelvinFrom?, kelvinTo?)` | the motion of `light`, an attachment or a photo or video layer; `preset: none` removes it; `startedAt` is the server's now; `on: false` pauses at the current place |
+| `preset_apply(preset)` | applies a preset (id or name) to the active scene |
+
 ### Resources and prompts
 - Resources: `scene://current`, `effects://catalog`, `docs://effect-api`, `docs://style-guide` (house style: tron-like lines, pixel stepping, black and white plus one accent), `docs://drawing`.
 - Prompts: `animate-object(object, mood, duration)`, `reveal-sequence(objects[], duration)` and `dress-object(objectId, device)`. These are starters that make the agent call `scene_get`, then `reference_photo_get`, and then look before writing.
@@ -131,8 +155,8 @@ Resource `docs://drawing` explains face UV and strokes with a worked example (fo
 
 ## Safety and control
 
-- **Drafts by default.** The agent edits a backstage copy, and live output is untouched until you apply.
-- **Three explicit toggles** in the editor: "agent may preview on projector", "agent may go live" and "agent may apply its drafts". All are off by default.
+- **Drafts by default.** The agent edits a backstage copy, and live output is untouched until you apply (or turn on "agents edit live" for the backdrop tools).
+- **Explicit toggles** in the editor: "agent may preview on projector", "agent may go live", "agent may apply its drafts" and "agents edit live" (the backdrop tools write straight to the wall, for live demos). All are off by default.
 - **Sandboxed effects.** GLSL only reaches the uniforms. JS runs in a worker with no DOM or network, and a frame-time budget kills runaway code.
 - **Undo for everything.** Every agent patch is one history entry with its own diff.
 - **Local only.** The MCP server binds to localhost (stdio for Claude Code and Codex). Phone pairing uses a one-time code, as in agents-deck.

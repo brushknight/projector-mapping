@@ -14,6 +14,8 @@ export interface MenuItem {
   onSelect?: () => void
   /** a non-clickable section caption */
   caption?: boolean
+  /** data-testid of the item's button */
+  testId?: string
 }
 
 /**
@@ -83,6 +85,7 @@ export function Menu({
                 role="menuitem"
                 disabled={it.disabled}
                 className={cx(s.item, it.on && s.on, it.danger && s.danger)}
+                data-testid={it.testId}
                 onClick={() => {
                   close()
                   it.onSelect?.()

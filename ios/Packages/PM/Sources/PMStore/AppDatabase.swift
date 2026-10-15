@@ -48,6 +48,11 @@ public final class AppDatabase: Sendable {
                     intent TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'queued', createdAt DOUBLE NOT NULL);
                 """)
         }
+        // Protocol §15: the scene list carries each scene's kind and mode.
+        m.registerMigration("002_scene_kind") { db in
+            try db.execute(sql: "ALTER TABLE scene ADD COLUMN kind TEXT NOT NULL DEFAULT ''")
+            try db.execute(sql: "ALTER TABLE scene ADD COLUMN mode TEXT NOT NULL DEFAULT ''")
+        }
         return m
     }
 

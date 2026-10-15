@@ -46,10 +46,12 @@ export interface LayerAnim {
   reveal?: number
   /** gradient offset or media x */
   sweep?: number
+  /** (§15) a motion's progress along its path, set by `motion` clips on an attachment, backdrop layer or light */
+  motion?: number
 }
 
-export const LAYER_CLIP_EFFECTS = ['reveal', 'sweep'] as const
-export const LAYER_CLIP_DEFAULTS: Record<string, { from: number; to: number }> = { reveal: { from: 0, to: 1 }, sweep: { from: -1, to: 1 } }
+export const LAYER_CLIP_EFFECTS = ['reveal', 'sweep', 'motion'] as const
+export const LAYER_CLIP_DEFAULTS: Record<string, { from: number; to: number }> = { reveal: { from: 0, to: 1 }, sweep: { from: -1, to: 1 }, motion: { from: 0, to: 1 } }
 
 /**
  * Per content layer id, the animated values at t: during a clip `from + (to − from) × progress`, after it the `to`

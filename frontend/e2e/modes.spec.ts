@@ -103,6 +103,9 @@ test('applying a preset switches to its mode', async ({ request }) => {
   await request.post(`${API}/api/v1/presets/pre_golden/apply`, { data: { sceneId: 'scn_desk' } })
   const sc = await (await request.get(`${API}/api/v1/scenes/scn_desk`)).json()
   expect(sc.mode).toBe('static')
-  expect(sc.backdrop.static.layers.map((l: { id: string }) => l.id)).toEqual(['lay_window'])
-  expect(sc.backdrop.live.layers).toHaveLength(2)
+  // (§15) a static preset brings its light and attachments
+  expect(sc.backdrop.static.layers).toEqual([])
+  expect(sc.backdrop.static.attachments.map((a: { gobo: string }) => a.gobo)).toEqual(['window-4'])
+  expect(sc.backdrop.static.light.colorLayer.ref).toBe('kelvin-cycle')
+  expect(sc.backdrop.live.layers).toHaveLength(1)
 })

@@ -1,4 +1,5 @@
 import SwiftUI
+import PMKit
 
 // The phone v4 kit (shared CSS of design/html/phone/*.dc.html). Each view notes the class it ports.
 
@@ -235,25 +236,23 @@ public struct FillSlider: View {
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .opacity(enabled ? 1 : 0.55)
                 .contentShape(Rectangle())
-                .gesture(
-                    DragGesture(minimumDistance: 0)
-                        .onChanged { d in
-                            guard enabled else { return }
-                            if start == nil { start = value }
-                            let next = min(1, max(0, (start ?? value) + d.translation.width / max(1, g.size.width)))
-                            local = next
-                            onChange(next)
+                .horizontalPan(enabled: enabled) { p in
+                    switch p.phase {
+                    case .began, .changed:
+                        if start == nil { start = value }
+                        let next = min(1, max(0, (start ?? value) + p.translation.width / max(1, g.size.width)))
+                        local = next
+                        onChange(next)
+                    case .ended, .cancelled:
+                        let last = local
+                        start = nil
+                        if let last { onEnd?(last) }
+                        Task { @MainActor in
+                            try? await Task.sleep(for: .milliseconds(350))
+                            if start == nil { local = nil }
                         }
-                        .onEnded { _ in
-                            let last = local
-                            start = nil
-                            if let last { onEnd?(last) }
-                            Task { @MainActor in
-                                try? await Task.sleep(for: .milliseconds(350))
-                                if start == nil { local = nil }
-                            }
-                        }
-                )
+                    }
+                }
             }
             .frame(height: 54)
             if detents { DetentDots() }
@@ -302,11 +301,20 @@ public struct StripSlider: View {
             }
             .contentShape(Rectangle())
             .opacity(enabled ? 1 : 0.5)
-            .gesture(DragGesture(minimumDistance: 0).onChanged { d in
+            // A sideways drag moves the knob to the finger; a tap jumps there. Vertical swipes scroll the page.
+            .horizontalPan(enabled: enabled) { p in
+                switch p.phase {
+                case .began, .changed:
+                    dragging = true
+                    onChange(min(1, max(0, p.location.x / max(1, g.size.width))))
+                case .ended, .cancelled:
+                    dragging = false
+                }
+            }
+            .onTapGesture(coordinateSpace: .local) { loc in
                 guard enabled else { return }
-                dragging = true
-                onChange(min(1, max(0, d.location.x / max(1, g.size.width))))
-            }.onEnded { _ in dragging = false })
+                onChange(min(1, max(0, loc.x / max(1, g.size.width))))
+            }
         }
         .frame(height: 40)
         .sensoryFeedback(trigger: Int((value * 10).rounded(.down))) { _, _ in haptics && dragging ? .selection : nil }

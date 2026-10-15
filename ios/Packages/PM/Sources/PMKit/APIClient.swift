@@ -66,7 +66,7 @@ public struct APIClient: Sendable {
                         contentType: String = "application/json", timeout: TimeInterval = 20) -> URLRequest {
         var r = URLRequest(url: url(path, query: query), timeoutInterval: timeout)
         r.httpMethod = method
-        if let token { r.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+        if let token, !token.isEmpty { r.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
         r.setValue("application/json", forHTTPHeaderField: "Accept")
         if let body {
             r.httpBody = body
@@ -200,12 +200,18 @@ extension APIClient {
 
     // MARK: Scenes (protocol §14)
 
-    /// `POST /scenes { name, setupId?, duplicate? }` → the new scene's document.
-    public func createScene(name: String, setupId: String? = nil, duplicate: String? = nil) async throws -> JSONValue {
+    /// `POST /scenes { name, setupId?, duplicate?, kind?, template? }` → the new scene's document (§14, §15).
+    public func createScene(name: String, setupId: String? = nil, duplicate: String? = nil, kind: String? = nil, template: String? = nil) async throws -> JSONValue {
+        try await send("POST", "\(Self.v1)/scenes", body: .object(Self.createSceneBody(name: name, setupId: setupId, duplicate: duplicate, kind: kind, template: template)))
+    }
+
+    public static func createSceneBody(name: String, setupId: String? = nil, duplicate: String? = nil, kind: String? = nil, template: String? = nil) -> JSONObject {
         var body: JSONObject = ["name": .string(name)]
         if let setupId { body["setupId"] = .string(setupId) }
         if let duplicate { body["duplicate"] = .string(duplicate) }
-        return try await send("POST", "\(Self.v1)/scenes", body: .object(body))
+        if let kind { body["kind"] = .string(kind) }
+        if let template { body["template"] = .string(template) }
+        return body
     }
 
     /// `PATCH /scenes/{id} { name }` → the summary.
@@ -315,13 +321,18 @@ extension APIClient {
     /// `/catalog/assets/scenery/<id>.jpg`.
     public func catalogAssetURL(_ path: String) -> URL { url("/catalog/assets/\(path)") }
 
-    /// `/preview?token=…&w=…&mode=hero|layer&layer=<id>` (protocol §6).
-    public func previewURL(width: Int, mode: String = "hero", layer: String? = nil) -> URL {
+    /// `GET /catalog/thumbs/<id>.png` (no auth, immutable): a 384 × 216 PNG of a gobo or procedural layer (§15).
+    public func catalogThumbURL(_ id: String) -> URL { url("/catalog/thumbs/\(id).png") }
+
+    /// `/preview?token=…&w=…&mode=hero|layer&layer=<id>&scene=<id>` (protocol §6, §15). An empty token is left out:
+    /// the page would send `Bearer ` and a LAN server would refuse it.
+    public func previewURL(width: Int, mode: String = "hero", layer: String? = nil, scene: String? = nil) -> URL {
         var q: [URLQueryItem] = []
-        if let token { q.append(.init(name: "token", value: token)) }
+        if let token, !token.isEmpty { q.append(.init(name: "token", value: token)) }
         q.append(.init(name: "w", value: String(width)))
         q.append(.init(name: "mode", value: mode))
         if let layer { q.append(.init(name: "layer", value: layer)) }
+        if let scene { q.append(.init(name: "scene", value: scene)) }
         return url("/preview", query: q)
     }
 }

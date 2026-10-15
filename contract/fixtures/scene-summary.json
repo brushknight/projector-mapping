@@ -1,0 +1,26 @@
+[
+ {
+  "id": "scn_desk",
+  "name": "Desk",
+  "setupId": "set_desk",
+  "version": 418,
+  "kind": "mapping",
+  "mode": "static"
+ },
+ {
+  "id": "scn_sun",
+  "name": "sun through the window",
+  "setupId": "set_desk",
+  "version": 3,
+  "kind": "static",
+  "mode": "static"
+ },
+ {
+  "id": "scn_rain",
+  "name": "rainy evening",
+  "setupId": "set_desk",
+  "version": 9,
+  "kind": "live",
+  "mode": "live"
+ }
+]

@@ -13,6 +13,8 @@ enum DebugScreen: String {
     case `static`, staticfx, live, addlayer, color, scenery, objects, automap1, automap2, automap3, automap4, setup, connect
     /// Protocol §14 screens (no board): the scene picker, the sounds sheet, YouTube import, the scenery videos.
     case scenes, sounds, youtube, videos
+    /// Protocol §15 screens: the static tab's motion card, the scene picker's long-press preview.
+    case motion, scenepreview
 
     var tab: AppTab {
         switch self {
@@ -20,6 +22,7 @@ enum DebugScreen: String {
         case .color: .color
         case .scenery, .youtube, .videos: .scenery
         case .objects, .automap1, .automap2, .automap3, .automap4, .sounds: .objects
+        case .scenepreview: .static
         default: .static
         }
     }
@@ -44,6 +47,8 @@ final class AppModel {
     var showAutoMap = false
     var showAddLayer = false
     var showScenes = false
+    /// The scene the picker's long-press preview shows (`/preview?scene=<id>`).
+    var previewScene: SceneSummary?
     var showSounds = false
     /// The "add from YouTube" sheet, with a link handed over by `projmap://youtube?url=…` or the clipboard.
     var showYouTube = false
@@ -112,6 +117,8 @@ final class AppModel {
             DemoData.prepare(self, screen: debugScreen)
         } else if let c = credentials {
             hub.start(server: c.server, token: c.token)
+            // Screenshots against a real server: the scene picker and its preview open too.
+            if debugScreen == .scenes || debugScreen == .scenepreview { DemoData.prepare(self, screen: debugScreen) }
         }
         CameraBridge.install(self)
         applyKeepAwake()
@@ -213,10 +220,29 @@ final class AppModel {
 
     // MARK: Scenes
 
-    /// Puts a scene on the wall (cmd `show.activate`).
+    /// Puts a scene on the wall (cmd `show.activate`) and opens the tab of its kind. The server puts the kind's mode on
+    /// air (§15); an older server does not, so the phone sends that `replace /mode` itself once the scene is active.
     func activate(_ sceneId: String) {
-        guard sceneId != self.sceneId else { return }
-        command("show.activate", ["sceneId": .string(sceneId)])
+        let kind = scenes.first { $0.id == sceneId }?.kind
+        if let kind, let t = AppTab(rawValue: SceneKind.mode(kind)) { tab = t; tabSynced = true }
+        guard sceneId != self.sceneId else {
+            if let kind, let scene, scene.mode != SceneKind.mode(kind) { edit(.setMode(SceneKind.mode(kind))) }
+            return
+        }
+        Task {
+            do {
+                try await hub.command("show.activate", ["sceneId": .string(sceneId)])
+                guard let kind else { return }
+                for _ in 0..<30 where self.sceneId != sceneId { try? await Task.sleep(for: .milliseconds(50)) }
+                if self.sceneId == sceneId, let scene, scene.mode != SceneKind.mode(kind) { edit(.setMode(SceneKind.mode(kind))) }
+            } catch { flash(error.localizedDescription) }
+        }
+    }
+
+    /// `POST /scenes { name, kind }`: the server builds it from the kind's template. Returns the new id.
+    @discardableResult
+    func createScene(name: String, kind: String) async -> String? {
+        do { return try await hub.createScene(name: name, kind: kind) } catch { flash(error.localizedDescription); return nil }
     }
 
     // MARK: Scene shortcuts
@@ -227,6 +253,42 @@ final class AppModel {
     var setupChannel: String? { active.setup.map { Channel.setup($0.id) } }
     /// The layers of one backdrop mode's stack.
     func layers(_ mode: String) -> [Layer] { active.scene?.layers(mode) ?? [] }
+    /// The stack light of `static` or `live` (nil in `live` without one).
+    func light(_ mode: String) -> StackLight? { active.scene?.light(mode) }
+    /// The attachments of `static` or `live`.
+    func attachments(_ mode: String) -> [Attachment] { active.scene?.attachments(mode) ?? [] }
+
+    // MARK: Light and attachments (protocol §15)
+
+    /// A drag on a light field: `param` while the light exists, else a structural edit that creates it.
+    func lightParam(_ mode: String, _ field: [String], _ value: JSONValue) {
+        if light(mode) == nil || active.sceneDoc?.value(at: ScenePath.stackLight(mode))?.object == nil {
+            edit(.setLight(mode: mode, field: field, value: value))
+            return
+        }
+        guard param(ScenePath.stack(mode) + "/light" + field.map { "/" + JSONPointer.escape($0) }.joined(), value) else {
+            flash("Not connected to the projector.")
+            return
+        }
+    }
+
+    /// A drag on an attachment field (by id, so a reorder elsewhere never moves the wrong one).
+    func attachmentParam(_ mode: String, _ id: String, _ field: [String], _ value: JSONValue) {
+        guard let i = attachments(mode).firstIndex(where: { $0.id == id }) else { return }
+        let path = ScenePath.attachments(mode) + "/\(i)" + field.map { "/" + JSONPointer.escape($0) }.joined()
+        if active.sceneDoc?.value(at: path) == nil { edit(.setAttachmentField(attachmentId: id, field: field, value: value)); return }
+        param(path, value)
+    }
+
+    /// The server's clock now (Unix ms), for motion progress.
+    var serverNowMs: Double { hub.status == .online ? hub.serverNowMs : Date().timeIntervalSince1970 * 1000 }
+
+    /// Writes a whole motion (or nil) on the light or on an attachment.
+    func setMotion(_ mode: String, attachment: String?, _ motion: Motion?) {
+        let value: JSONValue = motion.flatMap { try? JSONValue(encoding: $0) } ?? .null
+        if let attachment { edit(.setAttachmentField(attachmentId: attachment, field: ["motion"], value: value)) }
+        else { edit(.setLight(mode: mode, field: ["motion"], value: value)) }
+    }
     /// What is on air: `static` | `live` | `color` | `scenery` | `objects`.
     var mode: String { active.scene?.mode ?? "static" }
 
@@ -294,7 +356,8 @@ final class AppModel {
     func savePreset(name: String, mode: String) {
         guard let sceneId, let scene else { return }
         let tempId = "tmp_\(UUID().uuidString.prefix(6).lowercased())"
-        if !demo { try? db.addPendingPreset(Preset(id: tempId, name: name, mode: mode, backdrop: Backdrop(layers: scene.layers(mode)))) }
+        let stack = scene.backdrop.lightStack(mode) ?? Backdrop(layers: scene.layers(mode))
+        if !demo { try? db.addPendingPreset(Preset(id: tempId, name: name, mode: mode, backdrop: stack)) }
         hub.enqueue(.createPreset(name: name, mode: mode, sceneId: sceneId, tempId: tempId))
     }
 
@@ -304,8 +367,5 @@ final class AppModel {
 
 /// Client-made ids for new entities (protocol §8: `<prefix>_<8 base36 chars>`).
 enum NewID {
-    static func make(_ prefix: String) -> String {
-        let chars = Array("0123456789abcdefghijklmnopqrstuvwxyz")
-        return prefix + "_" + String((0..<8).map { _ in chars.randomElement()! })
-    }
+    static func make(_ prefix: String) -> String { ClientID.make(prefix) }
 }

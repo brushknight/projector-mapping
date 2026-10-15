@@ -9,10 +9,10 @@ extension LiveHub {
 
     /// Creates an empty scene on the active setup, or a copy of `duplicate`. Returns the new scene's id.
     @discardableResult
-    public func createScene(name: String, duplicate: String? = nil) async throws -> String {
-        if status == .demo { return try demoCreateScene(name: name, duplicate: duplicate) }
+    public func createScene(name: String, duplicate: String? = nil, kind: String? = nil) async throws -> String {
+        if status == .demo { return try demoCreateScene(name: name, duplicate: duplicate, kind: kind) }
         guard let api, status == .online else { throw LiveError.notConnected }
-        let doc = try await api.createScene(name: name, duplicate: duplicate)
+        let doc = try await api.createScene(name: name, duplicate: duplicate, kind: kind)
         await refreshScenes()
         return doc["id"]?.string ?? ""
     }
@@ -113,11 +113,15 @@ extension LiveHub {
 
     // MARK: Demo
 
-    private func demoCreateScene(name: String, duplicate: String?) throws -> String {
+    private func demoCreateScene(name: String, duplicate: String?, kind: String?) throws -> String {
         let id = "scn_" + String(UUID().uuidString.prefix(8)).lowercased()
         var doc: JSONValue
         if let duplicate, let src = (try? db.sceneDoc(duplicate)) ?? nil {
             doc = (try? src.applying([.replace("/id", .string(id)), .replace("/name", .string(name))])) ?? src
+        } else if let kind {
+            let setupId = ((try? db.read(Queries.show)) ?? nil)?.activeSetupId ?? "set_desk"
+            let catalog = (try? db.read(Queries.catalog)) ?? .empty
+            doc = SceneTemplates.document(kind: kind, id: id, name: name, setupId: setupId, catalog: catalog)
         } else {
             let setupId = ((try? db.read(Queries.show)) ?? nil)?.activeSetupId ?? "set_desk"
             doc = ["id": .string(id), "setupId": .string(setupId), "name": .string(name), "version": 1, "mode": "static",
@@ -128,7 +132,8 @@ extension LiveHub {
         try? db.saveSceneSnapshot(doc, version: 1)
         var list = (try? db.read(Queries.scenes)) ?? []
         list.removeAll { $0.id == id }
-        list.append(SceneSummary(id: id, name: name, setupId: doc["setupId"]?.string ?? "", version: 1))
+        let made = try? doc.decode(Scene.self)
+        list.append(SceneSummary(id: id, name: name, setupId: doc["setupId"]?.string ?? "", version: 1, kind: made?.kind ?? "static", mode: made?.mode))
         try? db.saveSceneList(list)
         return id
     }

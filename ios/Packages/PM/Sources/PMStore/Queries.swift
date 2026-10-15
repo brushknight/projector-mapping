@@ -47,8 +47,11 @@ public enum Queries {
     }
 
     public static func scenes(_ db: Database) throws -> [SceneSummary] {
-        try Row.fetchAll(db, sql: "SELECT id, name, setupId, version FROM scene ORDER BY sort, name").map {
-            SceneSummary(id: $0["id"], name: $0["name"], setupId: $0["setupId"], version: $0["version"])
+        try Row.fetchAll(db, sql: "SELECT id, name, setupId, version, kind, mode FROM scene ORDER BY sort, name").map {
+            let mode: String = $0["mode"]
+            let kind = SceneKind.infer(kind: $0["kind"], hasObjects: false, mode: mode.isEmpty ? nil : mode)
+            return SceneSummary(id: $0["id"], name: $0["name"], setupId: $0["setupId"], version: $0["version"], kind: kind,
+                                mode: mode.isEmpty ? nil : mode)
         }
     }
 

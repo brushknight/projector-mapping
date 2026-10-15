@@ -157,3 +157,35 @@ export function usePreviewAudio(scene: Scene | null, preview: PreviewClock, opts
     engine.syncTimeline(planner)
   }, [preview, preview.playing, scene, engine, unlocked, jump, opts.mutedTracks])
 }
+
+/**
+ * (§15) The viewer's own sound: while `on`, the wall's timeline sound clips play locally on the server clock (the
+ * viewer is never an audio client, so pads and cue sounds stay on the audio output).
+ */
+export function useLocalWallAudio(hub: Hub, show: Show | null, scene: Scene | null, on: boolean) {
+  const engine = useMemo(() => new AudioEngine(), [])
+  const unlocked = useAudioUnlocked()
+  const [clockTick, setClockTick] = useState(0)
+  const audio = showAudio(show)
+  useEffect(() => {
+    engine.revive()
+    return () => engine.dispose()
+  }, [engine])
+  useEffect(() => engine.setMaster(audio.volume, audio.muted || !on), [engine, audio.volume, audio.muted, on])
+  useEffect(() => hub.on('clock', () => setClockTick((n) => n + 1)), [hub])
+  useEffect(() => {
+    const t = show?.transport
+    if (!on || !unlocked || !show || !t || !scene || t.state !== 'playing') {
+      engine.stopTimeline()
+      return
+    }
+    const ctx = audioContext()
+    if (!ctx) return
+    const planner: Planner = () => {
+      const base = ctxTimeAt(ctx, performance.now())
+      const ph = playhead(t, hub.serverNow())
+      return planClips(scene, ph + LEAD, { until: holdPoint(scene, ph), fileDuration: soundLength }).map((p) => ({ ...p, when: base + LEAD + p.delay }))
+    }
+    engine.syncTimeline(planner)
+  }, [on, unlocked, show, scene, engine, hub, clockTick])
+}

@@ -1,0 +1,7 @@
+-- +goose Up
+ALTER TABLE scenes ADD COLUMN kind TEXT NOT NULL DEFAULT '';
+ALTER TABLE scenes ADD COLUMN mode TEXT NOT NULL DEFAULT '';
+
+-- +goose Down
+ALTER TABLE scenes DROP COLUMN mode;
+ALTER TABLE scenes DROP COLUMN kind;

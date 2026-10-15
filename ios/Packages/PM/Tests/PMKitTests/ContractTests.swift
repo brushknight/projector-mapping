@@ -20,6 +20,8 @@ import PMTestSupport
         "sound.json": { try JSONDecoder().decode(Asset.self, from: $0) },
         "video.json": { try JSONDecoder().decode(Video.self, from: $0) },
         "import.json": { try JSONDecoder().decode(ImportJob.self, from: $0) },
+        "scene-summary.json": { try JSONDecoder().decode([SceneSummary].self, from: $0) },
+        "settings.json": { try JSONDecoder().decode(ServerSettings.self, from: $0) },
     ]
 
     @Test func everyFixtureHasAModel() throws {
@@ -39,15 +41,31 @@ import PMTestSupport
         let scene = try JSONDecoder().decode(Scene.self, from: Fixtures.data("scene"))
         #expect(scene.id == "scn_desk")
         #expect(scene.mode == "static")
-        #expect(scene.layers("static").map(\.id) == ["lay_window"])
-        #expect(scene.layers("live").map(\.id) == ["lay_live_window", "lay_tree"])
-        #expect(scene.layers("color").map(\.ref) == ["ember"])
+        #expect(scene.kind == "mapping")
+        #expect(scene.layers("static").isEmpty)
+        #expect(scene.attachments("static").map(\.id) == ["att_window"])
+        #expect(scene.attachments("live").map(\.id) == ["att_live_window"])
+        #expect(scene.layers("live").map(\.id) == ["lay_tree"])
+        #expect(scene.layers("color").map(\.ref) == ["ember", "hue-cycle"])
+        #expect(scene.layers("color")[1].kind == "generator")
         #expect(scene.layers("scenery").map(\.ref) == ["youtube:aqz-KE-bpKQ", "flowers"])
+        #expect(scene.layers("scenery")[1].motion?.preset == "drift")
         #expect(scene.layers("objects").isEmpty)
-        #expect(scene.onAirLayers.map(\.id) == ["lay_window"])
         #expect(scene.underlay == Underlay(on: false, from: "static", level: 0.35))
-        #expect(scene.layers("static")[0].light?.color.kelvin == 3200)
-        #expect(scene.layers("live")[1].param("wind") == 0.4)
+        let light = try #require(scene.light("static"))
+        #expect(light.color.kelvin == 3200 && light.focus == 0.38 && light.intensity == 0.8 && light.colorLayer == nil)
+        #expect(light.fringe == 0.2 && light.vignette == 0.3 && light.haze == 0 && light.slide == .zero && light.motion == nil)
+        // Values straight from the fixture (it is still being tuned): every field decodes as written.
+        let att = scene.attachments("static")[0]
+        let raw = try #require(try Fixtures.json("scene").value(at: "/backdrop/static/attachments/0"))
+        #expect(att.gobo == raw["gobo"]?.string && att.rotation == raw["rotation"]?.double && att.scale == raw["scale"]?.double)
+        #expect(att.params == raw["params"]?.object && att.opacity == raw["opacity"]?.double)
+        let motion = try #require(att.motion)
+        #expect(!motion.on && motion.preset == "sun-lr" && motion.via == FramePoint(x: 0, y: -0.04) && motion.startedAt == 1_791_700_000_123)
+        #expect(scene.light("live")?.focus == 0.45)
+        #expect(scene.layers("live")[0].param("wind") == 0.4)
+        let sun = try #require(scene.timeline.clips.first { $0.id == "clp_sun" })
+        #expect(sun.effect == "motion" && sun.params["to"] == 1)
         // The drawing effect's strokes stay as JSON (array params).
         let draw = try #require(scene.objects[0].surfaces.first { $0.id == "srf_left" }?.effects.first)
         #expect(draw.effect == "drawing")
@@ -102,8 +120,12 @@ import PMTestSupport
         let json = #"{"id":"s","backdrop":{"layers":[{"id":"g","kind":"gobo","ref":"window","light":{}},{"id":"t","kind":"procedural","ref":"tree-sway","light":{}},{"id":"c","kind":"gradient","ref":"ember"},{"id":"p","kind":"photo","ref":"flowers"}]}}"#
         let scene = try JSONDecoder().decode(Scene.self, from: Data(json.utf8))
         #expect(scene.mode == "live")
-        #expect(scene.layers("static").map(\.id) == ["g"])
-        #expect(scene.layers("live").map(\.id) == ["g_live", "t"])
+        #expect(scene.kind == "live")
+        // §15 upgrade on read: gobo layers become attachments under a stack light.
+        #expect(scene.layers("static").isEmpty)
+        #expect(scene.attachments("static").map(\.id) == ["g"])
+        #expect(scene.attachments("live").map(\.id) == ["g_live"])
+        #expect(scene.layers("live").map(\.id) == ["t"])
         #expect(scene.layers("color").map(\.id) == ["c"])
         #expect(scene.layers("scenery").map(\.id) == ["p"])
     }
@@ -113,7 +135,7 @@ import PMTestSupport
         doc = try doc.applying([.replace("/mode", "objects")])
         #expect(try doc.decode(Scene.self).onAirLayers.isEmpty)
         doc = try doc.applying([.replace("/underlay/on", true), .replace("/underlay/from", "color")])
-        #expect(try doc.decode(Scene.self).onAirLayers.map(\.id) == ["lay_ember"])
+        #expect(try doc.decode(Scene.self).onAirLayers.map(\.id) == ["lay_ember", "lay_hue"])
     }
 
     @Test func toleratesUnknownAndMissingFields() throws {
@@ -151,11 +173,21 @@ import PMTestSupport
                 default:
                     _ = try #require(env.d).decode(Setup.self); #expect(env.v == 3)
                 }
-            case "param": _ = try #require(env.d).decode(ParamMessage.self)
+            case "param":
+                let p = try #require(env.d).decode(ParamMessage.self)
+                if p.path == "/backdrop/static/light/slide/x" {
+                    #expect(try Fixtures.json("scene").applying(.replace(p.path, p.value)).decode(Scene.self).light("static")?.slide.x == 0.25)
+                }
             case "patch":
                 let p = try #require(PatchedMessage(env.d))
                 if env.id == "c-80" {
                     #expect(p.ops == [.replace("/mode", "objects")])
+                } else if env.id == "c-95" {
+                    // §15: a motion turned on with its server-clock start.
+                    #expect(p.ops == [.replace("/backdrop/static/attachments/0/motion/on", true),
+                                      .replace("/backdrop/static/attachments/0/motion/startedAt", 1_791_700_000_123)])
+                    let scene = try Fixtures.json("scene").applying(p.ops).decode(Scene.self)
+                    #expect(scene.attachments("static")[0].motion?.on == true)
                 } else {
                     #expect(p.ops.first?.op == .add)
                     #expect(env.base == 419)
@@ -191,13 +223,13 @@ import PMTestSupport
 
     @Test func catalogKeepsParamOrder() throws {
         let cat = try Catalog.decode(Data(contentsOf: Fixtures.catalogURL))
-        #expect(cat.version == 3)
+        #expect(cat.version == 4)
         #expect(cat.videoParams.items.map(\.key) == ["blur", "brightness", "warmth", "drift", "start", "end", "audio", "volume"])
         #expect(cat.videoParams["blur"]?.default == 0.2)
         #expect(cat.videoDefaults["audio"] == false && cat.videoDefaults["brightness"] == 0.8)
         let drawing = try #require(cat.effects.first { $0.id == "drawing" })
         #expect(drawing.params["strokes"]?["type"] == "strokes")
-        #expect(cat.gobos.count == 8)
+        #expect(cat.gobos.count == 33)
         #expect(cat.procedural("tree-sway")?.params.items.map(\.key) == ["wind", "gust", "focus", "seed"])
         #expect(cat.photoParams.items.map(\.key) == ["blur", "brightness", "warmth", "drift"])
         #expect(cat.gradientParams.items.map(\.key) == ["angle", "drift", "grain", "brightness"])
@@ -257,8 +289,8 @@ import PMTestSupport
         let patch = try #require(try Fixtures.wsMessages().first { $0["t"] == "patch" })
         let ops = try #require(PatchedMessage(patch["d"])).ops
         let next = try scene.applying(ops)
-        #expect(next.value(at: "/backdrop/live/layers")?.array?.count == 3)
-        #expect(next.value(at: "/backdrop/live/layers/2/ref") == "tree-sway")
+        #expect(next.value(at: "/backdrop/live/layers")?.array?.count == 2)
+        #expect(next.value(at: "/backdrop/live/layers/1/ref") == "tree-sway")
     }
 
     @Test func leafReplaceDetection() {
@@ -271,13 +303,13 @@ import PMTestSupport
 @Suite struct SceneIntentTests {
     @Test func layerFieldFollowsTheLayerId() throws {
         var scene = try Fixtures.json("scene")
-        let intent = SceneIntent.setLayerField(layerId: "lay_tree", field: ["visible"], value: false)
-        #expect(intent.ops(on: scene) == [.replace("/backdrop/live/layers/1/visible", false)])
-        // Someone else moved the tree layer to the bottom: the intent still finds it.
-        scene = try scene.applying(.move(from: "/backdrop/live/layers/1", to: "/backdrop/live/layers/0"))
-        #expect(intent.ops(on: scene) == [.replace("/backdrop/live/layers/0/visible", false)])
+        let intent = SceneIntent.setLayerField(layerId: "lay_hue", field: ["visible"], value: true)
+        #expect(intent.ops(on: scene) == [.replace("/backdrop/color/layers/1/visible", true)])
+        // Someone else moved it to the bottom: the intent still finds it.
+        scene = try scene.applying(.move(from: "/backdrop/color/layers/1", to: "/backdrop/color/layers/0"))
+        #expect(intent.ops(on: scene) == [.replace("/backdrop/color/layers/0/visible", true)])
         // Deleted: nothing to do.
-        scene = try scene.applying(.remove("/backdrop/live/layers/0"))
+        scene = try scene.applying(.remove("/backdrop/color/layers/0"))
         #expect(intent.ops(on: scene) == nil)
     }
 
@@ -293,10 +325,10 @@ import PMTestSupport
         let scene = try Fixtures.json("scene")
         #expect(SceneIntent.addLayer(mode: "live", layer: ["id": "n"], index: nil).ops(on: scene) == [.add("/backdrop/live/layers/-", ["id": "n"])])
         #expect(SceneIntent.addLayer(mode: "live", layer: ["id": "n"], index: 0).ops(on: scene) == [.add("/backdrop/live/layers/0", ["id": "n"])])
-        #expect(SceneIntent.moveLayer(layerId: "lay_live_window", to: 5).ops(on: scene) == [.move(from: "/backdrop/live/layers/0", to: "/backdrop/live/layers/1")])
-        #expect(SceneIntent.removeLayer(layerId: "lay_tree").ops(on: scene) == [.remove("/backdrop/live/layers/1")])
+        #expect(SceneIntent.moveLayer(layerId: "lay_ember", to: 5).ops(on: scene) == [.move(from: "/backdrop/color/layers/0", to: "/backdrop/color/layers/1")])
+        #expect(SceneIntent.removeLayer(layerId: "lay_tree").ops(on: scene) == [.remove("/backdrop/live/layers/0")])
         // A single-layer stack does not move.
-        #expect(SceneIntent.moveLayer(layerId: "lay_window", to: 5).ops(on: scene) == [])
+        #expect(SceneIntent.moveLayer(layerId: "lay_tree", to: 5).ops(on: scene) == [])
         // A document without the stack gets it created.
         let bare: JSONValue = ["id": "s", "backdrop": [:]]
         let ops = try #require(SceneIntent.addLayer(mode: "live", layer: ["id": "n"], index: nil).ops(on: bare))
@@ -310,19 +342,58 @@ import PMTestSupport
         #expect(try #require(SceneIntent.setMode("objects").ops(on: scene)).allSatisfy(\.isLeafReplace))
     }
 
-    @Test func staticPickReplacesTheStackAndKeepsTheLight() throws {
+    @Test func pickingAnAttachmentReplacesTheListAndAddingStacksMasks() throws {
         var scene = try Fixtures.json("scene")
-        let old = try #require(try scene.decode(Scene.self).layers("static").first)
-        let layer = StackPick.gobo(id: "blinds", name: "blinds", keeping: old, id: "lay_new")
-        let ops = try #require(SceneIntent.replaceStack(mode: "static", layers: [layer]).ops(on: scene))
-        #expect(ops == [.replace("/backdrop/static/layers", [layer])])
+        let cat = try Catalog.decode(Data(contentsOf: Fixtures.catalogURL))
+        let blinds = try #require(cat.gobo("blinds"))
+        let a = try JSONValue(encoding: cat.newAttachment(blinds, id: "att_aaaaaaaa"))
+        let ops = try #require(SceneIntent.replaceAttachments(mode: "static", attachments: [a]).ops(on: scene))
+        #expect(ops == [.replace("/backdrop/static/attachments", [a])])
         scene = try scene.applying(ops)
-        let picked = try scene.decode(Scene.self).layers("static")
-        #expect(picked.map(\.ref) == ["blinds"])
-        #expect(picked[0].id == "lay_window")
-        #expect(picked[0].light == old.light)
-        // Without a previous gobo the light is the default one.
-        #expect(try StackPick.gobo(id: "spot", name: "spot", keeping: nil, id: "lay_x").decode(Layer.self).light == Light())
+        var picked = try scene.decode(Scene.self)
+        #expect(picked.attachments("static").map(\.gobo) == ["blinds"])
+        #expect(picked.light("static")?.focus == 0.38)  // the light stays
+        let b = try JSONValue(encoding: cat.newAttachment(try #require(cat.gobo("tree")), id: "att_bbbbbbbb"))
+        scene = try scene.applying(try #require(SceneIntent.addAttachment(mode: "static", attachment: b).ops(on: scene)))
+        picked = try scene.decode(Scene.self)
+        #expect(picked.attachments("static").map(\.id) == ["att_aaaaaaaa", "att_bbbbbbbb"])
+        // Fields follow the id; removing drops it.
+        #expect(SceneIntent.setAttachmentField(attachmentId: "att_bbbbbbbb", field: ["rotation"], value: 30).ops(on: scene)
+            == [.replace("/backdrop/static/attachments/1/rotation", 30)])
+        #expect(SceneIntent.setAttachmentField(attachmentId: "att_live_window", field: ["params", "skew"], value: 0.5).ops(on: scene)
+            == [.replace("/backdrop/live/attachments/0/params/skew", 0.5)])
+        #expect(SceneIntent.removeAttachment(attachmentId: "att_aaaaaaaa").ops(on: scene) == [.remove("/backdrop/static/attachments/0")])
+        #expect(SceneIntent.removeAttachment(attachmentId: "att_gone").ops(on: scene) == nil)
+    }
+
+    @Test func newAttachmentTakesCatalogDefaults() throws {
+        let cat = try Catalog.decode(Data(contentsOf: Fixtures.catalogURL))
+        let item = try #require(cat.gobo("window-4"))
+        let a = cat.newAttachment(item)
+        #expect(a.id.hasPrefix("att_") && a.id.count == 12)
+        #expect(a.rotation == item.attachment.rotation && a.scale == item.attachment.scale && a.opacity == 1 && a.visible && a.motion == nil)
+        // The gobo's own defaults, then goboParams defaults, overridden by the item's defaults.
+        var expected = Catalog.defaults(item.params)
+        for (k, v) in Catalog.defaults(cat.goboParams) { expected[k] = v }
+        for (k, v) in item.defaults { expected[k] = v }
+        #expect(a.params == expected)
+        #expect(Set(a.params.keys) == ["cols", "rows", "mullion", "throw", "skew", "depth"] && a.params["cols"] == 2)
+        #expect(cat.shapeParams("window-4").map(\.key) == ["cols", "rows", "mullion", "throw", "skew", "depth"])
+    }
+
+    @Test func lightFieldsAndMissingLights() throws {
+        let scene = try Fixtures.json("scene")
+        #expect(SceneIntent.setLight(mode: "static", field: ["slide", "x"], value: 0.25).ops(on: scene) == [.replace("/backdrop/static/light/slide/x", 0.25)])
+        // A live stack without a light gets the default light first.
+        let dark = try scene.applying(.replace("/backdrop/live/light", nil))
+        let ops = try #require(SceneIntent.setLight(mode: "live", field: ["intensity"], value: 0.5).ops(on: dark))
+        let next = try dark.applying(ops).decode(Scene.self)
+        #expect(next.light("live")?.intensity == 0.5)
+        #expect(next.light("live")?.color.kelvin == 5600)
+        // A motion object in one go.
+        let m = try JSONValue(encoding: Motion(on: true, preset: "drift", duration: 90))
+        let mops = try #require(SceneIntent.setLight(mode: "static", field: ["motion"], value: m).ops(on: scene))
+        #expect(try scene.applying(mops).decode(Scene.self).light("static")?.motion?.preset == "drift")
     }
 
     @Test func sceneryPickReplacesAndKeepsTheAdjustments() throws {
@@ -346,12 +417,13 @@ import PMTestSupport
         let scene = try Fixtures.json("scene")
         let preset = try JSONDecoder().decode(Preset.self, from: Fixtures.data("preset"))
         let backdrop = try JSONValue(encoding: preset.backdrop)
-        let ops = try #require(SceneIntent.applyPreset(mode: "live", backdrop: backdrop).ops(on: scene))
-        #expect(ops == [.replace("/backdrop/live", backdrop), .replace("/mode", "live")])
+        let ops = try #require(SceneIntent.applyPreset(mode: "static", backdrop: backdrop).ops(on: scene))
+        #expect(ops == [.replace("/backdrop/static", backdrop), .replace("/mode", "static")])
         let next = try scene.applying(ops).decode(Scene.self)
-        #expect(next.mode == "live")
-        #expect(next.layers("live").map(\.id) == ["lay_window"])
-        #expect(next.layers("static").map(\.id) == ["lay_window"])
+        #expect(next.mode == "static")
+        #expect(next.attachments("static").map(\.gobo) == ["window-4"])
+        #expect(next.light("static")?.colorLayer == ColorLayer(kind: "generator", ref: "kelvin-cycle", params: ["fromKelvin": 2700, "toKelvin": 4300, "minutes": 20]))
+        #expect(backdrop["light"]?["motion"] == .null && backdrop["layers"] == [])
     }
 
     @Test func intentsRoundTripThroughJSON() throws {
@@ -377,6 +449,11 @@ import PMTestSupport
         #expect(api.previewURL(width: 740, mode: "layer", layer: "lay_1").absoluteString
             == "http://studio-mac.local:7400/preview?token=tok&w=740&mode=layer&layer=lay_1")
         #expect(api.catalogAssetURL("scenery/flowers.jpg").absoluteString == "http://studio-mac.local:7400/catalog/assets/scenery/flowers.jpg")
+        #expect(api.catalogThumbURL("window-4").absoluteString == "http://studio-mac.local:7400/catalog/thumbs/window-4.png")
+        #expect(api.previewURL(width: 600, scene: "scn_sun").absoluteString == "http://studio-mac.local:7400/preview?token=tok&w=600&mode=hero&scene=scn_sun")
+        // An empty token (a local shortcut pairing) is left out of the page's URL.
+        #expect(APIClient(server: URL(string: "http://h:7400")!, token: "").previewURL(width: 10).absoluteString == "http://h:7400/preview?w=10&mode=hero")
+        #expect(APIClient.createSceneBody(name: "sun", kind: "static") == ["name": "sun", "kind": "static"])
     }
 }
 

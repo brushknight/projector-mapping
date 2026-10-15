@@ -135,3 +135,9 @@
   padding: 4px;
   cursor: pointer;
 }
+.moreBox {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 4px;
+}
