@@ -801,6 +801,26 @@ func (h *Hub) command(ctx context.Context, c *conn, m realtime.Message) {
 			h.sendTo(c, realtime.Message{T: "ack", Re: m.ID, D: realtime.Data(map[string]bool{"on": a.On})})
 		}()
 		return
+	case cmd.Name == "output.outline":
+		// The editor keeps the faces' outlines on the wall while mapping: forward {surfaceIds, color, width, ms} to the
+		// projector output as the output.outline RPC (the same one alignment checks use). Renewed by the editor.
+		if !h.Has(realtime.Target{Role: "output"}) {
+			h.sendTo(c, realtime.Message{T: "error", Re: m.ID, D: realtime.Data(map[string]string{"code": "no_output",
+				"message": "No projector output is connected. Open /out on the projector."})})
+			return
+		}
+		var args map[string]any
+		_ = json.Unmarshal(cmd.Args, &args)
+		go func() {
+			cctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+			defer cancel()
+			if _, err := h.Call(cctx, realtime.Target{Role: "output"}, "output.outline", args); err != nil {
+				h.sendTo(c, errMsg(m.ID, err))
+				return
+			}
+			h.sendTo(c, realtime.Message{T: "ack", Re: m.ID})
+		}()
+		return
 	case cmd.Name == "camera.capture":
 		if h.svc.Camera == nil || !h.Has(realtime.Target{Cap: "camera"}) {
 			h.sendTo(c, realtime.Message{T: "error", Re: m.ID, D: realtime.Data(map[string]string{"code": "no_phone",

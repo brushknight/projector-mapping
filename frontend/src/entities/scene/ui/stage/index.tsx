@@ -336,6 +336,7 @@ export function Stage() {
         <Pill size="sm" icon="testGrid" on={ed.testGrid} onClick={() => ed.setTestGrid(!ed.testGrid)} aria-pressed={ed.testGrid} title="show the grid test pattern here and on the projector for 60 s">
           grid
         </Pill>
+        <WallOutlines />
         <SoloControl />
         <span className={s.sp} />
         <Pill size="sm" ghost onClick={fitView} title="fit the frame (zoom with ⌘ + scroll)">
@@ -515,5 +516,45 @@ function Loupe({ canvasRef, left, top, frameW, frameH }: { canvasRef: React.RefO
         <span className={s.loupeLabel}>loupe ×10 · 1 px grid</span>
       </div>
     </>
+  )
+}
+
+/**
+ * "outlines on the wall": while on, the projector draws every face's outline (white, over whatever is on air) so the
+ * corners can be dragged onto the real object. Renews the output.outline command every 800 ms; it lapses on its own
+ * 1.5 s after the editor stops (closed tab, switched off). Remembered per browser.
+ */
+function WallOutlines() {
+  const ed = useEditor()
+  const [on, setOn] = useState(() => {
+    try {
+      return localStorage.getItem('pm:wallOutlines') !== '0'
+    } catch {
+      return true
+    }
+  })
+  const ids = (ed.scene?.objects ?? []).flatMap((o) => (o.visible === false ? [] : o.surfaces.filter((x) => x.visible !== false).map((x) => x.id)))
+  const key = ids.join(',')
+  useEffect(() => {
+    if (!on || !key) return
+    const surfaceIds = key.split(',')
+    const send = () => void ed.hub.cmd('output.outline', { surfaceIds, color: '#ffffff', width: 2, ms: 1500 }).catch(() => {})
+    send()
+    const t = window.setInterval(send, 800)
+    return () => window.clearInterval(t)
+  }, [on, key, ed.hub])
+  const toggle = () => {
+    const next = !on
+    setOn(next)
+    try {
+      localStorage.setItem('pm:wallOutlines', next ? '1' : '0')
+    } catch {
+      /* private mode */
+    }
+  }
+  return (
+    <Pill size="sm" icon="layers" on={on} onClick={toggle} aria-pressed={on} title="draw every face's outline on the projector while you map, so you can drag the corners onto the real object" data-testid="wall-outlines">
+      outlines on wall
+    </Pill>
   )
 }
