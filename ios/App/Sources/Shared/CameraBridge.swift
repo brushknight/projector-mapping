@@ -16,7 +16,12 @@ enum CameraBridge {
     static func install(_ model: AppModel) {
         model.hub.handleRPC("camera.capture") { [weak model] args in
             guard let model, let api = model.api else { throw LiveError.notConnected }
-            var jpeg = try await model.camera.captureStill(lock: args["lock"]?.bool ?? true)
+            // Calibration takes many stills with the same locked settings (the auto map flow meters and locks first);
+            // every other still (agent snapshots, photos) focuses and exposes on its own and leaves the camera in auto.
+            let calibrating = args["purpose"]?.string == "calibration"
+            var jpeg = calibrating
+                ? try await model.camera.captureStill(lock: args["lock"]?.bool ?? true)
+                : try await model.camera.captureSharpStill()
             if let w = args["maxWidth"]?.int, w > 0 { jpeg = await CameraController.downscale(jpeg: jpeg, maxWidth: w) }
             if let request = args["requestId"]?.string, !request.isEmpty {
                 let sha = try await api.uploadStill(requestId: request, jpeg: jpeg)

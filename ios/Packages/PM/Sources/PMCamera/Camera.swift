@@ -140,6 +140,66 @@ public final class CameraController: NSObject, @unchecked Sendable {
         if session.canAddOutput(videoOutput) { session.addOutput(videoOutput) }
         session.commitConfiguration()
         configured = true
+        applyAutoDefaults(device)
+    }
+
+    /// Continuous focus, exposure and white balance with the highlights protected (a dark room otherwise makes auto
+    /// exposure blow out the projected light) and no shutter slower than 1/30 s (a wobbly stand smears longer ones).
+    private func applyAutoDefaults(_ d: AVCaptureDevice) {
+        guard (try? d.lockForConfiguration()) != nil else { return }
+        if d.isFocusModeSupported(.continuousAutoFocus) { d.focusMode = .continuousAutoFocus }
+        if d.isSmoothAutoFocusSupported { d.isSmoothAutoFocusEnabled = false }
+        if d.isFocusPointOfInterestSupported { d.focusPointOfInterest = CGPoint(x: 0.5, y: 0.5) }
+        if d.isExposureModeSupported(.continuousAutoExposure) { d.exposureMode = .continuousAutoExposure }
+        if d.isExposurePointOfInterestSupported { d.exposurePointOfInterest = CGPoint(x: 0.5, y: 0.5) }
+        if d.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) { d.whiteBalanceMode = .continuousAutoWhiteBalance }
+        let cap = CMTime(value: 1, timescale: 30)
+        if CMTimeCompare(cap, d.activeFormat.minExposureDuration) >= 0, CMTimeCompare(cap, d.activeFormat.maxExposureDuration) <= 0 {
+            d.activeMaxExposureDuration = cap
+        }
+        d.setExposureTargetBias(max(d.minExposureTargetBias, -1.0))
+        d.unlockForConfiguration()
+    }
+
+    /// Waits (up to `timeout`) until focus and exposure stop adjusting.
+    private func settle(_ d: AVCaptureDevice, timeout: Double = 2.5) async {
+        let start = CACurrentMediaTime()
+        try? await Task.sleep(for: .milliseconds(150))
+        while CACurrentMediaTime() - start < timeout {
+            if !d.isAdjustingFocus && !d.isAdjustingExposure && !d.isAdjustingWhiteBalance { return }
+            try? await Task.sleep(for: .milliseconds(60))
+        }
+    }
+
+    /// Focuses and exposes for one still at `point` (capture-device coordinates; the centre by default), waits for
+    /// both to settle, captures, and returns the camera to continuous auto. Used for snapshots (agents, photos):
+    /// never leaves the camera locked.
+    public func captureSharpStill(at point: CGPoint? = nil) async throws -> Data {
+        if !session.isRunning { try await start() }
+        guard let d = device else { throw CameraError.unavailable }
+        let p = point ?? CGPoint(x: 0.5, y: 0.5)
+        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+            queue.async {
+                defer { cont.resume() }
+                guard (try? d.lockForConfiguration()) != nil else { return }
+                if d.isFocusPointOfInterestSupported { d.focusPointOfInterest = p }
+                if d.isFocusModeSupported(.autoFocus) { d.focusMode = .autoFocus }
+                if d.isExposurePointOfInterestSupported { d.exposurePointOfInterest = p }
+                if d.isExposureModeSupported(.continuousAutoExposure) { d.exposureMode = .continuousAutoExposure }
+                d.unlockForConfiguration()
+            }
+        }
+        await settle(d)
+        defer { queue.async { self.applyAutoDefaults(d) } }
+        return try await withCheckedThrowingContinuation { cont in
+            queue.async {
+                let settings = AVCapturePhotoSettings(format: [AVVideoCodecKey: AVVideoCodecType.jpeg])
+                settings.flashMode = .off
+                settings.photoQualityPrioritization = .balanced
+                self.photoWaiters[settings.uniqueID] = cont
+                self.photoOutput.capturePhoto(with: settings, delegate: self)
+            }
+        }
     }
 
     /// Locks exposure, ISO, focus and white balance where they are now (calibration needs frames that match).
@@ -152,12 +212,11 @@ public final class CameraController: NSObject, @unchecked Sendable {
                     if d.isFocusModeSupported(.locked) { d.focusMode = .locked }
                     if d.isExposureModeSupported(.locked) { d.exposureMode = .locked }
                     if d.isWhiteBalanceModeSupported(.locked) { d.whiteBalanceMode = .locked }
+                    d.unlockForConfiguration()
                 } else {
-                    if d.isFocusModeSupported(.continuousAutoFocus) { d.focusMode = .continuousAutoFocus }
-                    if d.isExposureModeSupported(.continuousAutoExposure) { d.exposureMode = .continuousAutoExposure }
-                    if d.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) { d.whiteBalanceMode = .continuousAutoWhiteBalance }
+                    d.unlockForConfiguration()
+                    self.applyAutoDefaults(d)
                 }
-                d.unlockForConfiguration()
             }
         }
     }
@@ -180,7 +239,7 @@ public final class CameraController: NSObject, @unchecked Sendable {
                 d.unlockForConfiguration()
             }
         }
-        try? await Task.sleep(for: .milliseconds(900))
+        if let d = device { await settle(d, timeout: 3) } else { try? await Task.sleep(for: .milliseconds(900)) }
         await lock(true)
     }
 
