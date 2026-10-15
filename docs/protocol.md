@@ -85,6 +85,16 @@ else the first non-empty of `static`, `color`, `scenery`, else `static`.
 `points` is the scene's pool of mapping points in **scene pixels**, where (0,0) is top left of the authored frame.
 Surfaces reference point ids, so faces that share a corner share a point, and moving it moves every face.
 
+**Details follow their face (server, 2026-10-15).** Whenever a commit moves any point of a surface that has detail
+surfaces (`role: "detail"`, `parentId` = that surface), the server maps every point of those details from the
+parent's old corners to its new ones and adds the moves to the same patch (so one undo puts both back): a homography
+for a quad parent, a similarity for a circle (centre, rim), a least-squares affine fit for `tri`, `poly`, `mask` and
+`line` (n ≥ 3), a translation otherwise. Only points used by detail surfaces alone follow; a point that a face, edge
+or mask also uses, and a detail point the same patch moves itself, stay as written. The added ops are
+`test /points/{i}/id`, `replace /points/{i}/x`, `replace /points/{i}/y` per point, rounded to 1/100 px. This holds for
+every way corners move: patches, params (below), undo/redo, drafts (`AddOps` adds the follow ops to the draft) and MCP
+writes.
+
 ### Layer (backdrop)
 
 ```json
@@ -336,6 +346,22 @@ One JSON object per text frame:
   the document. The server forwards it at once to every other subscriber as `param { path, value, by }`, without
   persisting. 200 ms after the last param on a path, it commits a `replace` patch and broadcasts `patched`. Clients
   apply incoming params to their local copy immediately.
+- **Point edits name their point (2026-10-15).** Points are addressed by index (`/points/12/x`), so an index computed
+  against another document (another scene, an older copy) would move the wrong point. A `param` on a
+  `/points/{i}/…` path carries `pointId`, the id the sender saw at that index: `param { path, value, pointId }`. The
+  server refuses it with `error { code: "mismatch" }` and sends a fresh `snapshot` when point i is not `pointId`
+  (or does not exist), and forwards `pointId` with the param; a client that holds another point at that index takes a
+  fresh snapshot instead of applying it. The commit 200 ms later is guarded by `test /points/{i}/id` with the id the
+  server saw when the param arrived. Patches do the same with a `test /points/{i}/id` op before the ops that write
+  point i; a failing `test` answers `reject { code: "stale" }` (the client rebuilds the ops from its intent).
+  `test` ops count as leaf ops for the stale-base rule. Before a patch, the server commits the scene's pending params
+  first (as one patch), so a drag's last value lands on the index it was sent for even when the patch then removes
+  a point (the magnet weld).
+- **Live follow while dragging (2026-10-15).** A `param` that moves a point of a face with details makes the server
+  send, to every subscriber including the sender, `param { path: "/points/{j}/x"|"/points/{j}/y", value, pointId,
+  by }` for each detail point that follows (the committed detail point mapped from the committed corners to the
+  live ones), and puts a detail point back with the same message when the face returns. These are not persisted;
+  the commit adds the same moves to its patch.
 - **Structural edits:** `patch { ops }` with `base` = the version the client has, and `id`. If base equals the current
   version, or every op only replaces a leaf value, the server applies it, bumps the version and broadcasts
   `patched { ops, by }` with `v` and `re` = the client's id. Otherwise it sends `reject { code: "stale" }` with
@@ -353,7 +379,7 @@ One JSON object per text frame:
 | method | sent to | meaning |
 | --- | --- | --- |
 | `output.pattern` | output | `{ kind: "gray", axis: "x" \| "y", bit, inverse }` or `{ kind: "white" \| "black" \| "off" }`. Answer after 3 presented frames |
-| `output.outline` | output | `{ surfaceIds, color, width, ms }`: flash outlines for an alignment check |
+| `output.outline` | output | `{ surfaceIds, color, width, ms, sceneId? }`: flash outlines for an alignment check; with `sceneId` the output draws them only while that scene is on the wall (the editor's "outlines on wall" sends it, so another scene's faces with the same ids are never drawn) |
 | `render.frame` | a client with cap `render` | `{ sceneId, draftId?, t, width }`. The client renders offscreen, uploads PNG to `/assets` with kind `snapshot` and answers `{ sha }` |
 | `camera.capture` | the phone | `{ requestId, lock: true }`. The phone POSTs `/camera/stills?request=…` and answers `{ sha }` |
 

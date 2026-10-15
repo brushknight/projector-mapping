@@ -653,8 +653,9 @@ func (h *Hub) param(ctx context.Context, c *conn, m realtime.Message) {
 		return
 	}
 	var p struct {
-		Path  string          `json:"path"`
-		Value json.RawMessage `json:"value"`
+		Path    string          `json:"path"`
+		Value   json.RawMessage `json:"value"`
+		PointID string          `json:"pointId"`
 	}
 	if err := json.Unmarshal(m.D, &p); err != nil || p.Path == "" {
 		h.sendTo(c, errMsg(m.ID, app_errors.BadRequest("param needs {path, value}.")))
@@ -664,7 +665,7 @@ func (h *Hub) param(ctx context.Context, c *conn, m realtime.Message) {
 	var err error
 	switch kind {
 	case "scene":
-		err = h.svc.Scenes.Param(ctx, scenessvc.ParamCmd{SceneID: id, Path: p.Path, Value: p.Value, By: c.dev.ID, Conn: c.id})
+		err = h.svc.Scenes.Param(ctx, scenessvc.ParamCmd{SceneID: id, Path: p.Path, Value: p.Value, By: c.dev.ID, Conn: c.id, PointID: p.PointID})
 	case "setup":
 		err = h.svc.Setups.Param(ctx, id, p.Path, p.Value, c.dev.ID, c.id)
 	case "draft":

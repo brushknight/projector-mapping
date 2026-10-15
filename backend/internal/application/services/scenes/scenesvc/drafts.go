@@ -109,6 +109,19 @@ func (d *Drafts) AddOps(ctx context.Context, id string, ops []docpatch.Op) (*sce
 	if err != nil {
 		return nil, app_errors.Invalid("The ops make an invalid scene: %v", err)
 	}
+	// detail surfaces follow their face in the draft too (the same rule as a live commit)
+	if touchesPoints(ops) {
+		if old, derr := scene.Decode(cur); derr == nil {
+			if extra := scene.FollowOps(sc, scene.FollowDetails(old, sc)); len(extra) > 0 {
+				all := append(append([]docpatch.Op{}, ops...), extra...)
+				if n2, e2 := docpatch.ApplyPlain(cur, all); e2 == nil {
+					if sc2, e3 := scene.Decode(n2); e3 == nil {
+						ops, sc = all, sc2
+					}
+				}
+			}
+		}
+	}
 	if err := d.scenes.Validate(sc); err != nil {
 		return nil, err
 	}

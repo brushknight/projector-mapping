@@ -356,7 +356,7 @@ export function Stage() {
           <div className={s.draftBar}>
             {draft && (
               <>
-                <span className={s.draftChip}>draft · {draft.ops.length} change{draft.ops.length === 1 ? '' : 's'}</span>
+                <span className={s.draftChip}>draft · {changes(draft.ops)} change{changes(draft.ops) === 1 ? '' : 's'}</span>
                 <Pill size="sm" on disabled={!draft.ops.length} onClick={() => draftApi.apply(draft.id).then(() => ed.toast('The draft is live.'), (e) => ed.toast(String(e.message ?? e), { bad: true }))}>
                   apply to live
                 </Pill>
@@ -535,14 +535,16 @@ function WallOutlines() {
   })
   const ids = (ed.scene?.objects ?? []).flatMap((o) => (o.visible === false ? [] : o.surfaces.filter((x) => x.visible !== false).map((x) => x.id)))
   const key = ids.join(',')
+  const sceneId = ed.scene?.id ?? null
   useEffect(() => {
-    if (!on || !key) return
+    if (!on || !key || !sceneId) return
     const surfaceIds = key.split(',')
-    const send = () => void ed.hub.cmd('output.outline', { surfaceIds, color: '#ffffff', width: 2, ms: 1500 }).catch(() => {})
+    // the wall draws them only while this scene is on it
+    const send = () => void ed.hub.cmd('output.outline', { sceneId, surfaceIds, color: '#ffffff', width: 2, ms: 1500 }).catch(() => {})
     send()
     const t = window.setInterval(send, 800)
     return () => window.clearInterval(t)
-  }, [on, key, ed.hub])
+  }, [on, key, sceneId, ed.hub])
   const toggle = () => {
     const next = !on
     setOn(next)
@@ -558,3 +560,6 @@ function WallOutlines() {
     </Pill>
   )
 }
+
+/** a draft's changes: its ops without the `test` guards (protocol §3 point edits) */
+const changes = (ops: ReadonlyArray<{ op: string }>) => ops.filter((o) => o.op !== 'test').length

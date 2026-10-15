@@ -95,6 +95,16 @@
   }
  },
  {
+  "t": "param",
+  "ch": "scene:scn_desk",
+  "d": {
+   "path": "/points/0/x",
+   "value": 1010,
+   "pointId": "p_t",
+   "by": "dev_7k2"
+  }
+ },
+ {
   "t": "patch",
   "ch": "scene:scn_desk",
   "id": "c-77",

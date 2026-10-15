@@ -5,7 +5,11 @@ package scenesvc
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log/slog"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -96,6 +100,10 @@ type actor struct {
 	redo       []entry
 	params     *services.Coalescer
 	closed     bool
+	// paramIDs is the point id each pending /points/{i}/… param addressed when it arrived (the commit tests it)
+	paramIDs map[string]string
+	// liveSent are detail points whose live (uncommitted) positions went out as params while a face was dragged
+	liveSent map[string]bool
 }
 
 // actorFor loads (once) the scene's actor.
@@ -113,7 +121,8 @@ func (s *Service) actorFor(ctx context.Context, id string) (*actor, error) {
 	if err != nil {
 		return nil, err
 	}
-	a := &actor{svc: s, id: id, inbox: make(chan func(), 64), doc: sc.Encode(), version: sc.Version, name: sc.Name, kind: sc.Kind, mode: sc.Mode}
+	a := &actor{svc: s, id: id, inbox: make(chan func(), 64), doc: sc.Encode(), version: sc.Version, name: sc.Name, kind: sc.Kind, mode: sc.Mode,
+		paramIDs: map[string]string{}, liveSent: map[string]bool{}}
 	a.params = services.NewCoalescer(s.delay, func(path string, v json.RawMessage, by string) {
 		a.inbox <- func() { a.commitParam(path, v, by) }
 	})
@@ -353,12 +362,29 @@ func (a *actor) commit(ctx context.Context, ops []docpatch.Op, by, re string) (e
 	}
 	next, inverse, err := docpatch.Apply(a.doc, ops)
 	if err != nil {
+		if errors.Is(err, docpatch.ErrTestFailed) {
+			return entry{}, app_errors.Stale(a.version)
+		}
 		return entry{}, app_errors.Invalid("The patch does not apply: %v", err)
 	}
 	sc, err := scene.Decode(next)
 	if err != nil {
 		return entry{}, app_errors.Invalid("The patch makes an invalid scene: %v", err)
 	}
+	// detail surfaces follow their face: points that moved bring the details' own points along, in the same patch
+	if touchesPoints(ops) {
+		if old, derr := scene.Decode(a.doc); derr == nil {
+			if extra := scene.FollowOps(sc, scene.FollowDetails(old, sc)); len(extra) > 0 {
+				all := append(append([]docpatch.Op{}, ops...), extra...)
+				if n2, inv2, e2 := docpatch.Apply(a.doc, all); e2 == nil {
+					if sc2, e3 := scene.Decode(n2); e3 == nil {
+						ops, next, inverse, sc = all, n2, inv2, sc2
+					}
+				}
+			}
+		}
+	}
+	a.liveSent = map[string]bool{}
 	sc.Version = a.version + 1
 	if n := len([]rune(strings.TrimSpace(sc.Name))); sc.Name != a.name && (n < 1 || n > MaxNameLen) {
 		return entry{}, app_errors.Invalid("A scene name needs 1 to %d characters.", MaxNameLen)
@@ -401,6 +427,9 @@ func (s *Service) Patch(ctx context.Context, cmd scenessvc.PatchCmd) (int64, err
 			cerr = app_errors.Stale(a.version)
 			return
 		}
+		// a drag's pending values land first, on the indexes they were sent for, so a structural patch (a magnet
+		// weld removing a point) cannot shift them onto another point
+		a.commitPending()
 		var e entry
 		if e, cerr = a.commit(ctx, cmd.Ops, cmd.By, cmd.Re); cerr == nil {
 			a.undo = append(a.undo, e)
@@ -425,10 +454,164 @@ func (s *Service) Param(ctx context.Context, cmd scenessvc.ParamCmd) error {
 	if err != nil {
 		return err
 	}
-	s.pub.PublishExcept(Channel(cmd.SceneID), realtime.Message{T: "param", Ch: Channel(cmd.SceneID),
-		D: realtime.Data(map[string]any{"path": cmd.Path, "value": cmd.Value, "by": cmd.By})}, cmd.Conn)
+	var perr error
+	err = a.run(ctx, func() { perr = a.param(cmd) })
+	if err != nil {
+		return err
+	}
+	return perr
+}
+
+// param checks a continuous value against the document, forwards it, remembers it for the commit and sends the
+// live positions of detail points that follow a dragged face. Runs on the actor goroutine.
+func (a *actor) param(cmd scenessvc.ParamCmd) error {
+	if a.closed {
+		return app_errors.NotFound("Scene %s does not exist.", a.id)
+	}
+	idx, field, isPoint := pointPath(cmd.Path)
+	var cur *scene.Scene
+	if isPoint {
+		sc, err := scene.Decode(a.doc)
+		if err != nil {
+			return app_errors.Invalid("%v", err)
+		}
+		cur = sc
+		if idx >= len(sc.Points) {
+			a.resync()
+			return app_errors.Mismatch("Point %d does not exist in scene %s; take a fresh snapshot.", idx, a.id)
+		}
+		if got := sc.Points[idx].ID; cmd.PointID != "" && got != cmd.PointID {
+			a.resync()
+			return app_errors.Mismatch("Point %d of scene %s is %s, not %s; take a fresh snapshot.", idx, a.id, got, cmd.PointID)
+		}
+		a.paramIDs[cmd.Path] = sc.Points[idx].ID
+	}
+	d := map[string]any{"path": cmd.Path, "value": cmd.Value, "by": cmd.By}
+	if cmd.PointID != "" {
+		d["pointId"] = cmd.PointID
+	}
+	a.svc.pub.PublishExcept(Channel(a.id), realtime.Message{T: "param", Ch: Channel(a.id), D: realtime.Data(d)}, cmd.Conn)
 	a.params.Put(cmd.Path, cmd.Value, cmd.By)
+	if isPoint && (field == "x" || field == "y") {
+		a.followLive(cur, cmd.By)
+	}
 	return nil
+}
+
+// followLive sends, as params to every subscriber, where the detail points of a face being dragged are right now:
+// the committed details mapped from the committed corners to the live ones (committed plus pending params).
+func (a *actor) followLive(committed *scene.Scene, by string) {
+	live := *committed
+	live.Points = append([]scene.Point(nil), committed.Points...)
+	for path, raw := range a.params.Pending() {
+		i, f, ok := pointPath(path)
+		if !ok || i >= len(live.Points) || a.paramIDs[path] != live.Points[i].ID {
+			continue
+		}
+		var v float64
+		if json.Unmarshal(raw, &v) != nil {
+			continue
+		}
+		switch f {
+		case "x":
+			live.Points[i].X = v
+		case "y":
+			live.Points[i].Y = v
+		}
+	}
+	moves := scene.FollowDetails(committed, &live)
+	send := func(i int, p scene.Point) {
+		for _, f := range []struct {
+			k string
+			v float64
+		}{{"x", p.X}, {"y", p.Y}} {
+			a.svc.pub.Publish(Channel(a.id), realtime.Message{T: "param", Ch: Channel(a.id), D: realtime.Data(map[string]any{
+				"path": fmt.Sprintf("/points/%d/%s", i, f.k), "value": f.v, "by": by, "pointId": p.ID})})
+		}
+	}
+	for i, p := range committed.Points {
+		if m, ok := moves[p.ID]; ok {
+			send(i, m)
+			a.liveSent[p.ID] = true
+		} else if a.liveSent[p.ID] {
+			// the face is back where it was: put the detail point back too
+			send(i, p)
+			delete(a.liveSent, p.ID)
+		}
+	}
+}
+
+// pointPath parses /points/{i}/{field}.
+func pointPath(path string) (int, string, bool) {
+	rest, ok := strings.CutPrefix(path, "/points/")
+	if !ok {
+		return 0, "", false
+	}
+	num, field, _ := strings.Cut(rest, "/")
+	i, err := strconv.Atoi(num)
+	if err != nil || i < 0 {
+		return 0, "", false
+	}
+	return i, field, true
+}
+
+// touchesPoints tells whether any op writes into /points.
+func touchesPoints(ops []docpatch.Op) bool {
+	for _, op := range ops {
+		if op.Op != "test" && (op.Path == "/points" || strings.HasPrefix(op.Path, "/points/") || strings.HasPrefix(op.From, "/points")) {
+			return true
+		}
+	}
+	return false
+}
+
+// paramOps is the replace for a committed param, guarded by a test of the point id it was sent for.
+func (a *actor) paramOps(path string, v json.RawMessage) []docpatch.Op {
+	op := docpatch.Op{Op: "replace", Path: path, Value: v}
+	id, ok := a.paramIDs[path]
+	delete(a.paramIDs, path)
+	if i, _, isPoint := pointPath(path); isPoint && ok {
+		b, _ := json.Marshal(id)
+		return []docpatch.Op{{Op: "test", Path: fmt.Sprintf("/points/%d/id", i), Value: b}, op}
+	}
+	return []docpatch.Op{op}
+}
+
+// commitPending commits every pending param now, as one patch (on the actor goroutine, before a structural patch).
+func (a *actor) commitPending() {
+	taken := a.params.Take()
+	if len(taken) == 0 {
+		return
+	}
+	paths := make([]string, 0, len(taken))
+	for p := range taken {
+		paths = append(paths, p)
+	}
+	sort.Strings(paths)
+	var ops []docpatch.Op
+	by := ""
+	for _, p := range paths {
+		t := taken[p]
+		if cur, err := docpatch.GetRaw(a.doc, p); err == nil {
+			if b, _ := json.Marshal(cur); string(b) == string(t.Value) {
+				delete(a.paramIDs, p)
+				continue
+			}
+		}
+		ops = append(ops, a.paramOps(p, t.Value)...)
+		by = t.By
+	}
+	if len(ops) == 0 {
+		return
+	}
+	e, err := a.commit(context.Background(), ops, by, "")
+	if err != nil {
+		a.svc.log.Warn("param commit failed", "scene", a.id, "err", err)
+		a.resync()
+		return
+	}
+	a.undo = append(a.undo, e)
+	a.redo = nil
 }
 
 // commitParam runs on the actor goroutine 200 ms after the last param on path.
@@ -436,13 +619,13 @@ func (a *actor) commitParam(path string, v json.RawMessage, by string) {
 	if a.closed {
 		return
 	}
-	op := docpatch.Op{Op: "replace", Path: path, Value: v}
 	if cur, err := docpatch.GetRaw(a.doc, path); err == nil {
 		if b, _ := json.Marshal(cur); string(b) == string(v) {
+			delete(a.paramIDs, path)
 			return
 		}
 	}
-	e, err := a.commit(context.Background(), []docpatch.Op{op}, by, "")
+	e, err := a.commit(context.Background(), a.paramOps(path, v), by, "")
 	if err != nil {
 		a.svc.log.Warn("param commit failed", "scene", a.id, "path", path, "err", err)
 		a.resync()

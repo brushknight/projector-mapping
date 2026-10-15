@@ -108,6 +108,13 @@ func (e *Env) AgentSession(ctx context.Context, create bool) (*agents.Session, e
 		// working (and its look tools show the live scene until it writes again)
 		if d, err := e.D.Drafts.Get(ctx, e.S.agent.DraftID); err == nil && !d.IsOpen() {
 			e.S.agent = nil
+		} else if err == nil && len(d.Ops) == 0 {
+			// an empty draft follows the wall: when another scene went up since, start over on that one, so the
+			// agent never writes one scene while it means the scene on the wall
+			if active := e.D.Show.Get(ctx).ActiveSceneID; active != "" && active != d.SceneID {
+				_, _ = e.D.Drafts.Discard(ctx, d.ID)
+				e.S.agent = nil
+			}
 		}
 	}
 	if e.S.agent != nil {
@@ -199,9 +206,27 @@ func (e *Env) View(ctx context.Context) (*scene.Scene, string, error) {
 	return s, "", err
 }
 
+// writeDraftID is DraftID for a write. A client that attached on its own works on the scene on the wall: once
+// another scene is up, its draft (made for the scene before) takes no more writes, so they cannot land in a scene
+// nobody is looking at.
+func (e *Env) writeDraftID(ctx context.Context) (string, error) {
+	id, err := e.DraftID(ctx)
+	if err != nil || e.S.P.SessionID != "" {
+		return id, err
+	}
+	d, err := e.D.Drafts.Get(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	if active := e.D.Show.Get(ctx).ActiveSceneID; active != "" && active != d.SceneID {
+		return "", app_errors.Conflict("Your draft %s is for scene %s, but scene %s is on the wall now. Call proposal_submit to hand it over (the user applies or discards it), then write again to start on the scene on the wall.", d.ID, d.SceneID, active)
+	}
+	return id, nil
+}
+
 // WriteView is the draft view for a write (the draft is created first).
 func (e *Env) WriteView(ctx context.Context) (*scene.Scene, string, error) {
-	id, err := e.DraftID(ctx)
+	id, err := e.writeDraftID(ctx)
 	if err != nil {
 		return nil, "", err
 	}
@@ -211,7 +236,7 @@ func (e *Env) WriteView(ctx context.Context) (*scene.Scene, string, error) {
 
 // Write appends ops to the session's draft.
 func (e *Env) Write(ctx context.Context, ops []docpatch.Op) error {
-	id, err := e.DraftID(ctx)
+	id, err := e.writeDraftID(ctx)
 	if err != nil {
 		return err
 	}

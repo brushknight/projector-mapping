@@ -109,7 +109,8 @@ func TestTools(t *testing.T) {
 	call(t, s, "cue_add", map[string]any{"at": 2, "label": "bay"})
 	call(t, s, "surface_nudge", map[string]any{"id": "srf_top", "dx": 1.5, "dy": -1})
 	text, _ = call(t, s, "draft_diff", nil)
-	if !strings.Contains(text, "adds surface") || !strings.Contains(text, "adds clip") || !strings.Contains(text, "moves 4 points") {
+	if !strings.Contains(text, "adds surface") || !strings.Contains(text, "adds clip") || !strings.Contains(text, "moves 26 points") {
+		// the 4 corners of top, and the bays of the faces that share them follow (protocol §1, details follow)
 		t.Fatalf("diff %s", text)
 	}
 	if h.Do("GET", "/api/v1/scenes/scn_desk", nil).Map(t)["version"] != float64(1) {

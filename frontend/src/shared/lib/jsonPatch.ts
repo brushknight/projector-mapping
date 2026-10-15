@@ -124,6 +124,7 @@ export function setAt<T>(doc: T, path: string, value: unknown): T {
 /** True when every op only replaces a leaf value (the server applies these even on a stale base). */
 export function onlyLeafReplaces(ops: readonly JsonOp[], doc: unknown): boolean {
   return ops.every((op) => {
+    if (op.op === 'test') return true
     if (op.op !== 'replace') return false
     const cur = getAt(doc, op.path)
     return cur === null || typeof cur !== 'object'

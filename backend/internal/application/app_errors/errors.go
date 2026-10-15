@@ -54,6 +54,8 @@ var (
 	NoOutput = mk("no_output", http.StatusConflict)
 	// NoPhone refuses calibration while no phone with a camera is connected.
 	NoPhone = mk("no_phone", http.StatusConflict)
+	// Mismatch refuses a point edit whose index names another point than the sender expected (protocol §3).
+	Mismatch = mk("mismatch", http.StatusConflict)
 )
 
 // Stale is the patch rejection of protocol §3.

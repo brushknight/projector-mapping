@@ -135,9 +135,10 @@ type pong struct {
 }
 
 type param struct {
-	Path  string `json:"path"`
-	Value any    `json:"value"`
-	By    string `json:"by,omitempty"`
+	Path    string `json:"path"`
+	Value   any    `json:"value"`
+	PointID string `json:"pointId,omitempty"`
+	By      string `json:"by,omitempty"`
 }
 
 type patched struct {

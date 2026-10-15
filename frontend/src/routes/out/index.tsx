@@ -114,6 +114,13 @@ export function OutPage() {
       }),
       hub.handleRpc('output.outline', async (args) => {
         const ms = Number(args.ms ?? 1500)
+        // outlines of another scene (the editor maps a scene that is not on the wall; a duplicate shares its surface
+        // ids) would draw this scene's faces and look like they do not follow the drag
+        const onWall = latest.current.scene?.id
+        if (typeof args.sceneId === 'string' && onWall && args.sceneId !== onWall) {
+          outline.current = null
+          return { presented: false, reason: 'another scene is on the wall' }
+        }
         outline.current = {
           surfaceIds: Array.isArray(args.surfaceIds) ? (args.surfaceIds as string[]) : [],
           color: typeof args.color === 'string' ? args.color : '#ffffff',

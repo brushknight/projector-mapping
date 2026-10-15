@@ -218,6 +218,18 @@ function EditorApp({ workspace, timeline }: { workspace: Workspace; timeline?: b
     [goWorkspace, workspace],
   )
 
+  // whatever changed the scene (a row click, the wall going to another scene while Show or a bare /editor/map
+  // follows it): the selection named ids of the scene before, and duplicated scenes share those ids, so an arrow
+  // nudge or a drag would move the same-named corners of this scene. Start clean.
+  const shownScene = useRef(sceneId)
+  useEffect(() => {
+    if (shownScene.current === sceneId) return
+    shownScene.current = sceneId
+    setSel(EMPTY_SELECTION)
+    setFaceZoom(null)
+    setSolo(null)
+  }, [sceneId])
+
   const select = useCallback((patch: Partial<Selection>) => setSel((cur) => ({ ...cur, ...patch })), [])
   const toggleTrack = useCallback((id: string) => setMuted((cur) => {
     const n = new Set(cur)

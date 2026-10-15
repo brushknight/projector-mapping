@@ -79,3 +79,26 @@ func (c *Coalescer) FlushAll() {
 		c.flush(k, p.value, p.by)
 	}
 }
+
+// Taken is one value Take removed.
+type Taken struct {
+	Value json.RawMessage
+	By    string
+}
+
+// Take removes every pending value without calling flush and returns them (path → value), so the caller can commit
+// them itself (before a structural patch that could shift the indexes they address).
+func (c *Coalescer) Take() map[string]Taken {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(c.m) == 0 {
+		return nil
+	}
+	out := make(map[string]Taken, len(c.m))
+	for k, p := range c.m {
+		p.timer.Stop()
+		out[k] = Taken{Value: p.value, By: p.by}
+	}
+	c.m = map[string]*pending{}
+	return out
+}

@@ -128,9 +128,11 @@ export function useSceneEditing(hub: Hub, sceneId: string | null, mode: EditMode
   }, [])
 
   const edit = useCallback(
-    async (build: OpsBuilder) => {
+    async (raw: OpsBuilder) => {
       const cur = sceneRef.current
-      if (!cur || !sceneId) return
+      // the document on screen must be the scene this editor writes to (never another scene's indexes)
+      if (!cur || !sceneId || cur.id !== sceneId) return
+      const build: OpsBuilder = (sc) => guardPointOps(sc, raw(sc))
       const ops = build(cur)
       if (!ops || ops.length === 0) return
       try {
@@ -161,10 +163,11 @@ export function useSceneEditing(hub: Hub, sceneId: string | null, mode: EditMode
   const setValues = useCallback(
     (entries: Array<[string, unknown]>, phase: Phase) => {
       const cur = sceneRef.current
-      if (!cur || !sceneId) return
+      if (!cur || !sceneId || cur.id !== sceneId) return
       const exists = entries.every(([p]) => getAt(cur, p) !== undefined)
       if (mode === 'live' && exists) {
-        for (const [p, v] of entries) hub.param(`scene:${sceneId}`, p, v)
+        // (§3) a point param carries the id of the point its index was computed for
+        for (const [p, v] of entries) hub.param(`scene:${sceneId}`, p, v, { pointId: pointIdAt(cur, p) })
         if (phase === 'final') setOverlay((o) => dropKeys(o, entries))
         return
       }
@@ -187,6 +190,39 @@ export function useSceneEditing(hub: Hub, sceneId: string | null, mode: EditMode
   const setValue = useCallback((path: string, value: unknown, phase: Phase) => setValues([[path, value]], phase), [setValues])
 
   return { scene, live, version: sceneCh.version, mode, draft, edit, setValue, setValues, pending: pendingCount > 0 || sceneCh.pending }
+}
+
+/** The id of the point a /points/{i}/… path addresses in scene, or undefined for other paths. */
+export function pointIdAt(scene: Scene, path: string): string | undefined {
+  const m = /^\/points\/(\d+)(\/|$)/.exec(path)
+  return m ? scene.points[Number(m[1])]?.id : undefined
+}
+
+/**
+ * Puts a `test /points/{i}/id` op before the first op that writes point i, so a patch computed against another
+ * document (another scene, or a point list that changed since) is refused instead of moving the wrong point. Ops
+ * after one that adds, removes or moves points are left alone (the indexes mean something else by then).
+ */
+export function guardPointOps(scene: Scene, ops: PatchOp[] | null): PatchOp[] | null {
+  if (!ops || !ops.length) return ops
+  const out: PatchOp[] = []
+  const guarded = new Set<number>()
+  let shifted = false
+  for (const op of ops) {
+    const m = /^\/points\/(\d+)\/(x|y)$/.exec(op.path)
+    if (m && !shifted && op.op === 'replace') {
+      const i = Number(m[1])
+      const id = scene.points[i]?.id
+      if (id && !guarded.has(i)) {
+        out.push({ op: 'test', path: `/points/${i}/id`, value: id })
+        guarded.add(i)
+      }
+    } else if (op.op !== 'replace' && op.op !== 'test' && (op.path === '/points' || op.path.startsWith('/points/'))) {
+      shifted = true
+    }
+    out.push(op)
+  }
+  return out
 }
 
 function dropKeys(o: Record<string, unknown>, entries: Array<[string, unknown]>) {

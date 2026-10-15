@@ -65,7 +65,7 @@ const payloads: Record<string, Guard> = {
   pong: obj({ t0: num, ts: num }),
   sub: any,
   snapshot: any,
-  param: obj({ path: str, value: any, by: nullable(str) }),
+  param: obj({ path: str, value: any, pointId: nullable(str), by: nullable(str) }),
   patch: arr(patchOpShape),
   patched: obj({ ops: arr(patchOpShape), by: str }),
   reject: obj({ code: str, message: nullable(str) }),

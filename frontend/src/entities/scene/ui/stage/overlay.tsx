@@ -140,6 +140,13 @@ export function StageOverlay({
   }, [draw, onApi])
 
   useEffect(() => setDraw([]), [ed.tool])
+  // a drag never carries over to another scene (its point ids could name that scene's corners too)
+  const sceneKey = scene?.id ?? null
+  useEffect(() => {
+    dragRef.current = null
+    setDrag(null)
+    setDraw([])
+  }, [sceneKey])
 
   // ── pointer ────────────────────────────────────────────────────────────────
 

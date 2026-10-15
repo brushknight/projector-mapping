@@ -5,6 +5,7 @@ package docpatch
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -54,6 +55,10 @@ func raw(v any) json.RawMessage {
 	return b
 }
 
+// ErrTestFailed is returned (wrapped) when a test op does not hold: the document is not what the sender expected
+// (for example a point index that now names another point), so nothing is applied.
+var ErrTestFailed = errors.New("the document does not match the expected value")
+
 // Apply applies ops to doc and returns the new document and the inverse ops (which, applied to the result, give the
 // original document back).
 func Apply(doc []byte, ops []Op) (out []byte, inverse []Op, err error) {
@@ -66,6 +71,9 @@ func Apply(doc []byte, ops []Op) (out []byte, inverse []Op, err error) {
 		}
 		next, err := applyOne(cur, op)
 		if err != nil {
+			if op.Op == "test" {
+				return nil, nil, fmt.Errorf("op %d (test %s): %w", i, op.Path, ErrTestFailed)
+			}
 			return nil, nil, fmt.Errorf("op %d (%s %s): %w", i, op.Op, op.Path, err)
 		}
 		inverse = append(inverse, inv...)
@@ -238,6 +246,10 @@ func LeafOnly(doc []byte, ops []Op) bool {
 		return false
 	}
 	for _, op := range ops {
+		if op.Op == "test" {
+			// a guard, not a change: it holds or the whole patch fails
+			continue
+		}
 		if op.Op != "replace" || isContainer(op.Value) {
 			return false
 		}

@@ -37,6 +37,8 @@ interface ParamSlot {
   ch: string
   path: string
   value: unknown
+  /** (§3) the point id the sender expects at a /points/{i}/… path */
+  pointId?: string
   /** a newer value waits for the end of the window */
   waiting: boolean
   timer: ReturnType<typeof setTimeout>
@@ -377,8 +379,10 @@ export class Hub {
    * first goes at once, the newest value of a burst goes at the end of the window, so the wire never floods and the
    * last value always arrives. A patch flushes the waiting params first, so order holds. Dropped while disconnected.
    */
-  param(ch: string, path: string, value: unknown): boolean {
+  param(ch: string, path: string, value: unknown, opts: { pointId?: string } = {}): boolean {
     const c = this.channel(ch)
+    // (§3) a point edit names the point it means: never write another point that sits at that index now
+    if (c.hasDoc && opts.pointId && !pointAt(c.confirmed, path, opts.pointId)) return false
     if (c.hasDoc) {
       try {
         c.confirmed = setAt(c.confirmed, path, value)
@@ -393,11 +397,12 @@ export class Hub {
     if (slot) {
       // inside the window: keep the newest, it goes when the window ends
       slot.value = value
+      slot.pointId = opts.pointId
       slot.waiting = true
       return true
     }
-    const sent = this.send({ t: 'param', ch, d: { path, value } })
-    const s: ParamSlot = { ch, path, value, waiting: false, timer: setTimeout(() => this.flushParam(key), PARAM_MS) }
+    const sent = this.send({ t: 'param', ch, d: paramData(path, value, opts.pointId) })
+    const s: ParamSlot = { ch, path, value, pointId: opts.pointId, waiting: false, timer: setTimeout(() => this.flushParam(key), PARAM_MS) }
     this.paramSlots.set(key, s)
     return sent
   }
@@ -408,7 +413,7 @@ export class Hub {
     if (!s) return
     clearTimeout(s.timer)
     this.paramSlots.delete(key)
-    if (s.waiting) this.send({ t: 'param', ch: s.ch, d: { path: s.path, value: s.value } })
+    if (s.waiting) this.send({ t: 'param', ch: s.ch, d: paramData(s.path, s.value, s.pointId) })
   }
 
   /** Sends every waiting param of a channel (before a patch on it, so a drag's last value lands first). */
@@ -558,7 +563,12 @@ export class Hub {
         break
       case 'param':
         if (c && c.hasDoc) {
-          const d = env.d as { path: string; value: unknown }
+          const d = env.d as { path: string; value: unknown; pointId?: string }
+          // a point param for a point this copy has elsewhere: the copy is behind, take a fresh one
+          if (d.pointId && !pointAt(c.confirmed, d.path, d.pointId)) {
+            this.resync(c.name)
+            break
+          }
           try {
             c.confirmed = setAt(c.confirmed, d.path, d.value)
             this.recompute(c)
@@ -689,6 +699,18 @@ export class Hub {
       this.send({ t: 'rpc.error', re: env.id, d: { code: e instanceof HubError ? e.code : 'failed', message: e instanceof Error ? e.message : String(e) } })
     }
   }
+}
+
+function paramData(path: string, value: unknown, pointId?: string) {
+  return pointId ? { path, value, pointId } : { path, value }
+}
+
+/** True unless `path` is /points/{i}/… and the document's point i is not `pointId`. */
+export function pointAt(doc: unknown, path: string, pointId: string): boolean {
+  const m = /^\/points\/(\d+)(\/|$)/.exec(path)
+  if (!m) return true
+  const pts = (doc as { points?: Array<{ id?: string }> } | null)?.points
+  return !!pts && pts[Number(m[1])]?.id === pointId
 }
 
 export function median(xs: number[]): number {

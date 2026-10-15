@@ -28,6 +28,9 @@ type ParamCmd struct {
 	By      string
 	// Conn is the sender's connection, which does not get the param back.
 	Conn string
+	// PointID, on a path into /points/{i}/, is the id the sender expects at that index; the server refuses the param
+	// when another point sits there (protocol §3).
+	PointID string
 }
 
 // CreateIn is POST /scenes without duplicate (protocol §15).
