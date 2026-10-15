@@ -120,6 +120,7 @@ func New(ctx context.Context, o Options) (*App, error) {
 	}
 	a.Assets = NewAssetsModule(db, filepath.Join(cfg.DataDir, "assets"), mt)
 	a.Show.Service.UseAudio(a.Hub, a.Assets.Service)
+	a.Catalog.Service.UseDirect(a.Hub)
 	a.Show.Service.UsePresets(func(ctx context.Context, presetID, sceneID string) error {
 		_, err := a.Scenes.Presets.Apply(ctx, presetID, sceneID, "server")
 		return err

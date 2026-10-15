@@ -382,9 +382,16 @@ One JSON object per text frame:
 | method | sent to | meaning |
 | --- | --- | --- |
 | `output.pattern` | output | `{ kind: "gray", axis: "x" \| "y", bit, inverse }` or `{ kind: "white" \| "black" \| "off" }`. Answer after 3 presented frames |
+| `output.diag` | output | `{ enable?, clear?, last?, kinds? }`: playback diagnostics (MCP `output_status`). Answers the page's build, canvas size, clock offset, playhead, transport, scene id and version, the effect sources it holds (`id`, `sourceHash`), the JS effect runtime's counters (`requested`, `shown`, `stale`, `wrongSource`, `skewed`, `expired`, `skipped`, `stuck`, `maxMs`, `inflight`, `disabled`), event `counts`, the newest event of each kind (`last`) and, while the log is on, `events` (`{ at, kind, ... }`: `frame`, `show`, `scene`, `effects`, `clock`, `hub`, `resize`, `gl.lost`, `gl.restored`, `raf.gap`, `render.held`, `js.frame`, `js.drop`, `js.wait`, `js.source`, `js.stuck`, `js.disabled`). `enable` turns the bounded log (4000 events) on or off; `?diag` in the /out URL turns it on at load |
 | `output.outline` | output | `{ surfaceIds, color, width, ms, sceneId? }`: flash outlines for an alignment check; with `sceneId` the output draws them only while that scene is on the wall (the editor's "outlines on wall" sends it, so another scene's faces with the same ids are never drawn) |
 | `render.frame` | a client with cap `render` | `{ sceneId, draftId?, t, width }`. The client renders offscreen, uploads PNG to `/assets` with kind `snapshot` and answers `{ sha }` |
 | `camera.capture` | the phone | `{ requestId, lock: true }`. The phone POSTs `/camera/stills?request=…` and answers `{ sha }` |
+
+### Effect updates: `effects.changed`
+
+`{ "t": "effects.changed", "d": { "id": "eff_66643b67" } }` is a direct message (no `ch`) to every client after an
+effect is created, updated or deleted (HTTP or MCP `effect_create` / `effect_update`). Clients that render reload the
+effect list (`GET /effects`), so a running output never keeps playing an old source.
 
 ### Telemetry
 

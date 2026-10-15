@@ -29,6 +29,12 @@ func Register(s *mcp.Server, env *tools.Env) {
 		Description: "Puts step 0 on the wall (protocol §20 \"Step 0\"): the scene's opening look (intro_set; without one, the backdrop on air with converge on) " +
 			"holds, animated, until GO; GO then converges onto the object or crossfades into the mapping and plays to the first cue. Back from the first cue returns to step 0. " +
 			"Needs \"agent may go live\"."}, sequenceStart)
+	tools.Add(s, env, &mcp.Tool{Name: "output_status", Title: "Read the projector output's state",
+		Description: "What the real projector output page is running: its build, canvas size, clock offset, playhead and transport, scene id and version, " +
+			"the effect sources it holds (id and source hash), the JS effect runtime (frames requested, shown, dropped as stale or from an old source, " +
+			"waiting after a seek, in flight, slowest call, disabled effects and why) and event counters. enable: true turns on the bounded event log " +
+			"(every frame's playhead, show and scene updates, resizes, GL context loss, frame gaps over 50 ms, JS frames and drops); events returns the newest " +
+			"`last` (default 500), optionally only `kinds`. clear empties it. Read-only for the show."}, outputStatus)
 	tools.Add(s, env, &mcp.Tool{Name: "projector_show", Title: "Show something on the projector",
 		Description: "Puts a test pattern (white, black, gray stripes), surface outlines, or a frame of your draft on the projector; off returns to normal. Needs \"agent may preview\"."}, projectorShow)
 }
@@ -181,4 +187,30 @@ func projectorShow(ctx context.Context, e *tools.Env, in showIn) (*mcp.CallToolR
 		return tools.Text("The projector is back to normal."), nil
 	}
 	return nil, app_errors.BadRequest("kind must be pattern, outline, draft_frame or off.")
+}
+
+type statusIn struct {
+	Enable *bool    `json:"enable,omitempty" jsonschema:"turn the event log on or off"`
+	Clear  bool     `json:"clear,omitempty" jsonschema:"empty the event log and counters first"`
+	Last   int      `json:"last,omitempty" jsonschema:"how many of the newest events to return, default 500"`
+	Kinds  []string `json:"kinds,omitempty" jsonschema:"only these event kinds, e.g. frame, show, scene, js.frame, js.drop, js.wait, js.disabled, raf.gap, resize, gl.lost"`
+}
+
+func outputStatus(ctx context.Context, e *tools.Env, in statusIn) (*mcp.CallToolResult, error) {
+	args := map[string]any{"clear": in.Clear, "last": in.Last, "kinds": in.Kinds}
+	if in.Enable != nil {
+		args["enable"] = *in.Enable
+	}
+	cctx, cancel := context.WithTimeout(ctx, 8*time.Second)
+	defer cancel()
+	raw, err := e.D.Caller.Call(cctx, OutputTarget, "output.diag", args)
+	if err != nil {
+		return nil, fmt.Errorf("the projector output did not answer (is /out open and reloaded with the current build?): %w", err)
+	}
+	var pretty any
+	if json.Unmarshal(raw, &pretty) != nil {
+		return tools.Text("%s", raw), nil
+	}
+	b, _ := json.MarshalIndent(pretty, "", " ")
+	return tools.Text("%s", b), nil
 }

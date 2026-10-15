@@ -159,6 +159,8 @@ function EditorApp({ workspace, timeline }: { workspace: Workspace; timeline?: b
   useEffect(() => {
     reloadEffects()
   }, [reloadEffects, hub.status])
+  // (§4) an agent saved an effect: load its new source
+  useEffect(() => hub.onMessage('effects.changed', reloadEffects), [hub, reloadEffects])
   useEffect(() => {
     if (scene && !scenes.some((x) => x.id === scene.id)) reloadScenes()
   }, [scene, scenes, reloadScenes])

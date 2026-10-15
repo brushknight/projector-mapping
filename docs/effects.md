@@ -39,8 +39,15 @@ A module whose default export draws one frame onto an OffscreenCanvas 2D context
 export default function render(ctx, { t, progress, width, height, aspect, seed, params }) { /* draw */ }
 ```
 
-There is no DOM, no network and no timers. The frame budget is 4 ms; an effect that goes over it three frames in a
-row is disabled and reported.
+There is no DOM, no network and no timers. The frame budget is 4 ms; an effect that goes over it 30 frames in a row
+is disabled and reported (MCP `output_status` shows it), so one slow frame on a busy laptop never takes a show down. An
+effect that does not answer within 1.5 s (an endless loop) is disabled and the worker restarts.
+
+Live, the projector composites each instance's newest frame (one frame behind). A frame only counts for the request it
+answers: a reply that arrives after a seek, a source update or the clip's end is dropped, a frame drawn for a later
+moment than the playhead (a seek back, a loop to the start) is never shown, and an instance whose clip ended is
+forgotten. Saving an effect (`effect_update`) sends `effects.changed`, and every output, preview and editor loads the
+new source at once.
 
 ## Renderer notes (frontend)
 

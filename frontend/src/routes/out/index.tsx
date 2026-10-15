@@ -10,6 +10,8 @@ import { activeTestPattern, sceneSize } from '../../entities/setup'
 import { useAudioClient } from '../../entities/sound/audioHooks'
 import { YouTubeBackdrop } from '../../entities/video/youtube'
 import { activeYouTube, Renderer, warmPlateMasks, type OutlineFlash, type OutputPattern } from '../../render'
+import { diag } from '../../render/diag'
+import { hashString01 } from '../../render/math/hash'
 import { youtubeVolume } from '../../render/youtube'
 import { Icon } from '../../shared/components'
 import { setAuthToken } from '../../shared/lib/http'
@@ -61,6 +63,9 @@ export function OutPage() {
   const patternAt = useRef(0)
   const [ytBlocked, setYtBlocked] = useState(false)
   const [ytRetry, setYtRetry] = useState(0)
+  // a lost WebGL context is recreated on restore
+  const [glEpoch, setGlEpoch] = useState(0)
+  const lastRaf = useRef(0)
   const latest = useRef({ show, scene, setup, catalog, effects, videoVolume: 0 })
   latest.current = { show, scene, setup, catalog, effects, videoVolume: audio.masterGain }
 
@@ -73,18 +78,46 @@ export function OutPage() {
       setGlError(e instanceof Error ? e.message : String(e))
       return
     }
+    diag.log('gl.created', { epoch: glEpoch })
     const size = () => {
       const dpr = window.devicePixelRatio || 1
-      renderer.current?.setSize(Math.round(window.innerWidth * dpr), Math.round(window.innerHeight * dpr))
+      const w = Math.round(window.innerWidth * dpr), h = Math.round(window.innerHeight * dpr)
+      if (renderer.current && (renderer.current.canvas.width !== w || renderer.current.canvas.height !== h)) diag.log('resize', { width: w, height: h, dpr })
+      renderer.current?.setSize(w, h)
     }
     size()
+    const lost = (e: Event) => {
+      e.preventDefault()
+      diag.log('gl.lost')
+    }
+    const restored = () => {
+      diag.log('gl.restored')
+      setGlEpoch((n) => n + 1)
+    }
     window.addEventListener('resize', size)
+    canvas.addEventListener('webglcontextlost', lost)
+    canvas.addEventListener('webglcontextrestored', restored)
     return () => {
       window.removeEventListener('resize', size)
+      canvas.removeEventListener('webglcontextlost', lost)
+      canvas.removeEventListener('webglcontextrestored', restored)
       renderer.current?.dispose()
       renderer.current = null
     }
-  }, [])
+  }, [glEpoch])
+
+  // (§4 output.diag) what arrives from the server, for lining flashes up with state changes
+  useEffect(() => diag.log('hub', { status }), [status])
+  useEffect(() => {
+    if (show) diag.log('show', { version: show.version, state: show.transport.state, offset: show.transport.offset, startedAt: show.transport.startedAt, step: show.transport.step ?? null, onAir: show.onAir, preview: show.preview?.draftId ?? null })
+  }, [show])
+  useEffect(() => {
+    diag.log('scene', { id: scene?.id ?? null, version: scene?.version ?? null })
+  }, [scene])
+  useEffect(() => {
+    diag.log('effects', { list: effects.map((e) => `${e.id}:${hashString01(e.source ?? '').toFixed(6)}`) })
+  }, [effects])
+  useEffect(() => hub.on('clock', (offset) => diag.log('clock', { offset: Math.round(offset as number) })), [hub])
 
   // (§16 masks) warm the plate masks at idle (the small size stands in while a picked plate's full mask decodes)
   useEffect(() => {
@@ -101,6 +134,8 @@ export function OutPage() {
     if (status !== 'open') return
     effectApi.list().then(setEffects, () => {})
   }, [status, scene?.id, scene?.version])
+  // (§4) an agent or the editor saved an effect: load its new source, or the wall keeps playing the old one
+  useEffect(() => hub.onMessage('effects.changed', () => void effectApi.list().then(setEffects, () => {})), [hub])
 
   useEffect(() => {
     if (!splash) return
@@ -143,6 +178,30 @@ export function OutPage() {
         return { presented: true }
       }),
       handleRenderRpcs(hub, () => ambientClock(hub)),
+      // (§4) playback diagnostics for MCP output_status: state, counters and, while on, the event ring
+      hub.handleRpc('output.diag', async (args) => {
+        if (typeof args.enable === 'boolean') diag.setOn(args.enable)
+        if (args.clear) diag.clear()
+        const r = renderer.current
+        const L = latest.current
+        const script = document.querySelector<HTMLScriptElement>('script[type="module"][src*="/assets/"]')
+        return {
+          build: script ? new URL(script.src).pathname : 'dev',
+          diagnostics: diag.on,
+          canvas: { width: r?.canvas.width ?? 0, height: r?.canvas.height ?? 0, dpr: window.devicePixelRatio || 1 },
+          hub: { status: hub.status, clockOffsetMs: Math.round(hub.clockOffset) },
+          playhead: playheadNow(hub, L.show ?? null),
+          transport: L.show?.transport ?? null,
+          preview: L.show?.preview ?? null,
+          scene: L.scene ? { id: L.scene.id, version: L.scene.version } : null,
+          effects: L.effects.map((e) => ({ id: e.id, kind: e.kind, sourceHash: hashString01(e.source ?? '').toFixed(6) })),
+          js: r?.jsStatus() ?? null,
+          effectErrors: r?.effectErrors() ?? [],
+          counts: diag.counts,
+          last: diag.lastOf,
+          events: diag.on ? diag.events(Number(args.last ?? 500), Array.isArray(args.kinds) ? (args.kinds as string[]) : undefined) : [],
+        }
+      }),
     ]
     return () => offs.forEach((f) => f())
   }, [hub])
@@ -193,15 +252,18 @@ export function OutPage() {
   useRaf((now) => {
     const r = renderer.current
     meter.current.tick(now)
+    if (lastRaf.current && now - lastRaf.current > 50) diag.log('raf.gap', { ms: Math.round(now - lastRaf.current) })
+    lastRaf.current = now
     const L = latest.current
     if (r && L.setup) {
       if (outline.current && outline.current.until < now) outline.current = null
-      r.render({
+      const t = playheadNow(hub, L.show)
+      const drawn = r.render({
         setup: L.setup,
         scene: L.scene,
         catalog: L.catalog,
         effects: L.effects,
-        t: playheadNow(hub, L.show),
+        t,
         step: L.show?.transport.step ?? null,
         clock: ambientClock(hub),
         now: hub.serverNow(),
@@ -216,6 +278,8 @@ export function OutPage() {
         // §14: a video layer's own sound, at volume × master, once the browser allows sound
         videoVolume: L.videoVolume,
       })
+      if (!drawn) diag.log('render.held', { t })
+      else if (diag.on) diag.log('frame', { t: Math.round(t * 1000) / 1000, state: L.show?.transport.state, step: L.show?.transport.step ?? null, scene: L.scene?.version ?? null, outline: !!outline.current, pattern: !!pattern.current })
     } else if (r && pattern.current) {
       // calibration still works before a setup arrives
       r.render({

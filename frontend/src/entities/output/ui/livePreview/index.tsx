@@ -70,7 +70,9 @@ export function LivePreview({ hub, maxWidth = 1280, fps = 30, children, classNam
 
   useEffect(() => {
     effectApi.list().then(setEffects, () => {})
-  }, [scene?.id])
+    // (§4) an effect was saved: load its new source
+    return hub.onMessage('effects.changed', () => void effectApi.list().then(setEffects, () => {}))
+  }, [hub, scene?.id])
 
   useRaf(() => {
     const rr = r.current

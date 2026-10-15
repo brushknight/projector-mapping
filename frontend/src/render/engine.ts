@@ -267,6 +267,11 @@ export class Renderer {
     if (this.canvas.height !== height) this.canvas.height = height
   }
 
+  /** (§4 output.diag) the JS effect runtime's counters, disabled effects and requests in flight */
+  jsStatus() {
+    return { ...this.js.stats, inflight: this.js.inflight(), disabled: this.js.failures() }
+  }
+
   effectErrors(): EffectError[] {
     return [...this.errors].map(([effectId, message]) => ({ effectId, message }))
   }
@@ -296,6 +301,9 @@ export class Renderer {
       return false
     }
     this.heldFrames = 0
+    // JS effect instances not drawn in the frame before are forgotten (their clip ended): a clip that comes back never
+    // shows its old picture
+    this.js.beginFrame()
     const S = sceneTargetSize(input, this.opts.maxSceneSize)
     const scene = this.pool.get('scene', S.width, S.height, true)
     gl.disable(gl.DEPTH_TEST)

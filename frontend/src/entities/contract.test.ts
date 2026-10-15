@@ -76,6 +76,7 @@ const payloads: Record<string, Guard> = {
   'rpc.result': any,
   telemetry: telemetryShape,
   'sound.play': soundPlayShape,
+  'effects.changed': obj({ id: str }),
   'sound.stop': soundStopShape,
 }
 

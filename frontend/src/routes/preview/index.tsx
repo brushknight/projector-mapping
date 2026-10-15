@@ -75,8 +75,11 @@ export function PreviewPage() {
   useEffect(() => warmPlateMasks(1024), [])
 
   useEffect(() => {
-    if (!layerMode) effectApi.list().then(setEffects, () => {})
-  }, [layerMode, scene?.id])
+    if (layerMode) return
+    effectApi.list().then(setEffects, () => {})
+    // (§4) an effect was saved: load its new source
+    return hub.onMessage('effects.changed', () => void effectApi.list().then(setEffects, () => {}))
+  }, [hub, layerMode, scene?.id])
 
   const announced = useRef(false)
 

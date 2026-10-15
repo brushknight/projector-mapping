@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"projmap/internal/application/app_errors"
+	"projmap/internal/application/ports/out/realtime"
 	catalogrepo "projmap/internal/application/ports/repository/catalog"
 	"projmap/internal/application/services"
 	catalogsvc "projmap/internal/application/services/catalog"
@@ -21,6 +22,18 @@ type Service struct {
 
 	mu      sync.RWMutex
 	schemas map[string]catalog.Schema // user effects' schemas, for validation
+
+	direct realtime.Direct // tells every client an effect changed (protocol §4 effects.changed); nil in tests
+}
+
+// UseDirect makes effect saves and deletes send effects.changed to every connected client, so a running output or
+// editor drops its old copy of the source instead of playing it until the next reload.
+func (s *Service) UseDirect(d realtime.Direct) { s.direct = d }
+
+func (s *Service) changed(id string) {
+	if s.direct != nil {
+		s.direct.SendDirect(realtime.Target{}, realtime.Message{T: "effects.changed", D: realtime.Data(map[string]string{"id": id})})
+	}
 }
 
 var _ catalogsvc.CatalogService = (*Service)(nil)
@@ -96,6 +109,7 @@ func (s *Service) CreateEffect(ctx context.Context, in catalogsvc.EffectInput) (
 		return nil, nil, err
 	}
 	s.remember(e)
+	s.changed(e.ID)
 	return e, catalog.LintSource(e.Kind, *e.Source), nil
 }
 
@@ -131,6 +145,7 @@ func (s *Service) UpdateEffect(ctx context.Context, id string, in catalogsvc.Eff
 		return nil, nil, err
 	}
 	s.remember(e)
+	s.changed(e.ID)
 	return e, catalog.LintSource(e.Kind, *e.Source), nil
 }
 
@@ -144,6 +159,7 @@ func (s *Service) DeleteEffect(ctx context.Context, id string) error {
 	s.mu.Lock()
 	delete(s.schemas, id)
 	s.mu.Unlock()
+	s.changed(id)
 	return nil
 }
 

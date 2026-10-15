@@ -183,6 +183,7 @@ func TestWSMessages(t *testing.T) {
 		"telemetry":  func() any { return &devices.Telemetry{} },
 		"sound.play": func() any { return &showsvc.SoundPlay{} },
 		"sound.stop": func() any { return &showsvc.SoundStop{} },
+		"effects.changed": func() any { return &map[string]string{} },
 		"ack":        func() any { return &showsvc.SoundAck{} },
 	}
 	// snapshots carry what their channel holds
