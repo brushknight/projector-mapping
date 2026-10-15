@@ -8,6 +8,7 @@ import { useLocalWallAudio } from '../../entities/sound/audioHooks'
 import { Icon, OnAirDot } from '../../shared/components'
 import { setAuthToken } from '../../shared/lib/http'
 import { useHubStatus, useOwnHub } from '../../shared/lib/useHub'
+import { useReloadOnNewBuild } from '../../shared/lib/reloadOnNewBuild'
 import { Hub } from '../../shared/lib/ws'
 import s from './styles.module.css'
 
@@ -26,6 +27,7 @@ export function ViewPage() {
     if (token) setAuthToken(token)
     return new Hub({ role: 'remote', name: 'viewer', caps: [], token: token ?? null })
   })
+  useReloadOnNewBuild(hub)
   const status = useHubStatus(hub)
   const { show, scene, setup, previewing } = useWallDocs(hub)
   const [sound, setSound] = useState(false)

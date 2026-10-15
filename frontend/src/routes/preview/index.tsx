@@ -8,6 +8,7 @@ import { YouTubeBackdrop } from '../../entities/video/youtube'
 import { activeYouTube, Renderer, warmPlateMasks } from '../../render'
 import { setAuthToken } from '../../shared/lib/http'
 import { useOwnHub } from '../../shared/lib/useHub'
+import { useReloadOnNewBuild } from '../../shared/lib/reloadOnNewBuild'
 import { useRaf } from '../../shared/lib/useRaf'
 import { Hub } from '../../shared/lib/ws'
 import s from './styles.module.css'
@@ -31,6 +32,7 @@ export function PreviewPage() {
     return new Hub({ role: 'remote', name: 'preview', token: token ?? null })
   })
   useOwnHub(() => hub)
+  useReloadOnNewBuild(hub)
   // (§15) scene=<id> follows that scene (its own mode) without putting it on air: the quick and long-press previews
   const { show, scene: liveScene, setup } = useLiveDocs(hub, sceneParam ?? null)
   const catalog = useCatalog(hub.welcome?.catalogVersion)

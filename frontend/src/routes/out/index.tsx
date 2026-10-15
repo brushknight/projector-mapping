@@ -14,6 +14,7 @@ import { youtubeVolume } from '../../render/youtube'
 import { Icon } from '../../shared/components'
 import { setAuthToken } from '../../shared/lib/http'
 import { useHubStatus, useOwnHub } from '../../shared/lib/useHub'
+import { useReloadOnNewBuild } from '../../shared/lib/reloadOnNewBuild'
 import { useRaf } from '../../shared/lib/useRaf'
 import { Hub } from '../../shared/lib/ws'
 import s from './styles.module.css'
@@ -36,6 +37,7 @@ export function OutPage() {
     if (token) setAuthToken(token)
     return new Hub({ role: 'output', name: 'projector output', caps: ['render', 'audio'], token: token ?? null })
   })
+  useReloadOnNewBuild(hub)
   const status = useHubStatus(hub)
   // an agent's draft previewed on the wall (backend §9 show.preview) replaces the live scene while it lasts
   const { show, setup, scene } = useWallDocs(hub)
