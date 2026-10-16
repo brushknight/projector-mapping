@@ -71,6 +71,15 @@ struct SceneryTab: View {
                 Text("photos · unsplash").font(.pm(12)).foregroundStyle(Palette.dim).frame(maxWidth: .infinity)
             }
         }
+        // the one-finger scrub rail through every photo, then the videos
+        .scrubRail(ScrubRail(entries: railEntries, current: found?.element.ref, hideKey: "scenery") { e in
+            let layer = model.layers("scenery").first { ($0.kind == "photo" || $0.kind == "video") && $0.visible } ?? model.layers("scenery").first { $0.kind == "photo" || $0.kind == "video" }
+            if let v = model.videos.first(where: { $0.ref == e.id }) {
+                if layer?.ref != v.ref { Self.pickVideo(model, ref: v.ref, name: v.name, trim: nil, embed: v.isEmbed) }
+            } else {
+                choose(e.id, name: e.name, layer: layer)
+            }
+        })
         .onChange(of: found?.element.ref) { picked.settle() }
         .onChange(of: pick) { _, item in
             guard let item else { return }
@@ -80,6 +89,16 @@ struct SceneryTab: View {
             guard let item else { return }
             Task { await uploadMovie(item) }
         }
+    }
+
+    /// The rail: the catalog photos grouped by category, then the videos.
+    var railEntries: [ScrubEntry] {
+        let items = model.catalog.scenery
+        var cats: [String] = []
+        for s in items where !cats.contains(s.category) { cats.append(s.category) }
+        let photos = cats.flatMap { c in items.filter { $0.category == c }.map { s in ScrubEntry(id: s.id, name: s.name, group: c) { SceneryImage(ref: s.id) } } }
+        let videos = model.videos.map { v in ScrubEntry(id: v.ref, name: v.name, group: "videos") { VideoThumb(video: v) } }
+        return photos + videos
     }
 
     func label(_ l: Layer) -> String {

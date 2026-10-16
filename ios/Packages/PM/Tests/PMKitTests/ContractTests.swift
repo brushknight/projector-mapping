@@ -261,7 +261,7 @@ import PMTestSupport
 
     @Test func catalogKeepsParamOrder() throws {
         let cat = try Catalog.decode(Data(contentsOf: Fixtures.catalogURL))
-        #expect(cat.version == 9)
+        #expect(cat.version == 10)
         // (§20 "Step 0") the opening step and the transport step decode
         let sc = try JSONDecoder().decode(Scene.self, from: Fixtures.data("scene"))
         #expect(sc.intro?.source.mode == "live" && sc.intro?.converge == true && sc.intro?.on == false && sc.intro?.transitionMs == 600)

@@ -1,5 +1,5 @@
 {
-  "version": 9,
+  "version": 10,
   "paramSchemaNote": "each param: {type: number|integer|boolean|color|enum|string|strokes, min?, max?, step?, default, label?, unit?, options?}; strokes is an array of drawing strokes (protocol §1, effect drawing); an attachment's params validate against goboParams merged with its gobo's own params; a generator layer or colour layer validates against its colorGenerators params",
   "light": {
     "params": {
@@ -4282,6 +4282,534 @@
           }
         ],
         "angle": 150,
+        "drift": 0.24,
+        "grain": 0.12,
+        "brightness": 0.9
+      }
+    },
+    {
+      "id": "sunrise",
+      "name": "sunrise",
+      "defaults": {
+        "stops": [
+          {
+            "color": "#ffd29b",
+            "pos": 0
+          },
+          {
+            "color": "#ff8a5c",
+            "pos": 0.5
+          },
+          {
+            "color": "#7b2d5b",
+            "pos": 1
+          }
+        ],
+        "angle": 170,
+        "drift": 0.24,
+        "grain": 0.12,
+        "brightness": 0.9
+      }
+    },
+    {
+      "id": "coral-reef",
+      "name": "coral reef",
+      "defaults": {
+        "stops": [
+          {
+            "color": "#ff6f61",
+            "pos": 0
+          },
+          {
+            "color": "#ffb88c",
+            "pos": 0.5
+          },
+          {
+            "color": "#00a8a8",
+            "pos": 1
+          }
+        ],
+        "angle": 140,
+        "drift": 0.24,
+        "grain": 0.12,
+        "brightness": 0.9
+      }
+    },
+    {
+      "id": "tropic",
+      "name": "tropic",
+      "defaults": {
+        "stops": [
+          {
+            "color": "#ffe259",
+            "pos": 0
+          },
+          {
+            "color": "#ffa751",
+            "pos": 0.45
+          },
+          {
+            "color": "#00c9a7",
+            "pos": 1
+          }
+        ],
+        "angle": 125,
+        "drift": 0.24,
+        "grain": 0.12,
+        "brightness": 0.9
+      }
+    },
+    {
+      "id": "rose-gold",
+      "name": "rose gold",
+      "defaults": {
+        "stops": [
+          {
+            "color": "#f7cac9",
+            "pos": 0
+          },
+          {
+            "color": "#e8a87c",
+            "pos": 0.5
+          },
+          {
+            "color": "#8a4f5e",
+            "pos": 1
+          }
+        ],
+        "angle": 150,
+        "drift": 0.24,
+        "grain": 0.12,
+        "brightness": 0.9
+      }
+    },
+    {
+      "id": "neon-night",
+      "name": "neon night",
+      "defaults": {
+        "stops": [
+          {
+            "color": "#ff00a8",
+            "pos": 0
+          },
+          {
+            "color": "#7000ff",
+            "pos": 0.5
+          },
+          {
+            "color": "#00e5ff",
+            "pos": 1
+          }
+        ],
+        "angle": 135,
+        "drift": 0.24,
+        "grain": 0.12,
+        "brightness": 0.9
+      }
+    },
+    {
+      "id": "cyber",
+      "name": "cyber",
+      "defaults": {
+        "stops": [
+          {
+            "color": "#00ffe1",
+            "pos": 0
+          },
+          {
+            "color": "#2b2bff",
+            "pos": 0.55
+          },
+          {
+            "color": "#0a0026",
+            "pos": 1
+          }
+        ],
+        "angle": 115,
+        "drift": 0.24,
+        "grain": 0.12,
+        "brightness": 0.9
+      }
+    },
+    {
+      "id": "synthwave",
+      "name": "synthwave",
+      "defaults": {
+        "stops": [
+          {
+            "color": "#ff2a6d",
+            "pos": 0
+          },
+          {
+            "color": "#d100d1",
+            "pos": 0.5
+          },
+          {
+            "color": "#05d9e8",
+            "pos": 1
+          }
+        ],
+        "angle": 180,
+        "drift": 0.24,
+        "grain": 0.12,
+        "brightness": 0.9
+      }
+    },
+    {
+      "id": "deep-sea",
+      "name": "deep sea",
+      "defaults": {
+        "stops": [
+          {
+            "color": "#00c6ff",
+            "pos": 0
+          },
+          {
+            "color": "#0072ff",
+            "pos": 0.5
+          },
+          {
+            "color": "#001a33",
+            "pos": 1
+          }
+        ],
+        "angle": 170,
+        "drift": 0.24,
+        "grain": 0.12,
+        "brightness": 0.9
+      }
+    },
+    {
+      "id": "arctic",
+      "name": "arctic",
+      "defaults": {
+        "stops": [
+          {
+            "color": "#e0f7ff",
+            "pos": 0
+          },
+          {
+            "color": "#8fd3fe",
+            "pos": 0.5
+          },
+          {
+            "color": "#2a6f97",
+            "pos": 1
+          }
+        ],
+        "angle": 160,
+        "drift": 0.24,
+        "grain": 0.12,
+        "brightness": 0.9
+      }
+    },
+    {
+      "id": "forest",
+      "name": "forest",
+      "defaults": {
+        "stops": [
+          {
+            "color": "#c6f68d",
+            "pos": 0
+          },
+          {
+            "color": "#3a7d44",
+            "pos": 0.5
+          },
+          {
+            "color": "#0b2b16",
+            "pos": 1
+          }
+        ],
+        "angle": 150,
+        "drift": 0.24,
+        "grain": 0.12,
+        "brightness": 0.9
+      }
+    },
+    {
+      "id": "mint",
+      "name": "mint",
+      "defaults": {
+        "stops": [
+          {
+            "color": "#d9fff2",
+            "pos": 0
+          },
+          {
+            "color": "#4fe3c1",
+            "pos": 0.5
+          },
+          {
+            "color": "#1b6f63",
+            "pos": 1
+          }
+        ],
+        "angle": 135,
+        "drift": 0.24,
+        "grain": 0.12,
+        "brightness": 0.9
+      }
+    },
+    {
+      "id": "lavender",
+      "name": "lavender",
+      "defaults": {
+        "stops": [
+          {
+            "color": "#f3e8ff",
+            "pos": 0
+          },
+          {
+            "color": "#b39ddb",
+            "pos": 0.5
+          },
+          {
+            "color": "#4a3a7a",
+            "pos": 1
+          }
+        ],
+        "angle": 140,
+        "drift": 0.24,
+        "grain": 0.12,
+        "brightness": 0.9
+      }
+    },
+    {
+      "id": "candy",
+      "name": "candy",
+      "defaults": {
+        "stops": [
+          {
+            "color": "#ff9a9e",
+            "pos": 0
+          },
+          {
+            "color": "#fecfef",
+            "pos": 0.5
+          },
+          {
+            "color": "#a18cd1",
+            "pos": 1
+          }
+        ],
+        "angle": 120,
+        "drift": 0.24,
+        "grain": 0.12,
+        "brightness": 0.9
+      }
+    },
+    {
+      "id": "blood-moon",
+      "name": "blood moon",
+      "defaults": {
+        "stops": [
+          {
+            "color": "#ff3b30",
+            "pos": 0
+          },
+          {
+            "color": "#8b0000",
+            "pos": 0.5
+          },
+          {
+            "color": "#1a0000",
+            "pos": 1
+          }
+        ],
+        "angle": 160,
+        "drift": 0.24,
+        "grain": 0.12,
+        "brightness": 0.9
+      }
+    },
+    {
+      "id": "golden-hour",
+      "name": "golden hour",
+      "defaults": {
+        "stops": [
+          {
+            "color": "#fff1a8",
+            "pos": 0
+          },
+          {
+            "color": "#ffb000",
+            "pos": 0.5
+          },
+          {
+            "color": "#c14a09",
+            "pos": 1
+          }
+        ],
+        "angle": 150,
+        "drift": 0.24,
+        "grain": 0.12,
+        "brightness": 0.9
+      }
+    },
+    {
+      "id": "amber-teal",
+      "name": "amber teal",
+      "defaults": {
+        "stops": [
+          {
+            "color": "#ffb000",
+            "pos": 0
+          },
+          {
+            "color": "#5a5a5a",
+            "pos": 0.5
+          },
+          {
+            "color": "#00a6a6",
+            "pos": 1
+          }
+        ],
+        "angle": 90,
+        "drift": 0.24,
+        "grain": 0.12,
+        "brightness": 0.9
+      }
+    },
+    {
+      "id": "magenta-cyan",
+      "name": "magenta cyan",
+      "defaults": {
+        "stops": [
+          {
+            "color": "#ff00cc",
+            "pos": 0
+          },
+          {
+            "color": "#333399",
+            "pos": 0.5
+          },
+          {
+            "color": "#00ffff",
+            "pos": 1
+          }
+        ],
+        "angle": 90,
+        "drift": 0.24,
+        "grain": 0.12,
+        "brightness": 0.9
+      }
+    },
+    {
+      "id": "ice-fire",
+      "name": "ice and fire",
+      "defaults": {
+        "stops": [
+          {
+            "color": "#00d2ff",
+            "pos": 0
+          },
+          {
+            "color": "#ffffff",
+            "pos": 0.5
+          },
+          {
+            "color": "#ff4b1f",
+            "pos": 1
+          }
+        ],
+        "angle": 90,
+        "drift": 0.24,
+        "grain": 0.12,
+        "brightness": 0.9
+      }
+    },
+    {
+      "id": "warm-gray",
+      "name": "warm gray",
+      "defaults": {
+        "stops": [
+          {
+            "color": "#f2ede4",
+            "pos": 0
+          },
+          {
+            "color": "#a39e93",
+            "pos": 0.5
+          },
+          {
+            "color": "#3d3a35",
+            "pos": 1
+          }
+        ],
+        "angle": 160,
+        "drift": 0.24,
+        "grain": 0.12,
+        "brightness": 0.9
+      }
+    },
+    {
+      "id": "cool-gray",
+      "name": "cool gray",
+      "defaults": {
+        "stops": [
+          {
+            "color": "#eef2f5",
+            "pos": 0
+          },
+          {
+            "color": "#8d99a6",
+            "pos": 0.5
+          },
+          {
+            "color": "#2c333a",
+            "pos": 1
+          }
+        ],
+        "angle": 160,
+        "drift": 0.24,
+        "grain": 0.12,
+        "brightness": 0.9
+      }
+    },
+    {
+      "id": "tungsten",
+      "name": "tungsten",
+      "defaults": {
+        "stops": [
+          {
+            "color": "#ffcf8a",
+            "pos": 0
+          },
+          {
+            "color": "#ff9f43",
+            "pos": 0.5
+          },
+          {
+            "color": "#5c2e00",
+            "pos": 1
+          }
+        ],
+        "angle": 170,
+        "drift": 0.24,
+        "grain": 0.12,
+        "brightness": 0.9
+      }
+    },
+    {
+      "id": "daylight",
+      "name": "daylight",
+      "defaults": {
+        "stops": [
+          {
+            "color": "#ffffff",
+            "pos": 0
+          },
+          {
+            "color": "#dfefff",
+            "pos": 0.5
+          },
+          {
+            "color": "#9cc7ff",
+            "pos": 1
+          }
+        ],
+        "angle": 170,
         "drift": 0.24,
         "grain": 0.12,
         "brightness": 0.9

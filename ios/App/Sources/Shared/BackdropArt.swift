@@ -50,6 +50,8 @@ struct BackdropArt: View {
         case .gradient:
             if let g = layers.first(where: { $0.kind == "gradient" }) {
                 GradientHeroArt(colors: stops(g).map(\.color), drift: g.param("drift") ?? 0.24, brightness: g.param("brightness") ?? 0.9)
+            } else if let g = layers.first(where: { $0.kind == "generator" }) {
+                GeneratorSwatch(ref: g.ref, params: g.params)
             } else {
                 Palette.hero
             }

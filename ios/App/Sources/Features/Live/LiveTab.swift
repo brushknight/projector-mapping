@@ -48,6 +48,12 @@ struct LiveTab: View {
             AccentCard()
             PresetsSection(mode: "live")
         }
+        // the one-finger scrub rail through the attachments in front of the live light
+        .overlay(alignment: .trailing) {
+            if model.light("live") != nil {
+                AttachmentRail(mode: "live", selected: $attachmentId).padding(.top, 130).padding(.bottom, 150).padding(.trailing, 2)
+            }
+        }
         .onChange(of: model.layers("live").map(\.id)) { _, ids in
             if let s = selectedId, !ids.contains(s) { selectedId = nil }
         }

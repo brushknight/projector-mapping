@@ -20,6 +20,12 @@ public enum StackPick {
          "opacity": .number(old?.opacity ?? 1), "blend": "normal", "light": nil, "params": .object(defaults)]
     }
 
+    /// An animated colour layer (`colorGenerators`) for `color` with the catalog's defaults.
+    public static func generator(ref: String, name: String, defaults: JSONObject, keeping old: Layer?, id: String) -> JSONValue {
+        ["id": .string(old?.id ?? id), "kind": "generator", "ref": .string(ref), "name": .string(name), "visible": true,
+         "opacity": .number(old?.opacity ?? 1), "blend": "normal", "light": nil, "params": .object(defaults)]
+    }
+
     /// A photo layer for `scenery`: keeps blur, brightness, warmth and drift of the previous photo (catalog defaults
     /// fill the rest).
     public static func photo(ref: String, name: String, defaults: JSONObject, keeping old: Layer?, id: String) -> JSONValue {

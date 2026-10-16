@@ -139,7 +139,7 @@ describe('contract fixtures', () => {
     expect(scene.intro?.converge).toBe(true)
     expect(scene.backdrop.static.attachments?.[0].motion?.preset).toBe('sun-lr')
     const cat = read('catalog.json')
-    expect(cat.version).toBe(9)
+    expect(cat.version).toBe(10)
     expect(cat.gobos.length).toBeGreaterThanOrEqual(45)
     // (catalog 6) every attachment is a metal plate with the reference photo it follows; (catalog 8) no metal thumbnail
     for (const g of cat.gobos) {

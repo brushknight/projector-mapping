@@ -13,7 +13,7 @@ import (
 func TestCatalog(t *testing.T) {
 	h := apitest.New(t)
 	m := h.Do("GET", "/api/v1/catalog", nil).Map(t)
-	if m["version"] != float64(9) || len(m["gobos"].([]any)) < 45 || len(m["effects"].([]any)) != 14 {
+	if m["version"] != float64(10) || len(m["gobos"].([]any)) < 45 || len(m["effects"].([]any)) != 14 {
 		t.Fatalf("catalog %v", m["version"])
 	}
 	r := h.Do("GET", "/catalog/assets/scenery/flowers.jpg", nil)

@@ -2,13 +2,14 @@ import SwiftUI
 import PMKit
 import PMDesign
 
-/// Board `phone-color`: gradient cards, the colour stops (tap to edit), drift, film grain and brightness.
+/// Board `phone-color`: gradient cards and animated colours (`colorGenerators`), the colour stops (tap to edit), drift,
+/// film grain and brightness, or the animated colour's own controls. A scrub rail on the right runs through them all.
 struct ColorTab: View {
     @Environment(AppModel.self) private var model
     private let picked = OptimisticPick()
 
     var body: some View {
-        let found = model.layers("color").enumerated().first { $0.element.kind == "gradient" }
+        let found = model.layers("color").enumerated().first { $0.element.kind == "gradient" || $0.element.kind == "generator" }
         TabPage {
             TabHeader(title: "color")
             Hero { BackdropArt(focus: .gradient) } leading: { OnAirLabel(detail: found?.element.name) } trailing: { FormatLabel() }
@@ -19,14 +20,69 @@ struct ColorTab: View {
                     }
                 }
             }
-            if let found {
+            if !model.catalog.colorGenerators.isEmpty {
+                CapRow("animated", "\(model.catalog.colorGenerators.count)")
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 10) {
+                    ForEach(model.catalog.colorGenerators) { g in
+                        ImageCard(g.name, on: picked.show(found?.element.ref) == g.id, aspect: 1, action: { choose(g, layer: found?.element) }) {
+                            GeneratorSwatch(ref: g.id, params: Catalog.defaults(g.params))
+                        }
+                    }
+                }
+            }
+            if let found, found.element.kind == "generator" {
+                generatorCard(index: found.offset, layer: found.element)
+            } else if let found {
                 editCard(index: found.offset, layer: found.element)
             } else {
                 EmptyCard(title: "no gradient on the wall", detail: "pick one above to fill the wall with color.")
             }
             PresetsSection(mode: "color")
         }
+        // the one-finger scrub rail through every gradient and animated colour
+        .scrubRail(ScrubRail(entries: railEntries, current: found?.element.ref, hideKey: "color") { e in
+            if let g = model.catalog.gradients.first(where: { $0.id == e.id }) { choose(g, layer: model.layers("color").first { $0.kind == "gradient" || $0.kind == "generator" }) }
+            else if let g = model.catalog.colorGenerator(e.id) { choose(g, layer: model.layers("color").first { $0.kind == "gradient" || $0.kind == "generator" }) }
+        })
         .onChange(of: found?.element.ref) { picked.settle() }
+    }
+
+    var railEntries: [ScrubEntry] {
+        model.catalog.gradients.map { g in ScrubEntry(id: g.id, name: g.name, group: "gradients") { GradientSwatch(item: g) } }
+            + model.catalog.colorGenerators.map { g in ScrubEntry(id: g.id, name: g.name, group: "animated") { GeneratorSwatch(ref: g.id, params: Catalog.defaults(g.params)) } }
+    }
+
+    /// Picking an animated colour replaces the color stack with that one generator layer.
+    func choose(_ g: ColorGeneratorItem, layer: Layer?) {
+        if let layer, layer.ref == g.id, model.layers("color").count == 1 { return }
+        picked.tap(g.id)
+        let pickedLayer = StackPick.generator(ref: g.id, name: g.name, defaults: Catalog.defaults(g.params), keeping: layer, id: NewID.make("lay"))
+        model.pickFast(path: ScenePath.layers("color"), value: [pickedLayer], fallback: .replaceStack(mode: "color", layers: [pickedLayer]))
+    }
+
+    /// An animated colour's controls: its colours (tap to edit) and its number params.
+    func generatorCard(index i: Int, layer: Layer) -> some View {
+        let live = model.hub.isLive
+        let spec = model.catalog.colorGenerator(layer.ref)?.params ?? ParamList()
+        let colors = spec.items.filter { $0.spec.type == "color" }
+        return Card {
+            CapRow(model.catalog.colorGenerator(layer.ref)?.name ?? layer.name, model.catalog.colorGenerator(layer.ref)?.description ?? "", padding: 2)
+            if !colors.isEmpty {
+                HStack(spacing: 10) {
+                    ForEach(colors) { p in
+                        StopButton(color: Color(css: layer.params[p.key]?.string ?? p.spec.default?.string) ?? .black) { c in
+                            model.param(ScenePath.param("color", i, p.key), .string(c))
+                        }
+                    }
+                }
+            }
+            ForEach(spec.items.filter { $0.spec.isNumeric }) { p in
+                let v = layer.params[p.key]?.double ?? p.spec.default?.double ?? p.spec.lower
+                FillSlider(p.spec.label ?? p.key, icon: .param(p.key), value: p.spec.fraction(v), enabled: live, format: { Fmt.param(p.key, p.spec, p.spec.value(at: $0)) }) {
+                    model.param(ScenePath.param("color", i, p.key), .number(p.spec.value(at: $0)))
+                }
+            }
+        }
     }
 
     /// Picking a gradient replaces the color stack with that one gradient.
@@ -133,5 +189,36 @@ struct GradientSwatch: View {
     var body: some View {
         let stops = item.stops.map { Gradient.Stop(color: Color(css: $0.color) ?? .black, location: $0.pos) }
         AngledGradient(stops: stops, angle: item.angle, radial: item.id == "ultraviolet")
+    }
+}
+
+/// A still stand-in for an animated colour (`colorGenerators`), from its colour params.
+struct GeneratorSwatch: View {
+    var ref: String
+    var params: JSONObject
+
+    var body: some View {
+        let a = Color(css: params["colorA"]?.string) ?? Color(hex: 0xFF4D00)
+        let b = Color(css: params["colorB"]?.string) ?? Color(hex: 0x2F6BFF)
+        switch ref {
+        case "hue-cycle":
+            AngularGradient(colors: [.red, .orange, .yellow, .green, .cyan, .blue, .purple, .pink, .red], center: .center)
+        case "color-flow":
+            ZStack {
+                Color(css: params["colorC"]?.string) ?? .purple
+                RadialGradient(colors: [a, .clear], center: UnitPoint(x: 0.3, y: 0.3), startRadius: 0, endRadius: 90)
+                RadialGradient(colors: [b, .clear], center: UnitPoint(x: 0.7, y: 0.75), startRadius: 0, endRadius: 90)
+            }
+        case "pulse":
+            RadialGradient(colors: [a, b], center: .center, startRadius: 0, endRadius: 90)
+        case "aurora":
+            LinearGradient(stops: [.init(color: .black, location: 0.05), .init(color: a, location: 0.45), .init(color: b, location: 0.78), .init(color: .black, location: 1)],
+                           startPoint: .topLeading, endPoint: .bottomTrailing)
+        case "kelvin-cycle":
+            LinearGradient(colors: [lightColor(LightColor(kelvin: params["fromKelvin"]?.double ?? 2700)), .white, lightColor(LightColor(kelvin: params["toKelvin"]?.double ?? 6500))],
+                           startPoint: .leading, endPoint: .trailing)
+        default:
+            LinearGradient(colors: [a, b], startPoint: .topLeading, endPoint: .bottomTrailing)
+        }
     }
 }
