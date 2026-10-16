@@ -3,7 +3,7 @@ import PMKit
 import PMDesign
 
 /// The one-finger scrub rail on the right edge of the static tab: every attachment, small, top to bottom in browse order
-/// (windows, nature, sky, patterns, beams). Slide a finger along it and each plate goes in front of the light as the
+/// (windows, nature, sky, patterns, beams), with "full frame" (nothing in front of the light) at the top. Slide a finger along it and each plate goes in front of the light as the
 /// finger passes it, with a selection tick per plate and a firmer tap at each new collection. It replaces the selected
 /// attachment and keeps its placement, like a tap in the browser.
 struct AttachmentRail: View {
@@ -13,23 +13,29 @@ struct AttachmentRail: View {
     /// the plate under the finger while it is down
     @State private var index: Int?
     @State private var lastSent = Date.distantPast
-    @State private var pending: GoboItem?
+    /// the plate to send next (nil inside: the full frame), when one is waiting
+    @State private var pending: GoboItem??
+    /// the attachment the full frame took off, so scrubbing back onto a plate keeps its placement
+    @State private var kept: Attachment?
     @State private var flush: Task<Void, Never>?
 
     /// picks at most this often while scrubbing; the last one under the finger always goes out
     private static let minInterval: TimeInterval = 0.05
     private static let gap: CGFloat = 5
 
+    /// One slot on the rail: a plate, or the full frame (item nil).
     struct Entry: Identifiable {
-        var item: GoboItem
+        var item: GoboItem?
         var category: GoboCategory
-        var id: String { item.id }
+        var id: String { item?.id ?? "" }
     }
+
+    static let fullFrame = Entry(item: nil, category: GoboCategory(id: "", name: "nothing in front of the light"))
 
     var body: some View {
         let cats = model.catalog.goboCategories.filter { !model.catalog.gobos(in: $0.id).isEmpty }
-        let entries = cats.flatMap { c in model.catalog.gobos(in: c.id).map { Entry(item: $0, category: c) } }
-        let onWall = model.attachments(mode).last?.gobo
+        let entries = [Self.fullFrame] + cats.flatMap { c in model.catalog.gobos(in: c.id).map { Entry(item: $0, category: c) } }
+        let onWall = model.attachments(mode).last?.gobo ?? ""
         GeometryReader { geo in
             let layout = Layout(entries: entries, height: geo.size.height)
             let active = index != nil
@@ -59,7 +65,7 @@ struct AttachmentRail: View {
         }
         .accessibilityElement()
         .accessibilityLabel("attachment rail")
-        .accessibilityValue(onWall.flatMap { id in entries.first { $0.id == id }?.item.name } ?? "nothing")
+        .accessibilityValue(entries.first { $0.id == onWall }?.item?.name ?? "full frame")
         .accessibilityAdjustableAction { dir in
             let cur = entries.firstIndex { $0.id == onWall } ?? -1
             let next = dir == .increment ? cur + 1 : cur - 1
@@ -68,12 +74,14 @@ struct AttachmentRail: View {
     }
 
     /// The column of small plates, a gap between collections, the one on the wall ringed.
-    func rail(_ entries: [Entry], layout: Layout, onWall: String?, active: Bool) -> some View {
+    func rail(_ entries: [Entry], layout: Layout, onWall: String, active: Bool) -> some View {
         ZStack(alignment: .top) {
             RoundedRectangle(cornerRadius: active ? 12 : 8, style: .continuous).fill(Palette.glass)
             ForEach(Array(entries.enumerated()), id: \.element.id) { i, e in
                 let on = (index.map { entries.indices.contains($0) ? entries[$0].id : nil } ?? onWall) == e.id
-                GoboThumb(gobo: e.id)
+                Group {
+                    if e.item == nil { Palette.ink } else { GoboThumb(gobo: e.id) }
+                }
                     .frame(width: (active ? 46 : 20) - 6, height: max(2, layout.size - 1))
                     .clipShape(RoundedRectangle(cornerRadius: 2, style: .continuous))
                     .overlay {
@@ -89,10 +97,12 @@ struct AttachmentRail: View {
     /// What the finger is on: the plate, bigger, with its name and collection.
     func bubble(_ e: Entry) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            GoboThumb(gobo: e.id)
+            Group {
+                if e.item == nil { Palette.ink.overlay { Icon(.sun, size: 28).foregroundStyle(Palette.ground) } } else { GoboThumb(gobo: e.id) }
+            }
                 .frame(width: 148, height: 92)
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            Text(e.item.name).font(.pm(12)).foregroundStyle(Palette.ink).lineLimit(1)
+            Text(e.item?.name ?? "full frame").font(.pm(12)).foregroundStyle(Palette.ink).lineLimit(1)
             Text(e.category.name).font(.pm(11)).foregroundStyle(Palette.dim).lineLimit(1)
         }
         .padding(8)
@@ -125,14 +135,22 @@ struct AttachmentRail: View {
         index = nil
     }
 
-    /// Puts this plate in front of the light in place of the selected attachment, keeping its placement (§16).
-    func send(_ g: GoboItem) {
+    /// Puts this plate in front of the light in place of the selected attachment, keeping its placement (§16); nil takes
+    /// every attachment off (the full frame is lit).
+    func send(_ g: GoboItem?) {
         pending = nil
         lastSent = Date()
         guard model.sceneId != nil else { model.flash("No scene is active on the projector."); return }
         let list = model.attachments(mode)
+        guard let g else {
+            if list.isEmpty { return }
+            kept = list.first { $0.id == selected } ?? list.last
+            model.pickFast(path: ScenePath.attachments(mode), value: [], fallback: .replaceAttachments(mode: mode, attachments: []))
+            selected = nil
+            return
+        }
         if list.count == 1, list[0].gobo == g.id { return }
-        let a = AttachmentSwap.replacing(list.first { $0.id == selected } ?? list.last, with: g, catalog: model.catalog)
+        let a = AttachmentSwap.replacing(list.first { $0.id == selected } ?? list.last ?? kept, with: g, catalog: model.catalog)
         guard let json = try? JSONValue(encoding: a) else { return }
         model.pickFast(path: ScenePath.attachments(mode), value: [json], fallback: .replaceAttachments(mode: mode, attachments: [json]))
         selected = a.id

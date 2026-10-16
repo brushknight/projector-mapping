@@ -255,14 +255,27 @@ struct AttachmentBrowser: View {
                         }
                 }
             }
-            HStack(spacing: 10) {
+            HStack(spacing: 8) {
+                PillButton("full frame", icon: .sun, on: wall.isEmpty) { clear() }
                 PillButton(addOnTop ? "adding on top" : "add on top", icon: .plus, on: addOnTop) { addOnTop.toggle() }
+            }
+            HStack(spacing: 10) {
                 Text(addOnTop ? "the next tap stacks another attachment in front of the light." : "a tap replaces what is in front of the light. hold a tile for more.")
                     .font(.pm(12)).foregroundStyle(Palette.dim).lineLimit(2)
             }
             .padding(.horizontal, 2)
         }
         .onChange(of: wall) { picked.settle() }
+    }
+
+    /// Takes every attachment off: the whole frame is lit.
+    func clear() {
+        guard model.sceneId != nil else { model.flash("No scene is active on the projector."); return }
+        guard !model.attachments(mode).isEmpty else { return }
+        picked.settle()
+        model.pickFast(path: ScenePath.attachments(mode), value: [], fallback: .replaceAttachments(mode: mode, attachments: []))
+        selected = nil
+        addOnTop = false
     }
 
     /// A tap swaps what is in front of the light and keeps the user's settings: the light (focus, intensity, colour,
