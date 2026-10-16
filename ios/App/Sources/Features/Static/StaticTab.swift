@@ -32,6 +32,13 @@ struct StaticTab: View {
             AccentCard()
             PresetsSection(mode: "static")
         }
+        // the one-finger scrub rail: slide along the right edge to run through every attachment
+        .overlay(alignment: .trailing) {
+            AttachmentRail(mode: "static", selected: $selectedId)
+                .padding(.top, 150)
+                .padding(.bottom, 150)
+                .padding(.trailing, 2)
+        }
         .onChange(of: list.map(\.id)) { _, ids in
             if let s = selectedId, !ids.contains(s) { selectedId = nil }
         }
