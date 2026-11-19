@@ -115,11 +115,11 @@ also the camera the server and the agents use to see the room.
 
 <table>
 <tr>
-<td align="center"><img src="docs/images/screens/phone-static.png" width="180" alt="static light with plates"><br><b>static</b><br>light and plates</td>
-<td align="center"><img src="docs/images/screens/phone-live.png" width="180" alt="live layers"><br><b>live</b><br>moving layers</td>
-<td align="center"><img src="docs/images/screens/phone-color.png" width="180" alt="colour"><br><b>color</b><br>gradients, animated colour</td>
-<td align="center"><img src="docs/images/screens/phone-scenery.png" width="180" alt="scenery"><br><b>scenery</b><br>blurred photos, video</td>
-<td align="center"><img src="docs/images/screens/phone-objects.png" width="180" alt="objects"><br><b>objects</b><br>mapped scenes, GO</td>
+<td align="center" valign="top" width="20%"><img src="docs/images/screens/phone-static.png" width="160" height="348" alt="the static tab"><br><b>static</b><br><sub>light, plates</sub></td>
+<td align="center" valign="top" width="20%"><img src="docs/images/screens/phone-live.png" width="160" height="348" alt="the live tab"><br><b>live</b><br><sub>moving layers</sub></td>
+<td align="center" valign="top" width="20%"><img src="docs/images/screens/phone-color.png" width="160" height="348" alt="the color tab"><br><b>color</b><br><sub>gradients</sub></td>
+<td align="center" valign="top" width="20%"><img src="docs/images/screens/phone-scenery.png" width="160" height="348" alt="the scenery tab"><br><b>scenery</b><br><sub>photos, video</sub></td>
+<td align="center" valign="top" width="20%"><img src="docs/images/screens/phone-objects.png" width="160" height="348" alt="the objects tab"><br><b>objects</b><br><sub>mapping, GO</sub></td>
 </tr>
 </table>
 
