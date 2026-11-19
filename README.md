@@ -1,207 +1,162 @@
 # projmap
 
-**A projector as a creative light and a mapping tool.** Throw a soft gobo, a swaying tree or a blurred photo onto
-the wall as a backdrop, or map light and animation onto the real objects in front of it.
+**An AI-native projector light and projection mapping tool.** Point your iPhone at the scene, and let Claude or
+Codex look through it and map the light onto the real objects in front of the projector.
 
-One small Go server on your laptop (or a mini PC by the projector) owns every scene. The projector output and the
-editor are web pages it serves, the iPhone app is a remote and a camera, and Claude Code or Codex can map and
-animate over MCP. It runs on your local network and needs no internet.
+> **Work in progress.** I made the video on Instagram with this <!-- TODO: link the post -->, and it
+> works for that, but it is far from finished. Expect rough edges, setup friction and things that change. Use it,
+> break it, fork it, and build your own thing on top of it.
 
-`projmap` is a working name.
+<!-- TODO: a short clip or GIF of the wall here -->
 
-## What you can do
+## How it works
 
-One mode is on air at a time, and each keeps its own settings when you switch away and back.
+1. **The projector becomes a light.** A small server on your Mac drives the projector through a browser page. Start
+   with plain light, then put plates in front of it like a real spotlight: window frames, leaves, blinds, beams. Or
+   fill the wall with a gradient, an animated colour or a soft, blurred photo.
+2. **The phone sees the scene.** Put the iPhone on a stand next to the projector. The projector flashes stripe
+   patterns, the phone photographs each one, and the server learns which projector pixel lands where in the room.
+3. **An agent does the mapping.** Claude Code or Codex connects over MCP. It looks at the scene through the phone's
+   camera, finds the faces of the objects, draws surfaces on them, checks its work against new camera frames, and
+   puts content on each face: outlines, fills, drawings, effects, animated reveals.
+4. **You stay in control.** Agents work in a backstage draft. You preview it on the wall, then apply it or throw it
+   away. Nothing goes live unless you turn that on.
+5. **You perform from the phone.** Switch looks, scrub through plates with one finger, step through a mapped
+   sequence with GO, play sounds. Every screen shows exactly what the wall shows.
 
-- **Static gobos.** Window frames, blinds, leaves and other shapes as light, with intensity, softness, angle,
-  colour temperature or hue, and light effects such as candle, fire, lightning and TV flicker.
-- **Live layers.** Procedural layers that move: a tree swaying in the wind, clouds, rain on glass, caustics, a day
-  cycle. Stack them, blend them and save the stack as a preset.
-- **Colour gradients.** Soft multi-stop washes with drift and grain.
-- **Blurred scenery.** A photo (built in, or one from your phone) as a soft, out-of-focus backdrop with warmth,
-  brightness and a slow drift.
-- **Object mapping.** Draw faces over real objects in the editor (quads, triangles, polygons, circles, lines, mesh
-  warps and masks), weld shared corners, and put pictures, drawings and effects on each face in the unfolded content
-  view, where content runs on across shared edges. Preview in the editor without touching the wall, animate it on a
-  timeline with cues and step through the cues with GO on the phone.
-- **Auto map.** Put the iPhone on a stand next to the projector. The projector flashes Gray-code stripes, the phone
-  photographs each one, and the server builds a dense camera to projector map and proposes surfaces to map.
-- **Agents.** Claude Code and Codex connect over MCP. They read the scene, look at renders and camera frames, write
-  effects and clips into a backstage draft, and hand you a proposal to preview, apply or discard.
+## Why AI-native
+
+Mapping by hand means dragging corners until they line up, face after face. projmap is built so an agent can do that
+work with you:
+
+- **65 MCP tools.** Read the scene, render frames, take camera snapshots, compare a render with what the camera
+  sees, create and nudge surfaces, draw on faces in their own flat coordinates, write timeline clips and cues,
+  write custom GLSL or JavaScript effects, and play sounds.
+- **Eyes on the real room.** The iPhone camera and the Gray-code calibration give the agent a map from camera pixels
+  to projector pixels, so it can check alignment instead of guessing.
+- **Safe by default.** Drafts, proposals and two switches in the editor ("agent may preview", "agent may go live"),
+  both off until you turn them on.
+- **Runs locally.** Everything stays on your network. The agent is your own Claude Code or Codex.
+
+## What is in it
+
+- **Static light.** A spotlight with focus, intensity, colour temperature or hue, light effects (candle, fire,
+  lightning, TV flicker) and 55 reference plates with adjustable window geometry. Plates stack as masks.
+- **Live layers.** Moving layers under the light: a tree swaying, clouds passing, rain on glass, a day cycle.
+- **Colour.** Gradients and animated colours (hue cycle, colour flow, pulse, aurora, kelvin cycle).
+- **Scenery.** Blurred photos and video loops (including YouTube) as soft backdrops.
+- **Object mapping.** Quads, triangles, polygons, circles, lines, mesh and Bezier warps, masks, details clipped to
+  their face, an unfolded content view, a timeline with cues, converge and morph transitions, and an opening step.
+- **Auto map.** iPhone camera calibration with Gray-code patterns.
+- **Phone app.** A native SwiftUI remote with haptic sliders, scrub rails, a soundboard and a live preview.
 
 ## How it fits together
 
 ```mermaid
 flowchart LR
-  PH["iPhone app<br/>remote + camera"] -- "WebSocket: state, params, GO" --> S
-  ED["Editor<br/>/editor in a browser"] -- "WebSocket: patches, drafts" --> S
-  OUT["Projector output<br/>/out, fullscreen WebGL2"] -- "WebSocket: subscribe" --> S
-  AG["Claude Code / Codex"] -- "MCP (stdio or HTTP)" --> S
-  S["projmap serve<br/>Go, port 7400"] --- DB[("SQLite + assets<br/>data folder")]
+  PH["iPhone app<br/>remote + camera"] -- "WebSocket" --> S
+  ED["Editor<br/>browser"] -- "WebSocket" --> S
+  OUT["Projector output<br/>browser, WebGL2"] -- "WebSocket" --> S
+  AG["Claude Code / Codex"] -- "MCP" --> S
+  S["projmap serve<br/>Go, port 7400"] --- DB[("SQLite + assets")]
 ```
 
-The server sends scene state (a few KB per change), not video. Every screen renders it locally with the same WebGL2
-engine, so the editor stage and the phone previews show exactly what the wall shows. Edits from the editor and
-from agents can go into a draft first; only an explicit apply or GO changes what is on air. The wire contract is in
-[docs/protocol.md](docs/protocol.md).
+The server owns every scene and sends state, not video. Each screen renders it with the same WebGL2 engine. The wire
+contract is [docs/protocol.md](docs/protocol.md).
 
-## Quick start
+## Try it
 
-Requirements: macOS (Apple Silicon or Intel) or Linux, Google Chrome for the projector output, and a projector on a
-second display. The iPhone app is optional and is built from source for now.
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/brushknight/projector-mapping/main/install.sh | sh -s -- --service
-```
-
-The installer downloads the latest release for your platform, checks it against the release's `SHA256SUMS`,
-installs `projmap` to `~/.local/bin` and, with `--service`, starts the server at login (a launchd agent on macOS).
-Without `--service`, run the server yourself:
-
-```bash
-projmap serve                       # port 7400; data in ~/Library/Application Support/projmap
-```
-
-Then:
-
-```bash
-projmap open                        # the editor in your browser (also prints a one-time link for another machine)
-projmap open --out --display 2      # the projector output, fullscreen in a Chrome kiosk window on display 2
-projmap pair                        # the 4-character pairing code for the phone
-```
-
-To pair the phone, open the iPhone app on the same Wi-Fi. It finds the server over Bonjour; type the code from the
-projector (or `projmap pair`), or scan the QR code the projector shows. See
-[docs/guides/getting-started.md](docs/guides/getting-started.md) for the full walk-through and
-[docs/guides/projector-setup.md](docs/guides/projector-setup.md) for HDMI, kiosk and mini PC setups.
-
-## Build from source
-
-Requirements: Go 1.24, Node 22 or newer, and for the iPhone app Xcode 27 with
-[xcodegen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`).
+There are no prebuilt releases yet, so build it from source. You need macOS (or Linux), Go 1.24, Node 22 or newer,
+Google Chrome, and a projector on a second display (HDMI).
 
 ```bash
 git clone https://github.com/brushknight/projector-mapping.git projmap && cd projmap/backend
-make build                          # builds ../frontend into internal/web/dist, then one binary: ./projmap
-./projmap serve
+make build                          # builds the web app into the binary: ./projmap
+./projmap serve                     # port 7400; data in ~/Library/Application Support/projmap
 ```
 
-For development, run the server and Vite side by side:
+Then, in another terminal:
 
 ```bash
-cd backend && make dev              # server on :7400 with data in backend/.data
-cd frontend && npm install && npm run dev   # editor with hot reload on http://localhost:5410/editor
+./projmap open                      # the editor in your browser
+./projmap open --out --display 2    # the projector output, full screen on display 2
+./projmap pair                      # the pairing code for the phone
 ```
 
-Tests:
+If the output window lands on the wrong screen, drag it to the projector and press ⌃⌘F. The full walk-through is in
+[docs/guides/getting-started.md](docs/guides/getting-started.md), and HDMI and mini PC setups are in
+[docs/guides/projector-setup.md](docs/guides/projector-setup.md).
+
+### Connect Claude Code or Codex
+
+Start the server first, then register projmap for this project only:
 
 ```bash
-cd backend && make test             # Go tests; make lint for go vet + gofmt
-cd frontend && npm run typecheck && npm test
-cd ios && swift test --package-path Packages/PM
-```
-
-`make release VERSION=0.2.0` in `backend/` builds the release tarballs and `SHA256SUMS` into `dist/` for macOS and
-Linux on arm64 and amd64. See [docs/releasing.md](docs/releasing.md).
-
-## iPhone app
-
-The app is native SwiftUI for iOS 26, iPhone only. The Xcode project is generated from `ios/project.yml`.
-
-```bash
-cd ios
-xcodegen generate
-open projmap.xcodeproj               # or build from the command line:
-
-# simulator
-xcodebuild -project projmap.xcodeproj -scheme projmap \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -derivedDataPath .build/dd build
-
-# your iPhone (USB or Wi-Fi, Developer Mode on); TEAM is your Apple Developer team id
-xcodebuild -project projmap.xcodeproj -scheme projmap -destination 'generic/platform=iOS' \
-  -derivedDataPath .build/dd -allowProvisioningUpdates DEVELOPMENT_TEAM="$TEAM" build
-xcrun devicectl device install app --device <device-id> .build/dd/Build/Products/Debug-iphoneos/projmap.app
-```
-
-`xcrun devicectl list devices` shows the device id. With your own team you may also need another bundle id:
-add `PRODUCT_BUNDLE_IDENTIFIER=com.example.projmap` to the build. The app runs without a server too: "look around
-without a projector" on the connect screen opens a demo. Details in
-[docs/guides/iphone-app.md](docs/guides/iphone-app.md).
-
-## Commands
-
-```text
-projmap [serve] [--port N] [--data DIR] [--no-bonjour]
-                                    run the server (HTTP, WebSocket, MCP and the web app)
-projmap open [--print]              open the editor and print a one-time login link for another machine
-projmap open --out [--display N]    open /out in a Chrome kiosk window on display N (default 2; macOS)
-projmap pair                        print the pairing code the projector shows
-projmap mcp [--token T] [--url U]   stdio MCP bridge for Claude Code and Codex (starts the server if needed)
-projmap sim [--url U]               fake phone camera and projector output, for trying calibration without hardware
-projmap install                     install the launchd login item dev.projmap.server and start it (macOS)
-projmap version                     print the version
-```
-
-Environment: `PROJMAP_DATA` (data folder), `PROJMAP_PORT` (7400), `PROJMAP_BIND` (0.0.0.0), `PROJMAP_BONJOUR=0`
-(no Bonjour), `PROJMAP_SEED=0` (no sample scene on first run), `PROJMAP_URL` (the server the CLI subcommands talk
-to).
-
-## Agents over MCP
-
-Claude Code:
-
-```bash
-claude mcp add projmap -- ~/.local/bin/projmap mcp
-# or over HTTP while the server runs:
 claude mcp add --transport http projmap http://127.0.0.1:7400/mcp
 ```
 
-Codex (`~/.codex/config.toml`):
+For Codex, add to `~/.codex/config.toml`:
 
 ```toml
 [mcp_servers.projmap]
-command = "/Users/you/.local/bin/projmap"
+command = "/path/to/projmap"
 args = ["mcp"]
 ```
 
-Agents write into a backstage draft and finish with a proposal you apply from the editor. Two toggles in the
-editor's agent panel, both off by default, let an agent preview on the projector or go live. You can also start an
-agent from the editor or the phone; the server then runs `claude -p` or `codex exec` on this machine. More in
-[docs/guides/agents-mcp.md](docs/guides/agents-mcp.md) and [docs/mcp-plan.md](docs/mcp-plan.md).
+`projmap mcp` is a stdio bridge to the running server. It starts the server when none is running, so while it is
+registered, every Codex session keeps a server alive. Remove the entry when you are not using projmap. See [docs/guides/agents-mcp.md](docs/guides/agents-mcp.md).
+
+### The iPhone app
+
+Native SwiftUI for iOS 26, built from source with Xcode and [xcodegen](https://github.com/yonaskolb/XcodeGen):
+
+```bash
+cd ios && xcodegen generate && open projmap.xcodeproj
+```
+
+Set your own team and bundle id, then run it on your phone. Details in
+[docs/guides/iphone-app.md](docs/guides/iphone-app.md).
+
+## Known rough edges
+
+- The projector output is a Chrome window you place by hand.
+- AirPlay output is not supported yet; use an HDMI cable.
+- Calibration needs a dark room and a steady phone.
+- The server can use a lot of CPU in some setups; this is not fixed yet.
+- No releases, no TestFlight build, no signed Mac app yet.
+
+## Ideas on the list
+
+Preprogrammed sequences (plates, gradients and photos stepping every 0.25 s), the iPhone as the projector's source
+over USB-C or AirPlay, grid-first mapping on the phone, box, cylinder and sphere surfaces, and LiDAR scanning so the
+phone can measure the object and map it in 3D. Want one of these, or something else? Open an issue.
+
+## Contributing
+
+This is an open playground. Open issues for bugs, open feature requests for things you would like it to do, and
+feel free to take it as the base for your own project.
+
+If you send a pull request, a few rules keep the three clients in step:
+
+- The protocol is the contract. A change to a message or entity updates `docs/protocol.md`, `contract/fixtures` and
+  all three decoders (Go, TypeScript, Swift) in the same pull request.
+- The server is the only source of truth. Clients cache, but never persist scene data on their own.
+- Run the tests: `cd backend && make test`, `cd frontend && npm run typecheck && npm test`,
+  `cd ios && swift test --package-path Packages/PM`.
+
+`CLAUDE.md` describes the conventions for coding agents too.
 
 ## Project layout
 
 | path | what |
 | --- | --- |
-| `backend/` | Go module `projmap`: server, hub, MCP, agent runner, calibration and vision, CLI in `cmd/projmap` |
-| `frontend/` | React + TypeScript + Vite: `/out`, `/editor`, `/preview`, `/components` and the WebGL2 renderer; builds into `backend/internal/web/dist` |
-| `ios/` | SwiftUI iPhone app (xcodegen) and the local package `PM` (PMKit, PMStore, PMLive, PMDesign, PMCamera, PMPreview) |
-| `contract/` | `catalog.json` (built-in gobos, layers, gradients, scenery, effects) and fixtures every client decodes in its tests |
+| `backend/` | Go server: hub, MCP, agent runner, calibration and vision, CLI in `cmd/projmap` |
+| `frontend/` | React + TypeScript: projector output, editor, previews and the WebGL2 renderer |
+| `ios/` | SwiftUI iPhone app and its local package `PM` |
+| `contract/` | `catalog.json` (plates, layers, gradients, scenery, effects) and fixtures every client tests against |
 | `design/` | design boards, HTML sources and scenery photos |
-| `docs/` | [protocol](docs/protocol.md), [architecture](docs/architecture.md), [effects](docs/effects.md), [MCP plan](docs/mcp-plan.md), [guides](docs/guides/), [releasing](docs/releasing.md) |
-
-## Guides
-
-[Getting started](docs/guides/getting-started.md) ·
-[Projector setup](docs/guides/projector-setup.md) ·
-[Mapping](docs/guides/mapping.md) ·
-[Auto map](docs/guides/auto-map.md) ·
-[Agents and MCP](docs/guides/agents-mcp.md) ·
-[iPhone app](docs/guides/iphone-app.md) ·
-[Troubleshooting](docs/guides/troubleshooting.md)
-
-## Contributing
-
-Issues and pull requests are welcome. A few rules keep the three clients in step:
-
-- The protocol is the contract. A change to a message or entity updates `docs/protocol.md`, `contract/fixtures`
-  and all three decoders (Go, TypeScript, Swift) in the same pull request.
-- The server is the only source of truth. Clients cache, but they never persist scene data on their own.
-- Run the tests above before you open a pull request; CI runs them on every push.
-- Copy in the apps uses active voice, no em dashes, and controls say what happens.
-
-`CLAUDE.md` in the root and in `frontend/` describes the conventions for coding agents too.
+| `docs/` | [protocol](docs/protocol.md), [architecture](docs/architecture.md), [effects](docs/effects.md), [MCP plan](docs/mcp-plan.md), [guides](docs/guides/) |
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT: do whatever you want with it. See [LICENSE](LICENSE).
